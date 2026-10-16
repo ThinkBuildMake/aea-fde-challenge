@@ -6,7 +6,7 @@
 
 **This document does not cover:** how the agent is built, verified, measured or hosted. Requirements, key metrics, stack and architecture are separate documents that trace back to the use case IDs (UC-n) and the constraints here.
 
-**Status:** Draft, interview with the builder (the FDE) on 2026-10-16, built from `docs/AEA_FDE_Challenge.pdf` (the PRD) and `data/meridian_dataset/`. The exec team has not been interviewed. Claims about their goals come from the PRD and are marked *(PRD)*; the open questions for them are in `MEETING_QUESTIONS.md`. Call-mix numbers come from a provisional rule-based labelling of each call's opening lines (`analysis/classify_openings.py`), not from the final discovery clustering the PRD asks for.
+**Status:** Draft, interview with the builder (the FDE) on 2026-10-16, built from `docs/AEA_FDE_Challenge.pdf` (the PRD) and `data/meridian_dataset/`. The exec team has not been interviewed and there will be no meeting notes, so questions that would have gone to them are answered by best guess and listed in Section 9 as assumptions, marked *(assumed)* where they appear. Claims about their goals come from the PRD and are marked *(PRD)*. Call-mix numbers come from a provisional rule-based labelling of each call's opening lines (`analysis/classify_openings.py`), not from the final discovery clustering the PRD asks for.
 
 ---
 
@@ -56,7 +56,7 @@ The supplied data does not contain wait times, hold times, abandoned calls or st
 - Benchmarks for home-services call answering differ by source and method. As reported by secondary summaries of CallRail (January 2025) and Invoca (July 2026), the share of home-services calls not reaching a person ranges from 14% to about 48%.
 - A UK contact-centre survey (ContactBabel, 2024) reports a mean abandonment rate of 8.4% and an average 116 seconds to answer, as reported by secondary pages.
 
-These are cited as context, not as Meridian's problem. The exec team's own wait, abandonment and staffing numbers are the first item in `MEETING_QUESTIONS.md`.
+These are cited as context, not as Meridian's problem. Meridian's own wait, abandonment and staffing numbers are not available; we assume the PRD's premise (Section 9, A1).
 
 ---
 
@@ -96,16 +96,16 @@ Disputes, refunds, complaints and manager requests are different work: the calle
 
 ## 5. Use cases
 
-### UC-1: Book a repair, plumbing or tune-up visit
+### UC-1: Book a repair, plumbing or tune-up visit, or check on one already booked
 
 | | |
 |---|---|
-| **Trigger** | The caller says something is broken or they need a tune-up and want someone out. |
+| **Trigger** | The caller says something is broken or they need a tune-up and want someone out, or asks about a visit they already have (confirm it, move it, cancel it). |
 | **Input** | A problem in plain words, their name and phone, a preferred day, their city. |
-| **What they need to see** | A clear yes or no: either "you're booked, Thursday 8 to 12, with [tech name]" or "nothing opens that day, here are the nearest options." The diagnostic fee, said once, in plain terms ($89, credited toward the repair, waived for members). If nothing can be booked, a clear handoff, not a dead end. |
+| **What they need to see** | A clear yes or no: either "you're booked, Thursday 8 to 12, with [tech name]" or "nothing opens that day, here are the nearest options." For an existing visit, the date, window and tech on file, and what moving or cancelling it costs (free more than 24 hours ahead, $49 inside 24 hours). The diagnostic fee, said once, in plain terms ($89, credited toward the repair, waived for members). If nothing can be booked, a clear handoff, not a dead end. |
 | **What they do with it** | Accept a window, pick another, or ask for a person. They decide; the agent never books without a yes. |
-| **Time available** | A booking call in the data runs about 137 seconds at the median. |
-| **Must never** | Book a visit for a gas smell, CO alarm, sparks or smoke. Tell a caller they are booked when nothing was recorded. Book someone outside the service area. Promise a repair price: only the diagnostic fee is stated, and repair prices are "the technician will confirm on site." Send a caller away from a booking without saying what happens next. |
+| **Time available** | A booking call in the data runs about 137 seconds at the median; appointment changes about 90 seconds. |
+| **Must never** | Book a visit for a gas smell, CO alarm, sparks or smoke. Tell a caller they are booked when nothing was recorded. Book someone outside the service area. Cancel or move a visit without the caller saying so. Charge or promise to waive the late-cancellation fee: only a person waives fees. Promise a repair price: only the diagnostic fee is stated, and repair prices are "the technician will confirm on site." Send a caller away from a booking without saying what happens next. |
 
 **Why an agent, not an online booking form or a phone menu:**
 A form can do the lookup. If the caller already knows their city, the problem type and the day they want, a form can show open windows, and a phone menu can read them out. Neither needs this product for that.
@@ -171,25 +171,25 @@ This is the weakest of the three cases. If the supplied invoice data is thin, th
 
 | # | Feature | Use case | What it does for the caller | Acceptable in v1 |
 |---|---|---|---|---|
-| 1 | Safety check on every call | UC-1 | Gas, CO, sparks or smoke gets "leave the house, call 911," not a booking. A burning smell gets the follow-up question first. | Never books these. Not yet asked: how fast. |
-| 2 | Find the caller's account by name and phone | UC-1, UC-3 | They don't repeat an account number. | Not yet asked: what to do if there is no match (treat as a new customer?). |
+| 1 | Safety check on every call | UC-1 | Gas, CO, sparks or smoke gets "leave the house, call 911," not a booking. A burning smell gets the follow-up question first. | Never books these. Triggers on the first mention, before any other question *(assumed)*. |
+| 2 | Find the caller's account by name and phone | UC-1, UC-3 | They don't repeat an account number. | No match: the agent says it can't find the account and hands off to a person; it does not create accounts *(assumed, A6)*. |
 | 3 | Check availability and book | UC-1 | They hear a yes or a set of alternatives, with date, window and tech name. The booking is written to the scheduling database. | A confirmed booking is the bar *(PRD)*. Matches the caller's zone, service type and membership tier. |
-| 4 | Answer fee, membership, warranty, hours and service-area questions | UC-2 | A short, correct answer with the condition that matters. | Wrong answer is worse than a handoff *(PRD)*. Not yet asked: wording of the "I'm not sure" reply. |
+| 4 | Answer fee, membership, warranty, hours and service-area questions | UC-2 | A short, correct answer with the condition that matters. | Wrong answer is worse than a handoff *(PRD)*. When the current documents don't settle it, the agent says so and hands off *(assumed, A4)*. |
 | 5 | Look up balance and invoice line items; send a payment link | UC-3 | They see what they owe and why, and pay without saying a card number. | Their own account only. |
-| 6 | Hand off to a human, with context | all | The caller is told what is happening; the person who picks up knows what was said. Disputes, refunds, complaints and manager requests get a supervisor callback within one business day. | The human should not need to start over *(PRD)*. |
+| 6 | Confirm, move or cancel an existing appointment | UC-1 | Callers with a visit already booked (29 calls, 6.9%) get the visit on file, or move or cancel it, and the old slot is freed. | Free if more than 24 hours ahead; the $49 fee inside 24 hours is stated and never waived by the agent *(assumed, A7)*. |
+| 7 | Hand off to a human, with context | all | The caller is told what is happening; the person who picks up knows what was said. Disputes, refunds, complaints and manager requests get a supervisor callback within one business day. | The human should not need to start over *(PRD)*. |
 
-> **A tension to resolve.** Using the provisional counts, the six features above could in principle resolve about 58% of calls (booking 120, warranty 45, membership questions 38, billing lookups 42: 245 of 420) even if every one worked perfectly, which is just under the bottom of the PRD's range. The PRD target is 60 to 75% containment. Reaching the top of that range depends on items currently in "later iterations." This is the main open scope question.
+> **Containment arithmetic.** Using the provisional counts, the seven features above could in principle resolve about 65% of calls (booking 120, warranty 45, membership questions 38, billing lookups 42, existing appointments 29: 274 of 420) if every one worked perfectly. That sits inside the PRD's 60 to 75% range, but with little headroom, so every wrong answer or needless handoff moves the number. Reschedule, cancel and confirm were originally a later iteration; with no stakeholder to ask, we moved them into the first iteration (Section 9, A8) because it is the cheapest way to clear the bottom of the range, and `SCHEMA.md` documents it as expected behavior.
 
 **Later iterations,** in the order the caller would want them. Later is not out of scope; it's the plan.
 
 | # | Feature | Use case | What it adds for the caller | Why not first |
 |---|---|---|---|---|
-| 1 | Confirm, move or cancel an existing appointment | UC-1 | The 38 calls (9.0%) about an appointment they already have; frees the old slot | Adds write paths and the 24-hour late-cancellation fee rules; the PRD says keep scheduling simple. The schema documents it, so a reviewer may probe it. |
-| 2 | Membership actions: set up autopay, cancel auto-renew, upgrade | UC-2 | 33 calls (7.9%) that today need a person | The agent would have to change account state, which nothing supplied lets it do. |
-| 3 | Book a free Comfort Advisor estimate for a new system | UC-1 | The 12 calls (2.9%) about replacing a system | Different appointment type; needs the estimate slots. |
-| 4 | Redirect commercial, employment and wrong-number callers | UC-2 | Meridian's documented redirects, so the caller isn't stuck | Small volume (3.8%); mostly a script. |
-| 5 | "My technician is late" handling | UC-1 | The 9 calls (2.1%) where the window has passed | Needs dispatch information the data doesn't have. |
-| 6 | Double-charge explanation (pending authorization) | UC-3 | The 11 calls (2.6%) about two charges | The FAQ gives guidance, but the internal policy sends billing disputes to a supervisor; which applies is a question for the exec team. |
+| 1 | Membership actions: set up autopay, cancel auto-renew, upgrade | UC-2 | 33 calls (7.9%) that today need a person | The agent would have to change account state, which nothing supplied lets it do. |
+| 2 | Book a free Comfort Advisor estimate for a new system | UC-1 | The 12 calls (2.9%) about replacing a system | Different appointment type; needs the estimate slots. |
+| 3 | Redirect commercial, employment and wrong-number callers | UC-2 | Meridian's documented redirects, so the caller isn't stuck | Small volume (3.8%); mostly a script. |
+| 4 | "My technician is late" handling | UC-1 | The 9 calls (2.1%) where the window has passed | Needs dispatch information the data doesn't have. |
+| 5 | Double-charge explanation (pending authorization) | UC-3 | The 11 calls (2.6%) about two charges | The FAQ gives guidance, but the internal policy sends billing disputes to a supervisor; we follow the policy (A5). |
 
 ---
 
@@ -210,7 +210,7 @@ This is the weakest of the three cases. If the supplied invoice data is thin, th
 
 | Constraint | What it is | Given by |
 |---|---|---|
-| Timeline | Submission **Thu 2026-10-22**. Time of day and time zone not yet given. What to drop first if half done: not yet asked. Deliverables: a deployed public URL, a 3 to 4 minute walkthrough video, and a source repository with README and eval numbers. | The builder; deliverables from the PRD |
+| Timeline | Due **Wed 2026-10-21, 11:59 PM US Central** (the day before the Thursday date the builder gave; Central assumed because the company is in Austin). If half done, drop later iterations first, then the deployed monitoring view, and keep the booking flow, the knowledge-base answers and the eval numbers *(assumed)*. Deliverables: a deployed public URL, a 3 to 4 minute walkthrough video, and a source repository with README and eval numbers. | The builder; deliverables from the PRD |
 | Team | One person. | The builder |
 | Spend | No cap for now. | The builder |
 | Services / vendors | **Approved list (builder may choose from it):** Anthropic, Aqua Voice, Cohere, Cursor, DigitalOcean, ElevenLabs, Google One, Midjourney, OpenAI, OpenRouter, Railway, Vultr, Whisper. A free tier of anything outside the list is allowed. | The builder |
@@ -221,11 +221,32 @@ This is the weakest of the three cases. If the supplied invoice data is thin, th
 
 ---
 
-## 9. Evidence limitations
+## 9. Assumptions made without confirmation
+
+There is no stakeholder to ask and there will be no meeting notes, so these are best guesses. Each is the most conservative choice that still serves the caller, and each can be overturned without changing who the user is.
+
+| # | Assumption | Why this guess |
+|---|---|---|
+| A1 | Meridian's call center is capacity constrained as the PRD says; no wait-time numbers are available. | The PRD states it; the data neither confirms nor contradicts it. |
+| A2 | **Containment** means the caller's need was met in the conversation with no human handoff, and for a booking call that the booking was written to the schedule. A call that ends in a clean handoff is not contained, but is not a failure. | Matches the PRD's wording ("fully resolved by the agent without human intervention"). |
+| A3 | Billing lookups (balance, invoice line items, payment link) are in the first iteration, as the builder said. | Builder's decision. |
+| A4 | When two documents disagree, the one in the current folders with the newest date wins (the 2026 fee schedule, FAQ and warranty policy over the archive, the old FAQ copy and the 2024 scheduling guide). If the question is still unsettled, the agent hands off instead of choosing. | The archive and old copies are labelled as superseded by their dates and folder; a wrong confident answer is the worst outcome. |
+| A5 | A caller who disagrees with an invoice amount, or says they were charged twice, is handed to a supervisor callback (within one business day), as the internal escalation policy says. The agent may repeat the FAQ's note that a second charge is often a pending authorization. | The policy names billing disputes explicitly. |
+| A6 | If the caller's name and phone match no account, the agent says so and hands off. It does not create accounts. | Creating a customer is outside the supplied database behavior. |
+| A7 | Only a person waives fees or makes exceptions, including the late-cancellation fee. The agent states the fee. | The internal discretion notes grant waivers to human agents. |
+| A8 | Reschedule, cancel and confirm are in the first iteration (Section 6, row 6). | Clears the bottom of the PRD's containment range; documented in `SCHEMA.md`. |
+| A9 | A burning smell on its own is not booked until the agent has asked whether there is smoke, sparks or a tripped breaker. If the caller answers yes, or can't say, it is treated as a safety emergency. | The policy treats an electrical burning smell *with tripped breakers* as an emergency. When unsure, the safer path costs a handoff, not a fire. |
+| A10 | A plumbing caller in the north zone, where no plumbing slots exist, is told no plumber is available in their area right now and is handed off. The agent does not book across zones. | The scheduling rules match customers to their city's zone. |
+| A11 | The 66 Sunday-timestamped calls are a dataset artifact. The agent states the published hours (Mon to Fri 7 AM to 7 PM, Sat 8 AM to 4 PM, closed Sunday, per the current FAQ) and says when a human callback will happen. | The current FAQ is the dated, authoritative source. |
+| A12 | Duct cleaning, commercial, employment and appliance questions get the documented redirect or "we don't offer that"; the agent gives no referral process because the document is an unfinished TODO. | `duct_cleaning.md` is a placeholder. |
+
+---
+
+## 10. Evidence limitations
 
 - **The call mix** is a provisional keyword labelling of the first two customer turns of 420 synthetic calls. It sizes scope; it is not the final clustering, and it would shift if calls were labelled by their full content.
 - **The calls are synthetic and templated.** About 80 distinct openings repeat across 420 calls, so the mix reflects how the dataset was made. It may not match a real caller population.
-- **The first-iteration ceiling of about 58%** is arithmetic on the provisional counts, assuming every handled call resolves. It is an illustration, not a prediction.
+- **The first-iteration ceiling of about 65%** is arithmetic on the provisional counts, assuming every handled call resolves. It is an illustration, not a prediction.
 - **The outside call-answering and abandonment figures** are from secondary vendor pages and summaries of CallRail, Invoca and ContactBabel; the primary reports were not opened. They differ in definition and period, and are not combined. None measures Meridian.
 - **Wait times, hold times and staffing** for Meridian are not in the data. The statement that the call center is capacity constrained comes from the PRD.
 - None of these sources measures whether an AI agent improves outcomes for Meridian's callers.
