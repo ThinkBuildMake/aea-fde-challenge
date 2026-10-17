@@ -45,7 +45,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | Zone | north / central / south, derived from the caller's city per `SCHEMA.md` [D-2]. |
 | Open slot | A row in `appointment_slots` with status `open` (or `reserved_members` for a standard/plus member) matching zone and service type. |
 
-**Dataset findings referenced (D-n).** D-1 conflicting superseded KB files; D-2 zone mapping and no plumbing slots in the north zone; D-3 holiday hours only in a PNG; D-4 fee schedule only in a PDF; D-5 internal agent notes in `internal/`; D-6 66 Sunday-timestamped calls vs. closed Sunday; D-7 scheduling guide (48 h) vs. FAQ (24 h) cancellation; D-8 four seeded test customers MHC-10001 to MHC-10004 and slots 2026-10-16 to 2026-11-05; D-9 no caller, phone, account number or invoice in the transcripts exists in the database; D-10 humans offer a waitlist and three different callback times, neither backed by a current document (`docs/AUDIT.md` §4).
+**Dataset findings referenced (D-n).** D-1 conflicting superseded KB files; D-2 zone mapping and no plumbing slots in the north zone; D-3 holiday hours only in a PNG; D-4 fee schedule only in a PDF; D-5 internal agent notes in `internal/`; D-6 66 Sunday-timestamped calls vs. closed Sunday; D-7 scheduling guide (48 h) vs. FAQ (24 h) cancellation; D-8 four seeded test customers MHC-10001 to MHC-10004 and slots 2026-10-16 to 2026-11-05; D-9 no caller, phone, account number or invoice in the transcripts exists in the database; D-10 humans offer a waitlist and three different callback times, neither backed by a current document (`docs/AUDIT.md` §4). D-11 `escalation_and_safety.md` sits outside `internal/` but tells agents to waive fees and change memberships (`docs/STACK.md`).
 
 ---
 
@@ -93,14 +93,14 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | GC-4 | Every paid service is from the approved list (Anthropic, Aqua Voice, Cohere, Cursor, DigitalOcean, ElevenLabs, Google One, Midjourney, OpenAI, OpenRouter, Railway, Vultr, Whisper) or is used on a free tier [src builder]. 0 off-list paid services. | Dependency/service inventory in the README reviewed against the list | U§8 | Must |
 | GC-5 | The product is a web app at a public URL; chat is the baseline and voice is excluded from v1 [src PRD-6, builder 2026-10-16]. | Opening the URL in a clean browser | PRD-6, U§7 | Must |
 | GC-6 | Integrates with the supplied scheduling database (SQLite, `SCHEMA.md`) and knowledge base as they are. Bookings really write: the reviewer tests against the same data and seeded customers MHC-10001 to MHC-10004 [src PRD, D-8]. | CT-1, FR-1 demo | PRD-3 | Must |
-| GC-7 | Internal demo; synthetic company and data; no regulatory scope [src builder]. Nothing in this document is a compliance claim. | Config review | U§8 | Should |
-| GC-8 | Scheduling reference date ("today") is 2026-10-16 and slots run 2026-10-16 to 2026-11-05 [src D-8]. | CT-3 | PRD, dataset README | Must |
+| GC-7 | Internal demo; synthetic company and data; no regulatory scope [src builder]. Nothing in this document is a compliance claim. The business view also needs no login, by the builder's decision (2026-10-17): access control is out of scope. | Config review | U§8 | Should |
+| GC-8 | Scheduling reference date ("today") is 2026-10-16 and slots run 2026-10-16 to 2026-11-05 [src D-8]. The live demo keeps this fixed clock until 2026-11-05, so the 24-hour cancellation rule is judged against it; the README says so. | CT-3 | PRD, dataset README | Must |
 
 ### 1.2 Dependencies and environment (DE-)
 
 | ID | Requirement | Verified by | Trace | Priority |
 |---|---|---|---|---|
-| DE-1 | If the language-model provider fails or times out, the caller sees a plain message and an offer of a human within 10 s [prop]; 0 unhandled exceptions shown to a caller. | Fault injection: block the provider, send 10 messages | PRD-4 | Must |
+| DE-1 | If the language-model provider fails or times out, the caller sees a plain message and an offer of a human within 15 s of the turn starting [prop], with a "still working" note visible from 10 s; 0 unhandled exceptions shown to a caller. | Fault injection: block the provider, send 10 messages | PRD-4 | Must |
 | DE-2 | If the scheduling database is unreadable or a write fails, the agent never states a booking is confirmed (0 false confirmations) and offers a handoff within 10 s [prop]. | Fault injection on read and on write | U§5 UC-1 must-never | Gate |
 | DE-3 | The run environment (model names and versions, knowledge-base index version, database snapshot id) is recorded on every eval run, and the eval reruns from a clean checkout following the README. | Eval output file contains all four fields; clean-clone run reproduces the same pass or fail on all but at most 2 of the 31 scenarios [prop] (model output varies) | PRD-5 | Must |
 
@@ -128,7 +128,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | FR-1.12 | A caller can cancel a visit only by explicitly saying so; the agent states the fee (free beyond 24 hours, $49 inside 24 hours) and does not waive or promise to waive it. | UC-1, A7 | Must |
 | FR-1.13 | Only the $89 diagnostic fee is stated as firm; any repair or replacement price is given only as FR-2.12 allows, is never promised, and comes with "the technician confirms pricing on site." | UC-1, UC-2, A15 | Gate |
 | FR-1.14 | A caller who cannot be booked is told what happens next; no conversation ends without a next step. | UC-1 | Must |
-| FR-1.15 | A caller who asks for an earlier window than any open one is told the earliest available and can book it, book it and join a waitlist for an earlier window, or ask for a person. Joining records who, the visit type, the zone and the window they hold; the caller is told staff will call if an earlier window opens, and is promised no specific time. | UC-1, A14, D-10 | Must |
+| FR-1.15 | A caller who asks for an earlier window than any open one is told the earliest available and can book it, book it and join a waitlist for an earlier window, or ask for a person. Joining records who, the visit type, the zone and a copy of the window they hold (date, window, zone), not a link to the appointment, so the seed reset cannot leave it pointing at nothing; the caller is told staff will call if an earlier window opens, and is promised no specific time. | UC-1, A14, D-10 | Must |
 
 ### FR-2 Answers: fees, membership, warranty, hours, service area (UC-2)
 
@@ -140,7 +140,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | FR-2.4 | Fee answers match the 2026 fee schedule held only in the PDF. | D-4 | Must |
 | FR-2.5 | Warranty answers distinguish the manufacturer warranty, Meridian's repair warranty and the membership, and ask for the detail that decides (brand, age, part or labor) when needed. | UC-2 | Must |
 | FR-2.6 | When current documents do not settle a question, or two disagree, the caller is told the agent is not sure and is handed off; the agent never picks one. | UC-2, A4, D-7 | Gate |
-| FR-2.7 | Content from `internal/` agent notes is never read or paraphrased to a caller. | UC-2, D-5 | Gate |
+| FR-2.7 | Content from `internal/` agent notes, and from `escalation_and_safety.md` (internal guidance outside that folder that tells agents to waive fees and change memberships, which FR-2.8 and FR-2.10 forbid here), is never read or paraphrased to a caller. | UC-2, D-5, D-11 | Gate |
 | FR-2.8 | The agent never promises a refund, a waiver or a price the account is not entitled to. | UC-2, A7 | Gate |
 | FR-2.9 | A caller who asks two things in one call (for example, a booking and a membership question) gets both answered in the same conversation. | U§3 Reason 3 | Must |
 | FR-2.10 | Membership changes (autopay, cancel auto-renew, upgrade) are explained, then handed off; not performed in v1. Boundary: later-iteration #1. | U§6 later #1 | Must |
@@ -229,7 +229,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 
 | ID | Requirement | Verified by | Trace | Priority |
 |---|---|---|---|---|
-| RL-1 | Two conversations racing for the same slot: exactly 1 booking is written, the other caller is offered alternatives; 0 double bookings over 20 repeated races [prop]. | Concurrent test script | FR-1.10, PRD-3 | Gate |
+| RL-1 | Two conversations racing for the same slot: exactly 1 booking is written, the other caller is offered alternatives; 0 double bookings over 20 repeated races [prop]. The supplied schema cannot enforce this (no unique rule on `appointments.slot_id`, and CT-1 forbids adding one), so the app does: each book, move and cancel is one locked transaction that changes the slot only if it is still open. | Concurrent test script | FR-1.10, PRD-3 | Gate |
 | RL-2 | A restart of the service mid-conversation never leaves a half-written booking (slot `booked` with no appointment row or the reverse); 0 orphans after 10 forced interruptions [prop]. | Interrupt test then VR-6 query | FR-1.10 | Gate |
 | RL-3 | When the agent has no good answer, a handoff is the default: both unanswerable scenarios (WA-3 and T-8) end in a handoff and invent nothing. | Eval run | FR-2.6, PRD-4 | Must |
 
@@ -275,7 +275,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 
 | ID | Requirement | Verified by | Trace | Priority |
 |---|---|---|---|---|
-| CO-1 | Model/API cost per conversation and cumulative cost are recorded; an alert (or visible banner) fires when cumulative spend passes $100 [prop]. The builder set no cap, so this protects against a runaway loop, not a budget. | Query OB-1 cost field; trigger the threshold in a test | GC-3 | Should |
+| CO-1 | Model/API cost per conversation and cumulative cost are recorded (cumulative spend is read from the model gateway's key usage, so eval runs and the one-time document read count too); an alert (or visible banner) fires when cumulative spend passes $100 [prop]. The builder set no cap, so this protects against a runaway loop, not a budget. | Query OB-1 cost field; trigger the threshold in a test | GC-3 | Should |
 
 ### 3.10 Scalability (SC-)
 
@@ -291,7 +291,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | DP-1 | The public URL opens in a clean browser with no login and answers a first message within PF-1. | Manual check from a second device | GC-5 | Must |
 | DP-2 | The service is up from deployment through 2026-11-05 (last slot date) with ≥ 99% availability [prop], checked by an external ping every 5 minutes, each ping recorded by the app so the business view can show misses. | Ping log | PRD-6, D-8 | Should |
 | DP-3 | Secrets live in environment configuration, not the repository. | CP-2 scan | CP-2 | Gate |
-| DP-4 | One documented command restores the scheduling database to its supplied seed state, leaving conversation logs, handoffs and the waitlist untouched, so the reviewer's bookings and the eval runs can be reset. | Run after a booking; VR-7 query and slot counts equal the seed | GC-6 | Must |
+| DP-4 | One documented command restores the scheduling database to its supplied seed state, leaving conversation logs, handoffs and the waitlist untouched, so the reviewer's bookings and the eval runs can be reset. Waitlist entries hold a copy of the slot they wait on, so the reset leaves none dangling. | Run after a booking; VR-7 query and slot counts equal the seed | GC-6 | Must |
 | DP-5 | A new machine goes from clone to running locally in ≤ 15 minutes [prop] following the README alone. | Timed run | PRD deliverable 3 | Should |
 
 ### 3.12 Change and later iterations (CH-)
@@ -331,7 +331,8 @@ Every **[prop]** and **[tbd]** number. Status is *accepted*, *revised*, or *pend
 
 | Row | Value | Reasoning | Status |
 |---|---|---|---|
-| DE-1, DE-2 | Fallback within 10 s | A caller waiting longer than ten seconds assumes the chat has died. | proposed |
+| DE-1 | Fallback within 15 s of the turn starting, "still working" note from 10 s | A slow but legitimate booking turn can take up to PF-2's 10 s, so the fallback must not fire on it; the note stops the caller assuming the chat has died. | proposed |
+| DE-2 | Fallback within 10 s | A database failure is detected at once, so a caller waiting longer than ten seconds assumes the chat has died. | proposed |
 | VR-2 | 3 safety scenarios | One each for gas, burning smell with a breaker tripped, burning smell with none; paraphrase testing is dropped for the 5-day build. | proposed |
 | VR-3 | 8 trap and attack scenarios | One per trap or attack. | proposed |
 | VR-4 | ≥ 9 of 10 handled-driver scenarios | Allows one miss; VR-1 is stricter. | proposed |

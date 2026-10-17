@@ -8,7 +8,7 @@
 - **Design:** one app server that runs the conversation, backed by the supplied scheduling database, a second small database for everything the app records, an in-process retrieval index built from the knowledge base, and an outside language-model provider.
 - **Wireframe:** [Meridian Agent Wireframe](https://claude.ai/artifact/JY5CoLpz2ViQzaD8sMQ7Sa), clickable. Caller chat: start, loading, booking, wants earlier, waitlisted, confirmed, answer, handoff, safety stop, error, thanks and not-solved. Business view: overview, handoffs, waitlist, conversations.
 - **Next as it grows:** final at this scale. The load is capped by SC-1 and the deadline of 2026-11-05 (DP-2); nothing in §2 comes within 100× of what one server and one database handle.
-- **Cost:** about $15 to $30 a month for hosting; model use is the larger part at roughly $30 to $80 across the build [assumed]. Budget: no cap (GC-3), alert at $100 (CO-1), which the build should stay under.
+- **Cost:** hosting $5 to $10 through 2026-11-05; model use about $20 to $45 across the build, the larger part (`STACK.md`). Budget: no cap (GC-3), alert at $100 (CO-1), which the build should stay under.
 
 ```mermaid
 ---
@@ -59,7 +59,7 @@ flowchart LR
 - *Live peak:* 5 conversations (SC-1), a caller turn every 15 s [assumed] → 5 ÷ 15 = 0.33 turns/s. Business view: 2 viewers refreshing every 30 s = 0.07 requests/s. Health ping: 1 per 300 s = 0.003/s.
 - *Eval run:* 31 key scenarios (EV-1) × 8 turns = 248 turns. At about 6 s a turn, serial time is 1,488 s (25 minutes); 4 conversations at once (SC-2) take about 6 minutes, which is 248 ÷ 372 s ≈ 0.7 turns/s. The retrieval eval (20 questions, EV-4) needs only embeddings and is separate.
 - *Storage:* a stored conversation is 8 turns × about 3 KB (including tool results and retrieved text for VR-9) ≈ 24 KB. 6 eval runs (186 conversations) plus 200 live ≈ 400 conversations ≈ 10 MB at most. Scheduling data 114 KB. Retrieval index: about 40 passages × 3 KB of vector ≈ 0.2 MB [assumed]. No uploaded files.
-- *Outside calls per turn:* about 3 model calls (safety screen, answer with tool use, sometimes a second tool round) plus 1 question embedding [assumed]. Per eval run: 248 turns × 3 ≈ 750 model calls. At about 5,000 input tokens each, that is about 3.7 million input tokens a run; at an assumed $3 per million, about $11 uncached, and less with prompt caching and a small model for the screen. This, not the servers, is the cost and latency driver.
+- *Outside calls per turn:* about 3 model calls (safety screen, answer with tool use, sometimes a second tool round) plus 1 question embedding [assumed]. Per eval run: 248 turns × 3 ≈ 750 model calls. At about 5,000 input tokens each, that is about 3.7 million input tokens a run; at the chosen models' prices (`STACK.md`: $0.50 in and $3 out per million for the agent, a cheaper model for the screen), about $2.50 to $4 a run including thinking output. This, not the servers, is the cost and latency driver.
 
 Peak load is under 2 requests/s even in the eval run, and most of each turn is waiting on the model provider. One app server and one small database handle this with over 100× headroom.
 
@@ -73,9 +73,9 @@ Peak load is under 2 requests/s even in the eval run, and most of each turn is w
 | Appointment | A booked visit | slot, customer, issue, status | one Slot, one Customer | never lose | up to about 1 a conversation |
 | Invoice | Supplied bill | amount, balance, line items | one Customer | supplied | none (81) |
 | Conversation | One chat from first message to end | outcome, intent, cost, solved answer, matched customer | many Turns | never lose | 400 |
-| Turn | One caller message and agent reply | text, latency, tools called, retrieved passages, error | one Conversation | never lose | 3,200 |
+| Turn | One caller message and agent reply | text, the raw model reply (including its reasoning notes, replayed unchanged on the next turn), latency, tools called, retrieved passages, error | one Conversation | never lose | 3,200 |
 | Handoff | A person must act: handoff record or supervisor callback | reason, summary, preferred window, status | one Conversation | never lose | about 100 |
-| WaitlistEntry | A caller wants an earlier window than the one booked | visit type, zone, window held, status | one Conversation, one Appointment | never lose | about 35 |
+| WaitlistEntry | A caller wants an earlier window than the one booked | visit type, zone, a copy of the window held (date, window, zone), status | one Conversation | never lose | about 35 |
 | Flag | A person marked a conversation wrong or poor | note, who, when | one Conversation | never lose | tens |
 | Passage | A chunk of one current knowledge-base file | text, source file, vector | one source file | rebuildable (CH-1) | about 40 |
 | Ping | One health check seen | time | none | disposable | 288 a day |
@@ -96,7 +96,6 @@ erDiagram
   CONVERSATION ||--o{ HANDOFF : produces
   CONVERSATION ||--o{ WAITLIST_ENTRY : produces
   CONVERSATION ||--o{ FLAG : receives
-  APPOINTMENT ||--o{ WAITLIST_ENTRY : later_visit_held
 ```
 
 Customer, Technician, Slot, Appointment and Invoice live in the supplied scheduling database and keep its schema exactly (GC-6, CT-1). Everything else lives in the app database, so resetting to the seed (DP-4) never erases the logs.
@@ -156,7 +155,7 @@ flowchart LR
 | Work | Trigger | Does | Serves |
 |---|---|---|---|
 | Load the retrieval index | process start | reads the built index into memory | I-1, FR-2 |
-| Check booking agreement and spend | each `getOverview` | joins appointments to slots, sums conversation cost | KEY_METRICS booking mismatches, total model spend |
+| Check booking agreement and spend | each `getOverview` | joins appointments to slots; spend comes from the model gateway's key usage so eval runs and the document read count (CO-1) | KEY_METRICS booking mismatches, total model spend |
 
 ### 4.2 Command-line tools (same codebase, run by the builder)
 
@@ -207,7 +206,7 @@ flowchart LR
 
 ### Scheduling database
 
-**Why it exists:** the PRD and GC-6 fix the supplied SQLite scheduling data as the place bookings are written, and the reviewer queries the same data. **Holds:** the five supplied tables, unchanged (CT-1). **Provided by platform:** a persistent disk. Writes commit before the reply says "booked" (RL-2, DE-2); two callers racing for a slot are serialized by the database (RL-1). **Backup:** a copy before each eval run and a seed to restore from (DP-4); a booking is acknowledged only after it is committed on disk.
+**Why it exists:** the PRD and GC-6 fix the supplied SQLite scheduling data as the place bookings are written, and the reviewer queries the same data. **Holds:** the five supplied tables, unchanged (CT-1). **Provided by platform:** a persistent disk. Writes commit before the reply says "booked" (RL-2, DE-2); two callers racing for a slot are serialized by the app: each book, move and cancel is one locked transaction that changes the slot only if it is still open, because the supplied schema has no unique rule to stop a double booking and CT-1 forbids adding one (RL-1). **Backup:** a copy before each eval run and a seed to restore from (DP-4); a booking is acknowledged only after it is committed on disk.
 
 ### App database
 
@@ -237,15 +236,15 @@ Final at this scale: capped at 5 simultaneous conversations (SC-1) for a review 
 
 | Component | Now (build) | At horizon (2026-11-05) |
 |---|---|---|
-| App hosting: one small always-on instance with a disk | $5 to $25 a month | same |
+| App hosting: one small always-on instance with a disk | $5 to $10 | same |
 | Scheduling and app databases | in the disk | in the disk |
-| Retrieval index | $0 | $0 |
+| Retrieval index and embeddings | under $1 | under $1 |
 | Uptime checker | $0 (free tier) | $0 |
-| Model provider, live traffic (a few hundred conversations) | under $10 | under $10 |
-| Model provider, eval runs: about $5 to $11 each [assumed], 4 to 6 runs | $20 to $70 | same |
-| **Total** | **about $55 to $150 over the build** | **same** |
+| Model provider, live traffic (a few hundred conversations) | $5 to $10 | same |
+| Model provider, eval runs: about $2.50 to $4 each, 4 to 6 runs, plus prompt tuning | $15 to $35 | same |
+| **Total** | **about $30 to $55 over the build** | **same** |
 
-No cap (GC-3). The CO-1 alert of $100 should not fire on this plan. Exact prices are in `STACK.md`.
+No cap (GC-3). The CO-1 alert of $100 should not fire on this plan; it could only in a worst case of many long eval runs or abuse of the public URL (about $100 to $150). Exact prices are in `STACK.md`.
 
 ## 7. Open questions and upstream fixes
 
@@ -253,7 +252,7 @@ No cap (GC-3). The CO-1 alert of $100 should not fire on this plan. Exact prices
 |---|---|---|
 | [assumed] 8 turns a conversation, a caller turn every 15 s, 3 model calls and 1 embedding a turn | Sets the eval length and the cost | First prototype run; replace with measured values in `STACK.md` and `ARCHITECTURE.md` |
 | [assumed] 4 conversations in parallel finish the eval in about 6 minutes | Needs the provider's rate limits to allow it, and the private database copy | **SC-2** in `REQUIREMENTS.md` (applied) |
-| [assumed] about $3 per million input tokens and 5,000 input tokens a call | One eval run costs about $11 uncached | `STACK.md` prices; decide the model for the safety screen and use prompt caching |
+| [assumed] 5,000 input tokens a call | One eval run costs about $2.50 to $4 at the chosen prices | Measured on the first prototype run; prices are in `STACK.md` |
 | The waitlist lives in the app database, not "beside the supplied tables" as A14 and DP-4 say | Keeps the supplied schema untouched and the reset from erasing logs | Reword A14 and DP-4 in `REQUIREMENTS.md` (applied with this document) |
 | FR-5.5 lists handoffs but gives staff no way to close them; the callback window is chosen with buttons | The wireframe needs `markHandoffFollowedUp` and `submitCallbackWindow` | Reword FR-5.5, FR-3.5 and FR-4.3 in `REQUIREMENTS.md` (applied with this document) |
 | DP-2 says an external ping is logged; the app must record each ping to draw the uptime strip | Needed for the uptime measure on `KEY_METRICS.md` | Reword DP-2 (applied with this document) |

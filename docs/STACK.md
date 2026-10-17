@@ -2,7 +2,7 @@
 
 **What this document is.** A comparison of candidate technologies for each module, and the choice for each. `REQUIREMENTS.md` defines what the system must do; requirement IDs (e.g. `PF-1`) appear here only as the reason a choice wins or loses. Which components exist and the load they carry are in `HIGH_LEVEL_DESIGN.md`; how the pieces fit together is designed in `ARCHITECTURE.md`.
 
-**How the shortlist was built.** Each module's options were researched against `REQUIREMENTS.md`, `HIGH_LEVEL_DESIGN.md`, `USERS.md`, `AUDIT.md` and `KEY_METRICS.md`, with deciding facts checked on 2026-10-17. A separate agent that hadn't seen the research then checked the chosen stack for conflicts. It found no blocker and 28 findings; the ones that change a choice or add a need from the design are applied below, and the ones that are really conflicts between requirements or errors in the high-level design are in the last section.
+**How the shortlist was built.** Each module's options were researched against `REQUIREMENTS.md`, `HIGH_LEVEL_DESIGN.md`, `USERS.md`, `AUDIT.md` and `KEY_METRICS.md`, with deciding facts checked on 2026-10-17. A separate agent that hadn't seen the research then checked the chosen stack for conflicts. It found no blocker and 28 findings; the ones that change a choice or add a need from the design are applied below, and the ones that were conflicts between requirements or errors in the high-level design are settled in those documents.
 
 **Markers.** **[verify]** = an external fact checked on 2026-10-17 (often from secondary sources) that should be re-confirmed before it's relied on. Go-live prerequisites, open choices and open questions are in the last sections.
 
@@ -29,7 +29,7 @@
 | 15 | Secrets | Railway environment variables, gitleaks in CI | DP-3, CP-2 |
 | 16 | CI/CD | GitHub Actions, Railway deploy on push to `main` | Free; no gate needed beyond tests |
 | 17 | Observability | The app's own business view plus stdout logs | FR-5.3, OB-1 |
-| 18 | Authentication | None for callers (a decision for the business view is open) | DP-1, GC-5 |
+| 18 | Authentication | None for callers (the business view is also open, by decision) | DP-1, GC-5 |
 
 **Cost (total over the build, ending 2026-11-05; token prices from OpenRouter listings [verify]):**
 
@@ -285,19 +285,7 @@ At these prices the high-level design's cost envelope (§6) is about 1.5 to 2 ti
 
 ## 21. Open questions
 
-Things no technology choice can settle. Each goes to the owner of the named document.
-
-| Kind | Issue | Proposed change |
-|---|---|---|
-| Requirements conflict | PF-1 / PF-2 (6 s and 10 s) against Decision 2 (screen every message first), plus DE-1 (fallback within 10 s) equal to PF-2 (10 s): a normal slow write turn would trigger the fallback | Measure first. Restate DE-1 as "fallback 15 s after the turn starts, with a visible 'still working' note", and keep PF-2 at 10 s |
-| Requirements conflict | GC-3 (no spend cap) against GC-5 (public, no login): anyone with the URL can spend your credits | Add a row for rate and turn limits; decide whether the business view gets a shared-link token or basic auth |
-| Requirements conflict | CT-1 (schema unchanged) against RL-1 (no double booking): the database cannot enforce it | Reword RL-1 and HLD §5 to say the app's single transaction enforces it |
-| Requirements conflict | DP-4 (reset leaves the waitlist alone) against a waitlist that points at appointments the reset removes | Reword FR-1.15 / DP-4: waitlist rows keep a copy of the held slot |
-| Requirements conflict | GC-8 freezes "today" at 2026-10-16 while DP-2 runs the app until 2026-11-05, so the 24-hour cancellation rule runs on a frozen clock | State in the README that the demo runs on a fixed clock |
-| Requirements conflict | The knowledge base tells agents to waive the diagnostic fee and cancel auto-renew; FR-2.8 and FR-2.10 forbid both, and `escalation_and_safety.md` sits outside `internal/` | Name that file in FR-2.7 as agent-only, and document the conflict in the README |
-| Design change | HLD §6 cost envelope ($55 to $150 build, $5 to $25 hosting) is about 1.5 to 2 times too high at these prices; HLD §5 says the database serializes bookings | Replace §6 with the table above; reword §5 as in module 3 |
-| Design change | The `Turn` entity stores text, but Gemini needs the raw model reply blocks replayed unchanged | Add "raw model message" to `Turn` in HLD §3 |
-| Design change | HLD §4.1 sums spend from conversation cost rows, which misses eval runs and the document read | Spend ledger is OpenRouter key usage plus a manual OpenAI line (CO-1) |
+None. The conflicts between requirements that the stack check found (fallback timing, double-booking enforcement, the waitlist and the seed reset, the fixed demo clock, the internal-guidance file) are settled in `REQUIREMENTS.md` (DE-1, RL-1, FR-1.15, DP-4, GC-8, FR-2.7, D-11), and the design errors in `HIGH_LEVEL_DESIGN.md` (§3, §5, §6, §7). The business view stays open by the builder's decision (GC-7); rate and turn caps remain a design guard.
 
 ---
 
