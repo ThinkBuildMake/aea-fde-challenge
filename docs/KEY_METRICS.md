@@ -10,13 +10,13 @@ Success means a caller with a routine need gets it settled correctly in one conv
 
 **What is it?** A count and a percentage: how many conversations the caller marked "solved" after the agent finished, out of all conversations. One conversation counts when the agent ended it with no handoff and the caller tapped "yes, that solved it" (FR-5.6).
 
-**How we measure it.** Conversations with outcome contained (OB-1) and a recorded "solved" tap ÷ all conversations, over a rolling 7 days; the raw count is shown beside it. Nobody judges anything: both pieces are events the system records. Before release the same ratio is computed on the eval set, where the expected answer and database change are known (VR-1, EV-3).
+**How we measure it.** Conversations with outcome contained (OB-1) and a recorded "solved" tap ÷ all conversations, over a rolling 7 days; the raw count is shown beside it. Nobody judges anything: both pieces are events the system records. Before release a projected version of the same ratio is computed from the 31 key scenarios, weighted by the call mix (VR-1, EV-3).
 
-**Target.** Today 0% of calls are settled without a person; target 60% to 75% [src PRD-5, VR-1]. The ceiling with the first-iteration features is about 65% (274 of 420 provisionally labelled calls); the final clustering may move it. Live callers who skip the tap count as not settled, so the live number reads low; the eval set is the reference.
+**Target.** Today 0% of calls are settled without a person; target 60% to 75% [src PRD-5, VR-1]. The ceiling with the first-iteration features is about 65% (274 of 420 calls, `AUDIT.md` §3). Live callers who skip the tap count as not settled, so the live number reads low; the projection from the key scenarios is the reference.
 
 **Why it shows the need was met.** It counts only conversations where the caller said their need was met, so a wrong answer, a dead end and a quiet abandonment all fail to count.
 
-**What it can't tell you.** A caller can tap "solved" on a wrong answer; the eval set's measured accuracy (VR-4, VR-5) covers that before release, and flags catch some live.
+**What it can't tell you.** A caller can tap "solved" on a wrong answer; the key scenarios' accuracy (VR-4, VR-5) covers that before release, and flags catch some live.
 
 ### Supporting metrics
 
@@ -40,7 +40,7 @@ Success means a caller with a routine need gets it settled correctly in one conv
 ## Upstream fixes and open questions
 
 - Add FR-5.6, a one-tap "did this solve it?" at the end of a contained conversation (done in `REQUIREMENTS.md`), and raise FR-5.4 flagging to Must (done).
-- Contained-wrong ≤ 2% (VR-5) cannot be counted live without a person judging each case → stays an eval-set check (rerun after each knowledge-base change, CH-2).
+- Contained-wrong (VR-5, 0 in the 31 scenarios) cannot be counted live without a person judging each case → stays an eval check (rerun after each knowledge-base change, CH-2).
 - Booking completion and Handoffs on handled topics have no target → set after the first week of live and eval data.
 - Ceiling is 65.2% on the handled drivers, up to 71.7% with burning-smell and scripted-redirect calls (`AUDIT.md` §3); the intent labels behind the supporting metrics still need the EV-6 second read.
 - Safety, privacy and "never promise a fee waiver" rows (AZ-, VR-2, VR-3, VR-9, CP-1) are tests that gate release, not tracked here.

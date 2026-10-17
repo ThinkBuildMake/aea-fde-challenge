@@ -4,11 +4,11 @@
 
 ## Summary
 
-- **Load:** one builder plus a reviewer, up to 5 conversations at once (SC-1); live peak about 0.3 turns/s. The heaviest job is the eval run: about 2,400 turns in 30 minutes (EV-7), about 1.3 turns/s. Reads to writes about 2:1. About 60 MB of data in total.
+- **Load:** one builder plus a reviewer, up to 5 conversations at once (SC-1); live peak about 0.3 turns/s. The heaviest job is the eval run: 31 scenarios, about 250 turns, in about 6 minutes. Reads to writes about 2:1. About 10 MB of data in total.
 - **Design:** one app server that runs the conversation, backed by the supplied scheduling database, a second small database for everything the app records, an in-process retrieval index built from the knowledge base, and an outside language-model provider.
 - **Wireframe:** [Meridian Agent Wireframe](https://claude.ai/artifact/JY5CoLpz2ViQzaD8sMQ7Sa), clickable. Caller chat: start, loading, booking, wants earlier, waitlisted, confirmed, answer, handoff, safety stop, error, thanks and not-solved. Business view: overview, handoffs, waitlist, conversations.
 - **Next as it grows:** final at this scale. The load is capped by SC-1 and the deadline of 2026-11-05 (DP-2); nothing in §2 comes within 100× of what one server and one database handle.
-- **Cost:** about $15 to $30 a month for hosting; model use dominates at roughly $100 to $600 across the build, mostly eval runs [assumed]. Budget: no cap (GC-3), alert at $100 (CO-1), which the first full eval run may trip (§7).
+- **Cost:** about $15 to $30 a month for hosting; model use is the larger part at roughly $30 to $80 across the build [assumed]. Budget: no cap (GC-3), alert at $100 (CO-1), which the build should stay under.
 
 ```mermaid
 ---
@@ -41,7 +41,7 @@ flowchart LR
 
 | # | Interaction | R/W | How often | Peak/s | Expected latency | Data touched | Can be lost? | Source |
 |---|---|---|---|---|---|---|---|---|
-| I-1 | Caller sends a message and gets a reply | R+W | 8 turns a conversation [assumed] | 0.3 live, 1.3 in eval | 6 s first reply | Conversation, Turn, Customer, Slot, Invoice, Passage | Log: no | FR-1, FR-2, FR-3, PF-1 |
+| I-1 | Caller sends a message and gets a reply | R+W | 8 turns a conversation [assumed] | 0.3 live, 0.7 in eval | 6 s first reply | Conversation, Turn, Customer, Slot, Invoice, Passage | Log: no | FR-1, FR-2, FR-3, PF-1 |
 | I-2 | Book, move or cancel a visit (inside a turn) | W | about 1 in 3 conversations | 0.1 | 10 s | Slot, Appointment | Never | FR-1.10 to 1.12, PF-2, VR-6 |
 | I-3 | Join the waitlist (inside a turn) | W | about 1 in 12 conversations (34 of 420 calls, `AUDIT.md`) | below 0.05 | 10 s | WaitlistEntry | Never | FR-1.15 |
 | I-4 | Hand off and take a callback window | W | about 1 in 4 (119 of 420 calls need a person or a safety stop, `AUDIT.md` §3) | 0.1 | 3 s | Handoff | Never | FR-4, FR-3.5 |
@@ -50,16 +50,16 @@ flowchart LR
 | I-7 | Staff opens the overview | R | a few times a day; refresh every 30 s | 0.05 | 2 s | Conversation, Turn, Appointment, Slot, Ping | — | FR-5.3, OB-2 |
 | I-8 | Staff works the handoff queue and waitlist | R+W | a few times a day | below 0.05 | 1 s | Handoff, WaitlistEntry | Never | FR-5.5, FR-5.7 |
 | I-9 | Staff browses, flags, or turns a conversation into a test | R+W | a few times a day | below 0.05 | 1 s | Conversation, Turn, Flag | Never | FR-5.4, OB-4 |
-| I-10 | Eval run | R+W | several times before the deadline | 1.3 turns | whole run 30 min | Scenarios, a private copy of the scheduling data | — | EV-7, SC-1 |
+| I-10 | Eval run | R+W | several times before the deadline | 0.7 turns | whole run 6 min | Scenarios, a private copy of the scheduling data | — | EV-7, SC-1 |
 | I-11 | Rebuild the retrieval index | R+W | when a knowledge-base file changes | n/a | 5 min | Passages | No | CH-1 |
 | I-12 | Reset scheduling data to the seed | W | before each eval or demo | n/a | 1 min | Scheduling database | — | DP-4 |
 | I-13 | Health ping | R | every 5 minutes | 0.003 | 1 s | Ping | No | DP-2 |
 
 **Arithmetic.**
 - *Live peak:* 5 conversations (SC-1), a caller turn every 15 s [assumed] → 5 ÷ 15 = 0.33 turns/s. Business view: 2 viewers refreshing every 30 s = 0.07 requests/s. Health ping: 1 per 300 s = 0.003/s.
-- *Eval run:* at least 200 scenarios (EV-1) plus probes: 35 safety (VR-2) + 16 trap (VR-3) + 15 cross-account (AZ-1) + 10 fee and price (AZ-3) + 25 unanswerable (RL-3) = 101 → about 301 conversations × 8 turns = 2,408 turns. At about 6 s a turn, serial time is 14,448 s; to finish in 1,800 s (EV-7) needs 14,448 ÷ 1,800 ≈ 8 conversations in parallel [assumed], which is 2,408 ÷ 1,800 = 1.3 turns/s. The retrieval eval (50 questions, EV-4) is small and separate.
-- *Storage:* a stored conversation is 8 turns × about 3 KB (including tool results and retrieved text for VR-9) ≈ 24 KB. 8 eval runs (2,408 conversations) plus 200 live ≈ 2,600 conversations ≈ 62 MB at most. Scheduling data 114 KB. Retrieval index: about 40 passages × 3 KB of vector ≈ 0.2 MB [assumed]. No uploaded files.
-- *Outside calls per turn:* about 3 model calls (safety screen, answer with tool use, sometimes a second tool round) plus 1 question embedding [assumed]. Per eval run: 2,408 turns × 3 ≈ 7,200 model calls. At about 5,000 input tokens each, that is about 36 million input tokens a run; at an assumed $3 per million, about $110 uncached, and a fraction of that with prompt caching and a small model for the screen. This, not the servers, is the cost and latency driver.
+- *Eval run:* 31 key scenarios (EV-1) × 8 turns = 248 turns. At about 6 s a turn, serial time is 1,488 s (25 minutes); 4 conversations at once (SC-2) take about 6 minutes, which is 248 ÷ 372 s ≈ 0.7 turns/s. The retrieval eval (20 questions, EV-4) needs only embeddings and is separate.
+- *Storage:* a stored conversation is 8 turns × about 3 KB (including tool results and retrieved text for VR-9) ≈ 24 KB. 6 eval runs (186 conversations) plus 200 live ≈ 400 conversations ≈ 10 MB at most. Scheduling data 114 KB. Retrieval index: about 40 passages × 3 KB of vector ≈ 0.2 MB [assumed]. No uploaded files.
+- *Outside calls per turn:* about 3 model calls (safety screen, answer with tool use, sometimes a second tool round) plus 1 question embedding [assumed]. Per eval run: 248 turns × 3 ≈ 750 model calls. At about 5,000 input tokens each, that is about 3.7 million input tokens a run; at an assumed $3 per million, about $11 uncached, and less with prompt caching and a small model for the screen. This, not the servers, is the cost and latency driver.
 
 Peak load is under 2 requests/s even in the eval run, and most of each turn is waiting on the model provider. One app server and one small database handle this with over 100× headroom.
 
@@ -72,14 +72,14 @@ Peak load is under 2 requests/s even in the eval run, and most of each turn is w
 | Slot | Supplied time window per technician, date, service type | date, window, zone, service type, status | holds 0..1 Appointment | never lose | none (528) |
 | Appointment | A booked visit | slot, customer, issue, status | one Slot, one Customer | never lose | up to about 1 a conversation |
 | Invoice | Supplied bill | amount, balance, line items | one Customer | supplied | none (81) |
-| Conversation | One chat from first message to end | outcome, intent, cost, solved answer, matched customer | many Turns | never lose | 2,600 |
-| Turn | One caller message and agent reply | text, latency, tools called, retrieved passages, error | one Conversation | never lose | 20,000 |
-| Handoff | A person must act: handoff record or supervisor callback | reason, summary, preferred window, status | one Conversation | never lose | about 500 |
-| WaitlistEntry | A caller wants an earlier window than the one booked | visit type, zone, window held, status | one Conversation, one Appointment | never lose | about 200 |
+| Conversation | One chat from first message to end | outcome, intent, cost, solved answer, matched customer | many Turns | never lose | 400 |
+| Turn | One caller message and agent reply | text, latency, tools called, retrieved passages, error | one Conversation | never lose | 3,200 |
+| Handoff | A person must act: handoff record or supervisor callback | reason, summary, preferred window, status | one Conversation | never lose | about 100 |
+| WaitlistEntry | A caller wants an earlier window than the one booked | visit type, zone, window held, status | one Conversation, one Appointment | never lose | about 35 |
 | Flag | A person marked a conversation wrong or poor | note, who, when | one Conversation | never lose | tens |
 | Passage | A chunk of one current knowledge-base file | text, source file, vector | one source file | rebuildable (CH-1) | about 40 |
 | Ping | One health check seen | time | none | disposable | 288 a day |
-| Scenario and Eval result | Eval inputs and outputs, kept as files in the repository | expected outcome, facts, database change | none | never lose (version control) | 301 scenarios |
+| Scenario and Eval result | Eval inputs and outputs, kept as files in the repository | expected outcome, facts, database change | none | never lose (version control) | 31 scenarios |
 
 ```mermaid
 ---
@@ -109,7 +109,7 @@ Customer, Technician, Slot, Appointment and Invoice live in the supplied schedul
 | Match the caller (I-1) | Customer | exact match on name plus phone, account number or address | fine as a query (154 rows) |
 | Balance and line items (I-1) | Customer, Invoice | filter by customer | fine as a query |
 | Answer a policy question (I-1) | Passage | nearest passages to the question's meaning, from current files only | needs a different kind of store: a meaning-based index (PRD-2, EV-4 require retrieval evaluated alone); 40 passages, searched in memory |
-| Overview numbers (I-7) | Conversation, Turn, Appointment, Slot, Ping | counts by outcome over 7 days, p95 latency, a join to check booking agreement | fine as a query (2,600 conversations); computed on request, which meets the 1 minute lag (OB-2) with no stored counts |
+| Overview numbers (I-7) | Conversation, Turn, Appointment, Slot, Ping | counts by outcome over 7 days, p95 latency, a join to check booking agreement | fine as a query (400 conversations); computed on request, which meets the 1 minute lag (OB-2) with no stored counts |
 | Handoff queue, waitlist (I-8) | Handoff, WaitlistEntry | filter by status, sort by age | fine as a query |
 | Conversation list and detail (I-9) | Conversation, Turn | filter by outcome, sort by time | fine as a query |
 
@@ -164,7 +164,7 @@ flowchart LR
 |---|---|---|---|---|---|---|---|
 | `rebuildIndex` | Builder | the knowledge-base folder | new retrieval index | W | ≤ 5 min | sync | I-11, CH-1 |
 | `resetScheduling` | Builder | none | scheduling database back to the seed, waitlist and logs untouched | W | ≤ 1 min | sync | I-12, DP-4 |
-| `runEval` | Builder | scenario set | counts, accuracy, escalation, intervals, run environment record | R+W | ≤ 30 min | sync, 8 conversations in parallel against a private copy of the scheduling data | I-10, EV-3, EV-7, DE-3 |
+| `runEval` | Builder | scenario set | per-scenario results, projected containment, accuracy, escalation, run environment record | R+W | ≤ 15 min | sync, 4 conversations in parallel against a private copy of the scheduling data | I-10, EV-3, EV-7, DE-3 |
 | `exportEvalCandidates` | Builder | flagged conversations | scenario files | W | ≤ 1 min | sync | OB-4 |
 
 ### 4.3 External services
@@ -223,7 +223,7 @@ flowchart LR
 
 ### Eval runner
 
-**Why it exists:** EV-3 to EV-7 need the eval run from one command. **Holds / does:** loads scenarios, starts a private copy of the app against a copy of the scheduling data so the live bookings are not touched, plays each scenario (8 at once), grades and prints counts with intervals. Not user-facing.
+**Why it exists:** EV-3 to EV-7 need the eval run from one command. **Holds / does:** loads scenarios, starts a private copy of the app against a copy of the scheduling data so the live bookings are not touched, plays each scenario (4 at once), grades and prints per-scenario results and the projected containment. Not user-facing.
 
 ### Uptime checker
 
@@ -231,7 +231,7 @@ flowchart LR
 
 **What to add next**
 
-Final at this scale: capped at 5 simultaneous conversations (SC-1) for a review window ending 2026-11-05 (DP-2). No queue (the longest operation is a 10 s turn), cache (every read is under 10 ms), scheduler (the two periodic checks run when someone opens the overview), second instance, load balancer, object storage or CDN is justified. The first thing that will strain is the model provider's rate limit during an 8-way eval run; if `runEval` logs rate-limit errors, lower the parallelism rather than add a component.
+Final at this scale: capped at 5 simultaneous conversations (SC-1) for a review window ending 2026-11-05 (DP-2). No queue (the longest operation is a 10 s turn), cache (every read is under 10 ms), scheduler (the two periodic checks run when someone opens the overview), second instance, load balancer, object storage or CDN is justified. The first thing that will strain is the model provider's rate limit during a 4-way eval run; if `runEval` logs rate-limit errors, lower the parallelism rather than add a component.
 
 ## 6. Cost envelope
 
@@ -242,19 +242,18 @@ Final at this scale: capped at 5 simultaneous conversations (SC-1) for a review 
 | Retrieval index | $0 | $0 |
 | Uptime checker | $0 (free tier) | $0 |
 | Model provider, live traffic (a few hundred conversations) | under $10 | under $10 |
-| Model provider, eval runs: about $20 to $110 each [assumed], 4 to 6 runs | $100 to $600 | same |
-| **Total** | **about $120 to $650 over the build** | **same** |
+| Model provider, eval runs: about $5 to $11 each [assumed], 4 to 6 runs | $20 to $70 | same |
+| **Total** | **about $55 to $150 over the build** | **same** |
 
-No cap (GC-3). The CO-1 alert of $100 would fire on the first or second full eval run (§7). Exact prices are in `STACK.md`.
+No cap (GC-3). The CO-1 alert of $100 should not fire on this plan. Exact prices are in `STACK.md`.
 
 ## 7. Open questions and upstream fixes
 
 | Item | Why it matters | Resolved by |
 |---|---|---|
 | [assumed] 8 turns a conversation, a caller turn every 15 s, 3 model calls and 1 embedding a turn | Sets the eval length and the cost | First prototype run; replace with measured values in `STACK.md` and `ARCHITECTURE.md` |
-| [assumed] 8 conversations in parallel are needed to finish the eval in 30 minutes | Needs the provider's rate limits to allow it, and the private database copy | Add **SC-2** to `REQUIREMENTS.md`: the eval runs 8 conversations at once, each on its own copy of the scheduling data, with 0 VR-6 or VR-7 violations [prop] |
-| [assumed] about $3 per million input tokens and 5,000 input tokens a call | One full eval run could cost around $100 uncached | `STACK.md` prices; decide the model for the safety screen and use prompt caching |
-| `CO-1` alerts at $100 cumulative, which one eval run can reach | A noisy alert gets ignored | Raise to $300 cumulative plus an alert for any single run above $100 [prop], or keep $100: your call |
+| [assumed] 4 conversations in parallel finish the eval in about 6 minutes | Needs the provider's rate limits to allow it, and the private database copy | **SC-2** in `REQUIREMENTS.md` (applied) |
+| [assumed] about $3 per million input tokens and 5,000 input tokens a call | One eval run costs about $11 uncached | `STACK.md` prices; decide the model for the safety screen and use prompt caching |
 | The waitlist lives in the app database, not "beside the supplied tables" as A14 and DP-4 say | Keeps the supplied schema untouched and the reset from erasing logs | Reword A14 and DP-4 in `REQUIREMENTS.md` (applied with this document) |
 | FR-5.5 lists handoffs but gives staff no way to close them; the callback window is chosen with buttons | The wireframe needs `markHandoffFollowedUp` and `submitCallbackWindow` | Reword FR-5.5, FR-3.5 and FR-4.3 in `REQUIREMENTS.md` (applied with this document) |
 | DP-2 says an external ping is logged; the app must record each ping to draw the uptime strip | Needed for the uptime measure on `KEY_METRICS.md` | Reword DP-2 (applied with this document) |
