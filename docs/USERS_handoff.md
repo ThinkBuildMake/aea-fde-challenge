@@ -11,7 +11,7 @@ These items came up while defining the user but describe how the product is buil
 - Retrieve only from current documents. Superseded content to exclude or down-rank: `archive/comfort_club_overview.md`, `archive/warranty_terms_2023.txt`, `faq/faq_old_copy.md`, `scheduling_guide.md` (Rev 2024-11, conflicts with the FAQ on cancellation notice) (UC-2).
 - Content that lives outside plain text must be ingested: `policies/holiday_hours_2026.png` (image) and `pricing/2026_fee_schedule.pdf` (table) (UC-2).
 - Where documents disagree and no precedence is known, the agent must hand off rather than pick one (UC-2).
-- Repair prices are never firm; only the $89 diagnostic fee is stated (UC-1, UC-2).
+- Repair prices are never firm; only the $89 diagnostic fee is firm. A range may be stated when a retrieved current document gives it (UC-1, UC-2).
 
 ## Capabilities traced to use cases
 | Capability | Required by |
@@ -37,7 +37,7 @@ These items came up while defining the user but describe how the product is buil
 ## Open questions for the requirements and research steps
 - **The containment ceiling.** The seven first-iteration features resolve at most about 274 of 420 provisionally labelled calls (about 65%), against a 60 to 75% target. Little headroom: requirements should set the counting rule (A2) and the accuracy needed so wrong answers don't erode it.
 - **Assumptions A1 to A12** in `USERS.md` Section 9 replace the exec-team questions; requirements should carry A4, A5, A9 and A10 as behaviors with tests.
-- The final discovery clustering must replace the keyword labels in `USERS.md` Section 2 (PRD goal 1).
+- Done: the whole-call audit (`docs/AUDIT.md`) replaced the keyword labels in `USERS.md` Section 2.
 - The eval set must be built from the transcripts; many transcripts begin with noise ("can you hear me," "I'm driving") before the real intent, so labelling must read the full call.
 - Check that the `invoices.line_items` JSON gives meaningful descriptions before claiming UC-3's value.
 - No plumbing slots exist in the north zone: decide the behaviour (alternatives, waitlist, handoff).

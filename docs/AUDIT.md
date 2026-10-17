@@ -89,12 +89,14 @@ The trap documents are therefore tested only by authored probes (VR-3, EV-4), no
 
 ## 7. Upstream fixes
 
+*All applied on 2026-10-17. Decisions from the builder: no waitlist is offered (the agent states the earliest window), and a price range may be stated when a retrieved current document confirms it.*
+
 | Document | Change | Why |
 |---|---|---|
 | `USERS.md` §2 | Replace the provisional table with §2 above; note that hours, service area and the three superseded values do not appear in the calls | Whole-call reading; no call evidence for UC-2's hours and area examples |
 | `REQUIREMENTS.md` EV-2 | Each scenario carries a database customer mapped from the call; balance and invoice scenarios carry a real invoice | Finding 1 |
-| `REQUIREMENTS.md` FR-1.3 | Accept account number plus name, or name plus service address, as well as name plus phone [decision needed] | Finding 2 |
-| `REQUIREMENTS.md` | Decide the waitlist (finding 4) and quoted ranges (finding 5) | Humans do both; documents are silent or stricter |
+| `REQUIREMENTS.md` FR-1.3 | Accept account number plus name, or name plus service address, as well as name plus phone (FR-1.3, A16) | Finding 2 |
+| `REQUIREMENTS.md` | No waitlist (FR-1.15, A14); sourced price ranges (FR-1.13, FR-2.12, VR-9, A15); one business day for callbacks (FR-4.3) | Findings 3, 4, 5 |
 | `REQUIREMENTS.md` open items | Remove the invoice line-item item | Section 6 |
 | `KEY_METRICS.md` | Ceiling note: 65.2% base, up to 71.7% if burning-smell and redirect calls are contained | Section 3 |
 

@@ -6,7 +6,7 @@
 
 **This document does not cover:** how the agent is built, verified, measured or hosted. Requirements, key metrics, stack and architecture are separate documents that trace back to the use case IDs (UC-n) and the constraints here.
 
-**Status:** Draft, interview with the builder (the FDE) on 2026-10-16, built from `docs/AEA_FDE_Challenge.pdf` (the PRD) and `data/meridian_dataset/`. The exec team has not been interviewed and there will be no meeting notes, so questions that would have gone to them are answered by best guess and listed in Section 9 as assumptions, marked *(assumed)* where they appear. Claims about their goals come from the PRD and are marked *(PRD)*. Call-mix numbers come from a provisional rule-based labelling of each call's opening lines (`analysis/classify_openings.py`), not from the final discovery clustering the PRD asks for.
+**Status:** Draft, interview with the builder (the FDE) on 2026-10-16, built from `docs/AEA_FDE_Challenge.pdf` (the PRD) and `data/meridian_dataset/`. The exec team has not been interviewed and there will be no meeting notes, so questions that would have gone to them are answered by best guess and listed in Section 9 as assumptions, marked *(assumed)* where they appear. Claims about their goals come from the PRD and are marked *(PRD)*. Call-mix numbers come from the whole-call audit in `docs/AUDIT.md` (`analysis/audit_calls.py`), which reads every call in full.
 
 ---
 
@@ -30,22 +30,24 @@ They are not trying to learn about Meridian. They want one of three outcomes: a 
 
 ### What callers actually ask for (the supplied transcripts)
 
-The 420 transcripts run from 2026-07-06 to 2026-09-19 and carry no labels. Reading every call's opening lines, the 420 calls contain about 80 distinct openings that fall into roughly 25 intents. Grouped:
+The 420 transcripts run from 2026-07-06 to 2026-09-19 and carry no labels. `docs/AUDIT.md` reads each call in full and labels what the caller wanted and how the human agent resolved it. Grouped:
 
 | What the caller wants | Calls | Share |
 |---|---|---|
 | Book a repair, plumbing or tune-up visit | 120 | 28.6% |
-| Membership: what it includes, renewal charge, upgrade, discount, autopay, cancel | 71 | 16.9% |
 | Warranty: coverage, transfer, repeat repair, manufacturer registration | 45 | 10.7% |
 | Billing lookup: balance, pay an invoice, what a line item is | 42 | 10.0% |
-| Something about an existing appointment: move or cancel it, confirm it, technician is late | 38 | 9.0% |
+| Membership question: what it includes, price, renewal charge, discount | 38 | 9.0% |
+| Membership change: autopay, cancel auto-renew, upgrade | 33 | 7.9% |
+| Existing appointment: move or cancel it, confirm it | 29 | 6.9% |
 | Billing dispute: quote differs from invoice, charged twice | 27 | 6.4% |
-| Complaint, manager request, refund demand | 24 | 5.7% |
 | Burning smell (needs a safety check) or confirmed gas, CO or sparks | 25 | 6.0% |
-| Replace a whole system (quote) | 12 | 2.9% |
+| Complaint, manager request, refund demand | 24 | 5.7% |
 | Employment, commercial, wrong number | 16 | 3.8% |
+| Replace a whole system (quote) | 12 | 2.9% |
+| Technician is late | 9 | 2.1% |
 
-> **How to read this table.** The labels are our provisional pass, a keyword rule on each call's first two customer turns. They are good enough to size the scope, not to report as final. The PRD asks for a defensible clustering and a written method; that is a separate step.
+> **How to read this table.** Labels come from rules applied to each whole call and were checked against how the human agent resolved it (`docs/AUDIT.md` §2); that document is the PRD's written discovery method. No call asks about opening hours, holidays, the service area or the superseded fee, warranty and cancellation values, so those knowledge-base rows are tested by authored probes, not by transcripts (`docs/AUDIT.md` §5).
 
 At a glance, the three things callers most often want are a visit booked, a membership or warranty question answered, and a bill explained. All three are routine in the sense that Meridian's own documents already say what the answer is.
 
@@ -105,7 +107,7 @@ Disputes, refunds, complaints and manager requests are different work: the calle
 | **What they need to see** | A clear yes or no: either "you're booked, Thursday 8 to 12, with [tech name]" or "nothing opens that day, here are the nearest options." For an existing visit, the date, window and tech on file, and what moving or cancelling it costs (free more than 24 hours ahead, $49 inside 24 hours). The diagnostic fee, said once, in plain terms ($89, credited toward the repair, waived for members). If nothing can be booked, a clear handoff, not a dead end. |
 | **What they do with it** | Accept a window, pick another, or ask for a person. They decide; the agent never books without a yes. |
 | **Time available** | A booking call in the data runs about 137 seconds at the median; appointment changes about 90 seconds. |
-| **Must never** | Book a visit for a gas smell, CO alarm, sparks or smoke. Tell a caller they are booked when nothing was recorded. Book someone outside the service area. Cancel or move a visit without the caller saying so. Charge or promise to waive the late-cancellation fee: only a person waives fees. Promise a repair price: only the diagnostic fee is stated, and repair prices are "the technician will confirm on site." Send a caller away from a booking without saying what happens next. |
+| **Must never** | Book a visit for a gas smell, CO alarm, sparks or smoke. Tell a caller they are booked when nothing was recorded. Book someone outside the service area. Cancel or move a visit without the caller saying so. Charge or promise to waive the late-cancellation fee: only a person waives fees. Promise a repair price: only the diagnostic fee is firm. A price range may be stated only when a current document the agent retrieved gives it, and always with "the technician will confirm on site." Send a caller away from a booking without saying what happens next. |
 
 **Why an agent, not an online booking form or a phone menu:**
 A form can do the lookup. If the caller already knows their city, the problem type and the day they want, a form can show open windows, and a phone menu can read them out. Neither needs this product for that.
@@ -244,7 +246,7 @@ There is no stakeholder to ask and there will be no meeting notes, so these are 
 
 ## 10. Evidence limitations
 
-- **The call mix** is a provisional keyword labelling of the first two customer turns of 420 synthetic calls. It sizes scope; it is not the final clustering, and it would shift if calls were labelled by their full content.
+- **The call mix** is a rule-based whole-call labelling of 420 synthetic calls (`docs/AUDIT.md`). Intent labels have not yet been checked by a second reader (EV-6).
 - **The calls are synthetic and templated.** About 80 distinct openings repeat across 420 calls, so the mix reflects how the dataset was made. It may not match a real caller population.
 - **The first-iteration ceiling of about 65%** is arithmetic on the provisional counts, assuming every handled call resolves. It is an illustration, not a prediction.
 - **The outside call-answering and abandonment figures** are from secondary vendor pages and summaries of CallRail, Invoca and ContactBabel; the primary reports were not opened. They differ in definition and period, and are not combined. None measures Meridian.
@@ -257,6 +259,6 @@ There is no stakeholder to ask and there will be no meeting notes, so these are 
 
 1. AEA FDE Challenge: AI Call Center Agent (PRD). `docs/AEA_FDE_Challenge.pdf`.
 2. Meridian dataset: `data/meridian_dataset/` (420 transcripts, knowledge base, scheduling database).
-3. Provisional call-intent labelling: `analysis/classify_openings.py`, output `analysis/provisional_labels.csv`.
+3. Call audit: `docs/AUDIT.md`, `analysis/audit_calls.py`, output `analysis/call_labels.csv`. Earlier keyword pass: `analysis/classify_openings.py`.
 4. Secondary summaries of home-services missed-call benchmarks (CallRail 2025, Invoca 2026): <https://www.zyratalk.com/blog/what-a-missed-call-actually-costs-a-home-service-business/>, <https://getaira.io/blog/missed-business-calls-statistics>.
 5. Secondary summaries of call-abandonment benchmarks (ContactBabel 2024 UK): <https://www.ringly.io/blog/call-abandonment-rate-statistics-2026>.

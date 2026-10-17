@@ -42,5 +42,5 @@ Success means a caller with a routine need gets it settled correctly in one conv
 - Add FR-5.6, a one-tap "did this solve it?" at the end of a contained conversation (done in `REQUIREMENTS.md`), and raise FR-5.4 flagging to Must (done).
 - Contained-wrong ≤ 2% (VR-5) cannot be counted live without a person judging each case → stays an eval-set check (rerun after each knowledge-base change, CH-2).
 - Booking completion and Handoffs on handled topics have no target → set after the first week of live and eval data.
-- The 65% ceiling and the intent labels behind the supporting metrics depend on the final discovery clustering (EV-6).
-- Safety, privacy and "never promise a fee waiver" rows (AZ-, VR-2, VR-3, CP-1) are tests that gate release, not tracked here.
+- Ceiling is 65.2% on the handled drivers, up to 71.7% with burning-smell and scripted-redirect calls (`AUDIT.md` §3); the intent labels behind the supporting metrics still need the EV-6 second read.
+- Safety, privacy and "never promise a fee waiver" rows (AZ-, VR-2, VR-3, VR-9, CP-1) are tests that gate release, not tracked here.

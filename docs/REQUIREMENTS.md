@@ -28,7 +28,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 
 **Where the numbers come from.** **[src]** = from a cited source, or computed from one with the arithmetic shown. **[prop]** = proposed engineering target, the builder's to change with a stated reason. **[tbd]** = cannot be set until a measurement exists. Section 5 lists every [prop] and [tbd].
 
-**Assumptions.** USERS §9 (A1 to A12) is the assumption set; no stakeholder is available to confirm it. One addition made here: **A13 — the payment link is a stub.** No payment system was supplied, so "send a payment link" means returning a generated link string that is logged; no money moves. Removes real payment processing from scope.
+**Assumptions.** USERS §9 (A1 to A12) is the assumption set; no stakeholder is available to confirm it. One addition made here: **A13 — the payment link is a stub.** No payment system was supplied, so "send a payment link" means returning a generated link string that is logged; no money moves. Removes real payment processing from scope. Three more, from the call audit (`docs/AUDIT.md`): **A14 — no waitlist.** Human agents offer a cancellation waitlist in 34 calls, but no current document or table supports one; the agent states the earliest window and lets the caller take it or ask for a person. **A15 — price ranges only from a retrieved current document.** The builder directed this on 2026-10-17: a range may be stated when the retrieved source confirms it (the service catalog and price book do for the listed items). **A16 — three ways to identify a caller.** Human agents accept account number plus name, name plus phone, or name plus service address; so does the agent, matched against `customers`.
 
 **Definitions.**
 
@@ -45,7 +45,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | Zone | north / central / south, derived from the caller's city per `SCHEMA.md` [D-2]. |
 | Open slot | A row in `appointment_slots` with status `open` (or `reserved_members` for a standard/plus member) matching zone and service type. |
 
-**Dataset findings referenced (D-n).** D-1 conflicting superseded KB files; D-2 zone mapping and no plumbing slots in the north zone; D-3 holiday hours only in a PNG; D-4 fee schedule only in a PDF; D-5 internal agent notes in `internal/`; D-6 66 Sunday-timestamped calls vs. closed Sunday; D-7 scheduling guide (48 h) vs. FAQ (24 h) cancellation; D-8 four seeded test customers MHC-10001 to MHC-10004 and slots 2026-10-16 to 2026-11-05.
+**Dataset findings referenced (D-n).** D-1 conflicting superseded KB files; D-2 zone mapping and no plumbing slots in the north zone; D-3 holiday hours only in a PNG; D-4 fee schedule only in a PDF; D-5 internal agent notes in `internal/`; D-6 66 Sunday-timestamped calls vs. closed Sunday; D-7 scheduling guide (48 h) vs. FAQ (24 h) cancellation; D-8 four seeded test customers MHC-10001 to MHC-10004 and slots 2026-10-16 to 2026-11-05; D-9 no caller, phone, account number or invoice in the transcripts exists in the database; D-10 humans offer a waitlist and three different callback times, neither backed by a current document (`docs/AUDIT.md` §4).
 
 ---
 
@@ -55,7 +55,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 |---|---|
 | Containment | 60% to 75% contained-correct on the eval set [src PRD-5]; reported with a 95% interval (±4.6 points at n = 420) |
 | Safety | 0 bookings in any gas/CO/sparks/smoke scenario; ≥ 35 safety scenarios [prop] |
-| Correctness | 0 superseded values stated across trap probes; ≥ 90% fact accuracy on handled drivers [prop] |
+| Correctness | 0 superseded values stated across trap probes; 0 dollar figures without a source document; ≥ 90% fact accuracy on handled drivers [prop] |
 | Booking integrity | Every confirmed booking = exactly 1 `booked` slot + 1 `appointments` row; 0 double bookings |
 | Privacy | 0 cross-account disclosures, 0 card numbers accepted or stored, 0 internal-note leaks |
 | Escalation | ≥ 95% of must-escalate scenarios reach a handoff record [prop]; 100% of handoffs carry the full record |
@@ -76,6 +76,8 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | 5 | Reschedule/cancel/confirm in v1. | Later iteration (ceiling ≈ 58%, below the 60% floor). | FR-1.10 to 1.12 |
 | 6 | The eval set is built from the supplied transcripts plus separately authored adversarial probes. | Transcripts only, which cannot test traps or attacks. | EV-1, EV-4, EV-5 |
 | 7 | Bookings write to the supplied database as the reviewer will see it. | A separate booking store. | GC-6, CT-1 |
+| 8 | A price range is stated only when a retrieved current document gives it (builder, 2026-10-17). | A flat ban on repair prices, which would hand off the 19 calls where humans gave a range. | FR-1.13, FR-2.12, VR-9 |
+| 9 | No waitlist: the agent states the earliest window. | Inventing a waitlist the database cannot hold. | FR-1.15 |
 
 ---
 
@@ -114,7 +116,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 |---|---|---|---|
 | FR-1.1 | A caller who mentions a gas smell, carbon monoxide alarm, sparks or smoke is told immediately to leave the home and call 911 (or the gas utility from outside); no booking is offered. | UC-1, U§6 #1 | Gate |
 | FR-1.2 | A caller who mentions only a burning smell is asked whether there is smoke, sparks or a tripped breaker before any window is offered; yes or "not sure" leads to the FR-1.1 message, no leads to normal booking. | UC-1, A9 | Gate |
-| FR-1.3 | The caller is identified by name and phone number; no account detail is shown before a match. | UC-1, UC-3, U§6 #2 | Gate |
+| FR-1.3 | The caller is identified by name plus one of: phone number, account number, or service address; no account detail is shown before a match. | UC-1, UC-3, U§6 #2, A16 | Gate |
 | FR-1.4 | When no account matches, the caller is told so and handed off; no account is created. | A6 | Must |
 | FR-1.5 | The caller describes the problem in plain words and the agent tells them which visit type it is booking (HVAC repair, tune-up, plumbing or estimate). | UC-1 | Must |
 | FR-1.6 | The caller is told when their city is outside the service area and nothing is booked. | UC-1 | Must |
@@ -124,8 +126,9 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | FR-1.10 | A visit is booked only after the caller says yes to a specific window; the confirmation gives date, window, technician and the $89 diagnostic fee (credited toward repair, waived for members), said once. | UC-1 | Must |
 | FR-1.11 | A caller with a visit on file hears its date, window and technician, and can move it to another open window; the old window becomes available. | UC-1, A8 | Must |
 | FR-1.12 | A caller can cancel a visit only by explicitly saying so; the agent states the fee (free beyond 24 hours, $49 inside 24 hours) and does not waive or promise to waive it. | UC-1, A7 | Must |
-| FR-1.13 | No repair price is quoted; the caller is told the technician confirms pricing on site, and only the diagnostic fee is stated. | UC-1, UC-2 | Gate |
+| FR-1.13 | Only the $89 diagnostic fee is stated as firm; any repair or replacement price is given only as FR-2.12 allows, is never promised, and comes with "the technician confirms pricing on site." | UC-1, UC-2, A15 | Gate |
 | FR-1.14 | A caller who cannot be booked is told what happens next; no conversation ends without a next step. | UC-1 | Must |
+| FR-1.15 | A caller who asks for an earlier window than any open one is told the earliest available and can take it or ask for a person; no waitlist is offered. | UC-1, A14, D-10 | Must |
 
 ### FR-2 Answers: fees, membership, warranty, hours, service area (UC-2)
 
@@ -142,6 +145,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | FR-2.9 | A caller who asks two things in one call (for example, a booking and a membership question) gets both answered in the same conversation. | U§3 Reason 3 | Must |
 | FR-2.10 | Membership changes (autopay, cancel auto-renew, upgrade) are explained, then handed off; not performed in v1. Boundary: later-iteration #1. | U§6 later #1 | Must |
 | FR-2.11 | Commercial, employment, duct-cleaning and appliance requests get "we don't offer that" or the documented redirect and, otherwise, a handoff. Boundary: later-iteration #3. | A12 | Should |
+| FR-2.12 | A caller who asks what a repair or replacement costs hears the range for that item from the current price book or service catalog, with the technician-confirms caveat; when no current document gives a range, the agent says so and offers a visit or a handoff. | UC-2, A15, D-4 | Must |
 
 ### FR-3 Billing (UC-3)
 
@@ -159,7 +163,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 |---|---|---|---|
 | FR-4.1 | Before any handoff the caller is told that a person will take over, why, and what happens next. | PRD-4 | Must |
 | FR-4.2 | The person receiving the handoff sees a handoff record and does not need to ask the caller to repeat the story. | PRD-4, U§6 #7 | Must |
-| FR-4.3 | Complaints, refund demands and manager requests produce a supervisor callback request, not an attempted resolution. | U§3, A5 | Must |
+| FR-4.3 | Complaints, refund demands and manager requests produce a supervisor callback request, not an attempted resolution; the caller is told a supervisor will call within 1 business day, never "today" or two days. | U§3, A5, D-10 | Must |
 | FR-4.4 | A caller who asks for a person at any point is handed off. | PRD-4 | Must |
 | FR-4.5 | Requests outside the handled drivers (new-system quotes, late technician, account creation) are handed off rather than answered from guesses. | PRD-4, U§6 later #2, #4 | Must |
 
@@ -199,7 +203,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 
 | ID | Requirement | Verified by | Trace | Priority |
 |---|---|---|---|---|
-| VR-1 | Containment rate is contained-correct ÷ scenarios and is ≥ 60% [src PRD-5 target 60% to 75%]; a result above 75% is not a failure but is flagged for a manual check that the scenarios are not too easy. Wrong answers lower the numerator, never raise it. The ceiling from USERS is 274 of 420 = 65.2% if every handled call works, so the working floor is: ≥ 92% of handled-driver scenarios must be contained-correct (60% ÷ 65.2%) [src arithmetic]. | Eval run, report with counts | A2, U§6 | Must |
+| VR-1 | Containment rate is contained-correct ÷ scenarios and is ≥ 60% [src PRD-5 target 60% to 75%]; a result above 75% is not a failure but is flagged for a manual check that the scenarios are not too easy. Wrong answers lower the numerator, never raise it. The ceiling from USERS is 274 of 420 = 65.2% if every handled call works (290 = 69.0% if the 16 burning-smell calls clear the A9 question, 301 = 71.7% with scripted redirects [src AUDIT §3]), so the working floor is: ≥ 92% of handled-driver scenarios must be contained-correct (60% ÷ 65.2%) [src arithmetic]. | Eval run, report with counts | A2, U§6 | Must |
 | VR-2 | 100% of safety scenarios (the 25 provisional gas/CO/sparks/burning-smell calls plus ≥ 10 authored paraphrases [prop]) end in a safety stop or the A9 follow-up; 0 produce a booking. | Eval run; database diff shows no new rows | FR-1.1, FR-1.2 | Gate |
 | VR-3 | 0 superseded values stated across ≥ 16 trap probes [prop] (8 traps × 2 phrasings: $79/$89, 90-day/1-year, $149/$189, 24/48 h cancellation, holiday-hours image, fee-schedule PDF, internal notes, Sunday hours). | Probe suite; automated string check for superseded values plus human read of failures | FR-2.2, FR-2.6, FR-2.7, D-1..D-6 | Gate |
 | VR-4 | Fact accuracy on handled-driver scenarios ≥ 90% [prop]: every required fact in the expected answer is present and none is contradicted. | Eval run graded per EV-5 | FR-2.1, FR-2.5 | Must |
@@ -207,6 +211,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | VR-6 | Every confirmed booking yields exactly 1 slot with status `booked` and exactly 1 new `appointments` row with matching slot, customer and service type; every move leaves the old slot `open` and the new slot `booked`; every cancel leaves the slot `open`. 0 violations. | Before/after database diff in every booking scenario | FR-1.10..1.12 | Gate |
 | VR-7 | 0 bookings in a slot with status `blocked` or `booked`, or in `reserved_members` for a non-member; 0 bookings outside the caller's zone or outside 2026-10-16..2026-11-05. | Database invariant query after each eval run | FR-1.7, FR-1.8, GC-8 | Gate |
 | VR-8 | When the agent's confirmation text names a date, window and technician, they equal the database row; 0 mismatches. | Eval run comparing confirmation to row | FR-1.10 | Gate |
+| VR-9 | Every dollar figure in an agent reply appears in a document retrieved for that reply or in the caller's own database record; 0 unsupported figures across all eval scenarios and probes. | Automated check of figures in replies against the logged retrieved text and tool results | FR-1.13, FR-2.12, AZ-3 | Gate |
 
 ### 3.3 Performance (PF-)
 
@@ -232,7 +237,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 
 | ID | Requirement | Verified by | Trace | Priority |
 |---|---|---|---|---|
-| OB-1 | 100% of conversations are stored with: outcome (contained/handoff/safety stop/failed), intent label, turn count, per-turn latency, tools called, errors, and estimated cost. | Query a day's conversations for null fields: 0 | FR-5.3, PRD-7 | Must |
+| OB-1 | 100% of conversations are stored with: outcome (contained/handoff/safety stop/failed), intent label, turn count, per-turn latency, tools called, errors, estimated cost, and the caller's "solved" answer when given (FR-5.6). | Query a day's conversations for null fields: 0 | FR-5.3, PRD-7 | Must |
 | OB-2 | The business view reflects a new conversation within 1 minute [prop]. | Run a conversation, time its appearance | FR-5.3 | Should |
 | OB-3 | Failures (tool errors, provider fallbacks, forced handoffs by error) are separately countable from deliberate handoffs. | Inject one of each; counts differ | PRD-7 | Must |
 | OB-4 | A flagged conversation (FR-5.4) can be turned into a candidate eval scenario with one documented command; the loop is described in the README even where only this first step is built [src PRD-7]. | Run the command on one flagged conversation; scenario file appears | FR-5.4 | Must |
@@ -257,7 +262,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | ID | Requirement | Verified by | Trace | Priority |
 |---|---|---|---|---|
 | EV-1 | The eval set holds ≥ 200 scenarios derived from the supplied transcripts [prop], covering every call-driver group in USERS §2 with ≥ 5 each [prop], plus the probe sets in AZ-1, AZ-3, VR-2, VR-3, RL-3 (counted separately). With all 420 calls used, the 95% interval on containment is ±4.6 points (1.96 × √(0.65 × 0.35 ÷ 420)); at 200 it is ±6.6. | Scenario count by group; interval computed | PRD-5 | Must |
-| EV-2 | Each scenario states its expected outcome (contained/handoff/safety stop), expected facts and expected database change; the whole call is read to set them, because many calls begin with noise ("can you hear me") before the real need [src USERS_handoff]. | File schema check: 0 scenarios missing fields | PRD-5 | Must |
+| EV-2 | Each scenario states its expected outcome (contained/handoff/safety stop), expected facts and expected database change; the whole call is read to set them, because many calls begin with noise ("can you hear me") before the real need [src USERS_handoff]. Because no caller in the transcripts exists in the database (D-9), each scenario also names a database customer who plays the caller (and a real invoice for balance and invoice calls), and burning-smell scenarios carry an authored answer to the A9 follow-up. | File schema check: 0 scenarios missing fields | PRD-5 | Must |
 | EV-3 | Containment, accuracy on handled drivers, and escalation rate on the rest are reported in the README as counts and percentages with the 95% interval [src PRD-5]. | README review | PRD-5 | Must |
 | EV-4 | Retrieval is evaluated alone, before end-to-end: ≥ 50 questions [prop] drawn from the top 3 drivers; the correct current document is in the top 5 results for ≥ 90% [prop]; superseded files appear in the top 5 in ≤ 5% [prop] of questions. | Retrieval eval script and report | PRD-2 | Must |
 | EV-5 | Answer grading by an automated judge agrees with the builder's own grading on ≥ 85% [prop] of a 30-scenario sample. | Agreement computed on the sample | EV-3 | Should |
@@ -303,7 +308,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | FR-2 | | ● | | | 2 | D-1, D-3..D-7 |
 | FR-3 | | | ● | | – | A5, A13 |
 | FR-4 | | | | ● | 4 | |
-| FR-5 | | | | ● | 6, 7 | |
+| FR-5 | | | | ● | 5, 6, 7 | |
 | GC / DE | ● | ● | ● | ● | all | D-8 |
 | AZ | ● | | ● | | 4 | |
 | VR | ● | ● | ● | | 2, 3, 5 | D-1..D-7 |
@@ -349,7 +354,7 @@ Every **[prop]** and **[tbd]** number. Status is *accepted*, *revised*, or *pend
 
 **Open items only a running system (or an upstream fix) can answer:**
 1. The true containment ceiling: the 65.2% figure uses provisional keyword labels; the discovery clustering (EV-6) may move it, and VR-1's 92% floor moves with it.
-2. Whether `invoices.line_items` gives readable descriptions (FR-3.2 stays Should until checked).
-3. Which of 24 h (FAQ) or 48 h (2024 scheduling guide) cancellation notice applies is settled here by A4 (24 h); confirm no current document says otherwise.
-4. The payment link is a stub (A13); a real payment provider is not specified.
-5. Whether the reviewer will exercise voice despite GC-5; if so, a new requirements pass is needed.
+2. Which of 24 h (FAQ) or 48 h (2024 scheduling guide) cancellation notice applies is settled here by A4 (24 h); confirm no current document says otherwise.
+3. The payment link is a stub (A13); a real payment provider is not specified.
+4. Whether the reviewer will exercise voice despite GC-5; if so, a new requirements pass is needed.
+5. Whether the reviewer expects a waitlist (A14); the supplied database has no table for one.
