@@ -170,8 +170,9 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | FR-5.1 | A reviewer opens a public URL, types messages, and sees the agent's replies, including a visible indication when the conversation has been escalated or ended in a safety stop. | PRD-6 | Must |
 | FR-5.2 | A reviewer can start a new conversation without reloading and without carrying over the previous caller's identity. | PRD-6 | Must |
 | FR-5.3 | The business can open a view showing how the agent is performing (volume, containment, escalations, failures, latency). | PRD-7 | Must |
-| FR-5.4 | A reviewer or staff member can flag a conversation as wrong or poor, with a note. | PRD-7 | Should |
+| FR-5.4 | A reviewer or staff member can flag a conversation as wrong or poor, with a note. | PRD-7 | Must |
 | FR-5.5 | The business view lists handoffs and supervisor callback requests awaiting follow-up. | PRD-4, PRD-7 | Should |
+| FR-5.6 | When the agent finishes a conversation without a handoff, the caller can tap "yes, that solved it" or "no"; the answer is recorded. | PRD-5, PRD-7 | Must |
 
 ### FR-6 First-iteration boundaries
 

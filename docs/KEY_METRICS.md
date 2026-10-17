@@ -8,15 +8,15 @@ Success means a caller with a routine need gets it settled correctly in one conv
 
 ## Success metric: Calls settled by the agent
 
-**What is it?** The percentage of conversations the agent settles correctly with no human involved. A conversation counts when it ends with the need met (a booking made, a question answered, a payment link sent) and nobody has flagged it as wrong.
+**What is it?** A count and a percentage: how many conversations the caller marked "solved" after the agent finished, out of all conversations. One conversation counts when the agent ended it with no handoff and the caller tapped "yes, that solved it" (FR-5.6).
 
-**How we measure it.** Contained conversations that were not flagged wrong ÷ all conversations, over a rolling 7 days. "Contained" is the outcome the system records on every conversation (OB-1). "Flagged wrong" is the reviewer or staff flag (FR-5.4). Before release the same ratio is computed on the eval set, where the expected answer and database change are known (VR-1, EV-3).
+**How we measure it.** Conversations with outcome contained (OB-1) and a recorded "solved" tap ÷ all conversations, over a rolling 7 days; the raw count is shown beside it. Nobody judges anything: both pieces are events the system records. Before release the same ratio is computed on the eval set, where the expected answer and database change are known (VR-1, EV-3).
 
-**Target.** Today 0% of calls are settled without a person; target 60% to 75% [src PRD-5, VR-1]. The ceiling with the first-iteration features is about 65% (274 of 420 provisionally labelled calls, VR-1); the final clustering may move it.
+**Target.** Today 0% of calls are settled without a person; target 60% to 75% [src PRD-5, VR-1]. The ceiling with the first-iteration features is about 65% (274 of 420 provisionally labelled calls); the final clustering may move it. Live callers who skip the tap count as not settled, so the live number reads low; the eval set is the reference.
 
-**Why it shows the need was met.** It counts only conversations where the caller's need was met, so a confident wrong answer and a dead end both lower it. A chat that simply ends with no handoff does not count.
+**Why it shows the need was met.** It counts only conversations where the caller said their need was met, so a wrong answer, a dead end and a quiet abandonment all fail to count.
 
-**What it can't tell you.** Callers who give up quietly, and wrong answers nobody flags, look like successes; the eval set's measured accuracy (VR-4, VR-5) is how that gap is covered before release.
+**What it can't tell you.** A caller can tap "solved" on a wrong answer; the eval set's measured accuracy (VR-4, VR-5) covers that before release, and flags catch some live.
 
 ### Supporting metrics
 
@@ -39,7 +39,7 @@ Success means a caller with a routine need gets it settled correctly in one conv
 
 ## Upstream fixes and open questions
 
-- Flagging is a Should (FR-5.4) but the success metric needs it → raise FR-5.4 to Must. Add a one-tap "did this solve it?" at the end of a contained conversation as a new FR-5 row, so settled calls rest on a recorded caller action, not only on flags.
+- Add FR-5.6, a one-tap "did this solve it?" at the end of a contained conversation (done in `REQUIREMENTS.md`), and raise FR-5.4 flagging to Must (done).
 - Contained-wrong ≤ 2% (VR-5) cannot be counted live without a person judging each case → stays an eval-set check (rerun after each knowledge-base change, CH-2).
 - Booking completion and Handoffs on handled topics have no target → set after the first week of live and eval data.
 - The 65% ceiling and the intent labels behind the supporting metrics depend on the final discovery clustering (EV-6).
