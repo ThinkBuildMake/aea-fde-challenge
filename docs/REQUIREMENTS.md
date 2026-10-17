@@ -28,7 +28,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 
 **Where the numbers come from.** **[src]** = from a cited source, or computed from one with the arithmetic shown. **[prop]** = proposed engineering target, the builder's to change with a stated reason. **[tbd]** = cannot be set until a measurement exists. Section 5 lists every [prop] and [tbd].
 
-**Assumptions.** USERS §9 (A1 to A12) is the assumption set; no stakeholder is available to confirm it. One addition made here: **A13 — the payment link is a stub.** No payment system was supplied, so "send a payment link" means returning a generated link string that is logged; no money moves. Removes real payment processing from scope. Three more, from the call audit (`docs/AUDIT.md`): **A14 — no waitlist.** Human agents offer a cancellation waitlist in 34 calls, but no current document or table supports one; the agent states the earliest window and lets the caller take it or ask for a person. **A15 — price ranges only from a retrieved current document.** The builder directed this on 2026-10-17: a range may be stated when the retrieved source confirms it (the service catalog and price book do for the listed items). **A16 — three ways to identify a caller.** Human agents accept account number plus name, name plus phone, or name plus service address; so does the agent, matched against `customers`.
+**Assumptions.** USERS §9 (A1 to A12) is the assumption set; no stakeholder is available to confirm it. One addition made here: **A13 — the payment link is a stub.** No payment system was supplied, so "send a payment link" means returning a generated link string that is logged; no money moves. Removes real payment processing from scope. Three more, from the call audit (`docs/AUDIT.md`): **A14 — a waitlist for earlier windows.** Human agents offer a cancellation waitlist in 34 calls (8.1%); no current document or table supports one. The builder directed on 2026-10-17 that the agent offers it. It is stored in a new table beside the supplied ones (CT-1 allows additions), the caller keeps the later visit they booked, and staff, not the agent, call the caller if an earlier window opens. **A15 — price ranges only from a retrieved current document.** The builder directed this on 2026-10-17: a range may be stated when the retrieved source confirms it (the service catalog and price book do for the listed items). **A16 — three ways to identify a caller.** Human agents accept account number plus name, name plus phone, or name plus service address; so does the agent, matched against `customers`.
 
 **Definitions.**
 
@@ -77,7 +77,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | 6 | The eval set is built from the supplied transcripts plus separately authored adversarial probes. | Transcripts only, which cannot test traps or attacks. | EV-1, EV-4, EV-5 |
 | 7 | Bookings write to the supplied database as the reviewer will see it. | A separate booking store. | GC-6, CT-1 |
 | 8 | A price range is stated only when a retrieved current document gives it (builder, 2026-10-17). | A flat ban on repair prices, which would hand off the 19 calls where humans gave a range. | FR-1.13, FR-2.12, VR-9 |
-| 9 | No waitlist: the agent states the earliest window. | Inventing a waitlist the database cannot hold. | FR-1.15 |
+| 9 | Offer a waitlist for earlier windows, kept in a new table; the caller keeps the later booking. | No waitlist, which drops a step humans take in 34 calls; or a waitlist that holds the caller's only booking. | FR-1.15, FR-5.7, VR-10 |
 
 ---
 
@@ -128,7 +128,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | FR-1.12 | A caller can cancel a visit only by explicitly saying so; the agent states the fee (free beyond 24 hours, $49 inside 24 hours) and does not waive or promise to waive it. | UC-1, A7 | Must |
 | FR-1.13 | Only the $89 diagnostic fee is stated as firm; any repair or replacement price is given only as FR-2.12 allows, is never promised, and comes with "the technician confirms pricing on site." | UC-1, UC-2, A15 | Gate |
 | FR-1.14 | A caller who cannot be booked is told what happens next; no conversation ends without a next step. | UC-1 | Must |
-| FR-1.15 | A caller who asks for an earlier window than any open one is told the earliest available and can take it or ask for a person; no waitlist is offered. | UC-1, A14, D-10 | Must |
+| FR-1.15 | A caller who asks for an earlier window than any open one is told the earliest available and can book it, book it and join a waitlist for an earlier window, or ask for a person. Joining records who, the visit type, the zone and the window they hold; the caller is told staff will call if an earlier window opens, and is promised no specific time. | UC-1, A14, D-10 | Must |
 
 ### FR-2 Answers: fees, membership, warranty, hours, service area (UC-2)
 
@@ -177,6 +177,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | FR-5.4 | A reviewer or staff member can flag a conversation as wrong or poor, with a note. | PRD-7 | Must |
 | FR-5.5 | The business view lists handoffs and supervisor callback requests awaiting follow-up. | PRD-4, PRD-7 | Should |
 | FR-5.6 | When the agent finishes a conversation without a handoff, the caller can tap "yes, that solved it" or "no"; the answer is recorded. | PRD-5, PRD-7 | Must |
+| FR-5.7 | The business view lists waitlist entries with caller, visit type, zone, the window held and time waiting. | FR-1.15, PRD-7 | Should |
 
 ### FR-6 First-iteration boundaries
 
@@ -211,6 +212,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | VR-6 | Every confirmed booking yields exactly 1 slot with status `booked` and exactly 1 new `appointments` row with matching slot, customer and service type; every move leaves the old slot `open` and the new slot `booked`; every cancel leaves the slot `open`. 0 violations. | Before/after database diff in every booking scenario | FR-1.10..1.12 | Gate |
 | VR-7 | 0 bookings in a slot with status `blocked` or `booked`, or in `reserved_members` for a non-member; 0 bookings outside the caller's zone or outside 2026-10-16..2026-11-05. | Database invariant query after each eval run | FR-1.7, FR-1.8, GC-8 | Gate |
 | VR-8 | When the agent's confirmation text names a date, window and technician, they equal the database row; 0 mismatches. | Eval run comparing confirmation to row | FR-1.10 | Gate |
+| VR-10 | Joining the waitlist writes exactly 1 row to the waitlist table and changes 0 slot or appointment rows; asking twice for the same request writes 1 row, not 2. 0 violations. | Before/after database diff in every waitlist scenario | FR-1.15 | Must |
 | VR-9 | Every dollar figure in an agent reply appears in a document retrieved for that reply or in the caller's own database record; 0 unsupported figures across all eval scenarios and probes. | Automated check of figures in replies against the logged retrieved text and tool results | FR-1.13, FR-2.12, AZ-3 | Gate |
 
 ### 3.3 Performance (PF-)
@@ -288,7 +290,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | DP-1 | The public URL opens in a clean browser with no login and answers a first message within PF-1. | Manual check from a second device | GC-5 | Must |
 | DP-2 | The service is up from deployment through 2026-11-05 (last slot date) with ≥ 99% availability [prop], checked by an external ping every 5 minutes. | Ping log | PRD-6, D-8 | Should |
 | DP-3 | Secrets live in environment configuration, not the repository. | CP-2 scan | CP-2 | Gate |
-| DP-4 | One documented command restores the database to its supplied seed state, so the reviewer's bookings and the eval runs can be reset. | Run after a booking; VR-7 query and slot counts equal the seed | GC-6 | Must |
+| DP-4 | One documented command restores the database to its supplied seed state (the waitlist table emptied), so the reviewer's bookings and the eval runs can be reset. | Run after a booking; VR-7 query and slot counts equal the seed | GC-6 | Must |
 | DP-5 | A new machine goes from clone to running locally in ≤ 15 minutes [prop] following the README alone. | Timed run | PRD deliverable 3 | Should |
 
 ### 3.12 Change and later iterations (CH-)
@@ -357,4 +359,4 @@ Every **[prop]** and **[tbd]** number. Status is *accepted*, *revised*, or *pend
 2. Which of 24 h (FAQ) or 48 h (2024 scheduling guide) cancellation notice applies is settled here by A4 (24 h); confirm no current document says otherwise.
 3. The payment link is a stub (A13); a real payment provider is not specified.
 4. Whether the reviewer will exercise voice despite GC-5; if so, a new requirements pass is needed.
-5. Whether the reviewer expects a waitlist (A14); the supplied database has no table for one.
+5. The waitlist table is an addition to the supplied database (A14); if the reviewer's own queries or reset script assume only the supplied tables, DP-4 must drop it.
