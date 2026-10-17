@@ -62,7 +62,7 @@ The 65.2% ceiling in `USERS.md` holds as the conservative figure. The 16 burning
 | 1 | **The callers in the calls are not in the database.** 0 of 130 phone numbers, 0 of 131 account numbers, 0 of 42 invoice numbers and 0 of 48 street addresses appear in the supplied tables. | `customers.csv` (154 rows), `invoices.csv` (81 rows) | A transcript cannot be replayed against the database as it stands. Each eval scenario must be given a database customer (and, for balance and invoice calls, a real invoice) in place of the one in the call. EV-2 and CT-2 need a mapping rule. |
 | 2 | **Humans identify callers three ways**, in about equal shares: account number plus name (131), name plus phone (130), name plus service address (115). 44 calls need no identification. | Agent lines "Do you have your account number handy?", "Name and the phone number on the account", "Name and service address?" | FR-1.3 names only name and phone. Either accept the other two or record the narrowing. |
 | 3 | **Callback promises vary.** One business day (21 calls, matches the escalation policy), two business days for refunds (8), "today" from a service manager (16). | Agent lines on supervisor and manager escalations | The agent states one business day (FR-3.5, FR-4.3). Do not copy the other two. |
-| 4 | **A waitlist is offered in 34 calls** (every caller who asked "can you do anything earlier?"), then the later slot is booked. | Agent line "I can add you to the waitlist for cancellations" | Only the 2024 scheduling guide, already marked superseded, mentions a waitlist; the database has no table for one. Decide: say no waitlist exists, or add a table. |
+| 4 | **A waitlist is offered in 34 calls** (8.1% of all calls: 29 bookings and 5 burning-smell bookings). Every one follows "can you do anything earlier?"; no caller ever asked for a waitlist. 33 of 34 accepted and had the later slot booked in the same breath. | Agent line "I can add you to the waitlist for cancellations" | Only the 2024 scheduling guide, already marked superseded, mentions a waitlist; the database has no table for one. Decision: offer it, in a new table (FR-1.15, A14). |
 | 5 | **Humans quote price ranges**: compressor labor $600 to $900 and a full system $8,000 to $16,000, always followed by "the technician will quote exact" (19 calls). The ranges are in the customer-facing service catalog. | `services/service_catalog.md`, `pricing/repair_price_book_2026.csv` | FR-1.13 forbids any repair price. The documents allow stating a range. Decide which to follow. |
 | 6 | **Humans waive the diagnostic fee** for a late technician, as the internal notes allow. | Late-technician calls (9) | The agent never waives (A7); these 9 calls are handoffs. No change. |
 | 7 | **Humans change memberships directly** (33 calls), and `escalation_and_safety.md` lists this as something agents resolve. | Same document | Nothing supplied lets the agent do it; FR-2.10 stands and caps containment. |
@@ -89,14 +89,14 @@ The trap documents are therefore tested only by authored probes (VR-3, EV-4), no
 
 ## 7. Upstream fixes
 
-*All applied on 2026-10-17. Decisions from the builder: no waitlist is offered (the agent states the earliest window), and a price range may be stated when a retrieved current document confirms it.*
+*All applied on 2026-10-17. Decisions from the builder: a waitlist for earlier windows is offered (kept in a new table), and a price range may be stated when a retrieved current document confirms it.*
 
 | Document | Change | Why |
 |---|---|---|
 | `USERS.md` §2 | Replace the provisional table with §2 above; note that hours, service area and the three superseded values do not appear in the calls | Whole-call reading; no call evidence for UC-2's hours and area examples |
 | `REQUIREMENTS.md` EV-2 | Each scenario carries a database customer mapped from the call; balance and invoice scenarios carry a real invoice | Finding 1 |
 | `REQUIREMENTS.md` FR-1.3 | Accept account number plus name, or name plus service address, as well as name plus phone (FR-1.3, A16) | Finding 2 |
-| `REQUIREMENTS.md` | No waitlist (FR-1.15, A14); sourced price ranges (FR-1.13, FR-2.12, VR-9, A15); one business day for callbacks (FR-4.3) | Findings 3, 4, 5 |
+| `REQUIREMENTS.md` | Waitlist for earlier windows (FR-1.15, FR-5.7, VR-10, A14); sourced price ranges (FR-1.13, FR-2.12, VR-9, A15); one business day for callbacks (FR-4.3) | Findings 3, 4, 5 |
 | `REQUIREMENTS.md` open items | Remove the invoice line-item item | Section 6 |
 | `KEY_METRICS.md` | Ceiling note: 65.2% base, up to 71.7% if burning-smell and redirect calls are contained | Section 3 |
 
