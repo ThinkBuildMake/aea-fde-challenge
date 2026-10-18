@@ -17,7 +17,7 @@
 | 3 | Scheduling database | Supplied SQLite file, unchanged | GC-6, CT-1 |
 | 4 | App database | SQLite, separate file, same volume; numbered migrations, volume backups | Survives the seed reset (DP-4); 10 MB (HLD §2) |
 | 5 | Retrieval index | In-memory vectors with numpy | About 40 passages (HLD §3); PRD-2, EV-4 |
-| 6 | Embeddings | OpenAI `text-embedding-3-small` | $0.02 per million tokens; no trial cap |
+| 6 | Embeddings | `text-embedding-3-small` through OpenRouter (OpenAI direct as fallback) | $0.02 per million tokens; one vendor fewer |
 | 7 | Model access | OpenRouter, with the builder's own Google key (BYOK) | Approved provider (GC-4); one place to swap models |
 | 8 | Agent model | Gemini 3 Flash Preview, pinned slug | $0.50 / $3 per million tokens; tool use (CO-1) |
 | 9 | Safety screen | Gemini 3.1 Flash Lite | Runs on every message (FR-1.1, FR-1.2) |
@@ -36,7 +36,7 @@
 | Item | Cost |
 |---|---|
 | Model use: 4 to 6 eval runs at about $2.50 to $4 each, prompt tuning, live traffic | $20 to $45 |
-| Embeddings (OpenAI) | under $1; fund $5 |
+| Embeddings (through OpenRouter credits) | under $1; fund $5 |
 | Langfuse Cloud Hobby (50,000 units a month, 30-day retention, 2 users) | $0 [verify] |
 | OpenRouter fee on credits | 5.5% on a purchase if credits are used; reduced under BYOK [verify] |
 | Hosting (Railway Hobby, about 3 weeks) | $5 to $10 |
@@ -145,11 +145,11 @@ At these prices the high-level design's cost envelope (§6) is about 1.5 to 2 ti
 
 | Option | Pros | Cons |
 |---|---|---|
-| **OpenAI `text-embedding-3-small`** ✅ | $0.02 per million tokens. No trial cap. OpenAI is on the approved list (GC-4). | A second vendor, key and prepaid balance, and an extra call on every turn. |
+| **`text-embedding-3-small` through OpenRouter** ✅ | $0.02 per million tokens [verify]. Same account and key as the chat models, so no second vendor (GC-4). | Billed from OpenRouter credits, not the Google key. Listing found by search, not yet called live [verify]. An extra call on every turn. |
+| OpenAI `text-embedding-3-small` direct | Fallback if the OpenRouter call fails its test. On the approved list (GC-4). | A second vendor, key and prepaid balance. |
 | Cohere Embed 4 | Approved. Good quality. | $0.12 per million tokens; the free trial key is not allowed in production, and the paid key bills monthly [verify]. |
-| Embeddings through OpenRouter | One vendor fewer. | Whether OpenRouter serves this model is unconfirmed [verify]. |
 
-**Choice: OpenAI `text-embedding-3-small`.** Under $1 for the whole build.
+**Choice: `text-embedding-3-small` through OpenRouter, OpenAI direct as the fallback.** Under $1 for the whole build. Test one embeddings call on day 1; if it fails, use the OpenAI key.
 
 **Needs from the design.** An embedding failure on a live turn is a provider failure under DE-1: answer without retrieval or hand off, never show an error.
 
@@ -163,7 +163,7 @@ At these prices the high-level design's cost envelope (§6) is about 1.5 to 2 ti
 
 **Choice: OpenRouter, BYOK.** Chosen by the builder (2026-10-17) for price; the approved list rules out calling Google directly.
 
-**Needs from the design.** Leave OpenRouter's input/output logging off and send no card numbers: strip card-shaped strings from every message before the safety screen, the model, the database and the logs (CP-1). Treat provider errors 402 and 429 as DE-1 failures. Spend is read from OpenRouter's key usage plus a manual line for OpenAI, because per-conversation costs miss eval runs and the one-time document read (CO-1).
+**Needs from the design.** Leave OpenRouter's input/output logging off and send no card numbers: strip card-shaped strings from every message before the safety screen, the model, the database and the logs (CP-1). Treat provider errors 402 and 429 as DE-1 failures. Spend is read from OpenRouter's key usage (embeddings included; a manual line for OpenAI only if the fallback is used), because per-conversation costs miss eval runs and the one-time document read (CO-1).
 
 ## 8. Agent model
 
@@ -279,7 +279,7 @@ At these prices the high-level design's cost envelope (§6) is about 1.5 to 2 ti
 | Prerequisite | Lead time | Blocks |
 |---|---|---|
 | OpenRouter account; your Google key added under BYOK; about $50 of credit if any traffic is billed there | minutes to an hour | Every model call |
-| OpenAI account with a $5 prepaid balance | minutes | Embeddings |
+| OpenRouter credit of about $50 covers chat fallbacks and embeddings; an OpenAI account with $5 only if the embeddings test fails | minutes | Embeddings |
 | Railway account on the Hobby plan, volume created | minutes | Deployment |
 | UptimeRobot account, one HTTP monitor on `/health`, email alerts on | minutes | DP-2 evidence and alerts |
 | Langfuse Cloud account in the US region (us.cloud.langfuse.com), a project, and its public and secret keys in Railway variables | minutes | Traces |
@@ -301,7 +301,7 @@ At these prices the high-level design's cost envelope (§6) is about 1.5 to 2 ti
 | Pydantic AI instead of the hand-written loop | Keep the loop | Day-1 test: Gemini reasoning notes survive a two-round multi-turn run, per-call timeout and zero retries can be set, raw messages can be stored and replayed |
 | Langfuse free-tier fit and card text | Hobby is enough | Units used after the first 50 conversations; CP-1 test with 5 card-shaped messages against Langfuse |
 | `railway ssh` for admin jobs | Use it | Test with a registered key before the freeze; else the admin routes |
-| OpenAI embeddings through OpenRouter | Keep OpenAI direct | Test `openai/text-embedding-3-small` on OpenRouter; moves only if it works and removes a vendor |
+| Embeddings through OpenRouter | Use OpenRouter | Day-1 test of `openai/text-embedding-3-small` on OpenRouter; OpenAI direct only if it fails |
 
 ## 21. Open questions
 

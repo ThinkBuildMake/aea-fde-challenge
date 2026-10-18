@@ -23,7 +23,7 @@ flowchart LR
   sdb[("Scheduling database: supplied SQLite")]
   adb[("App database: SQLite")]
   idx[("Retrieval index: in memory plus a file")]
-  llm["Language-model provider: OpenRouter chat, OpenAI embeddings"]
+  llm["Language-model provider: OpenRouter chat and embeddings"]
   lf["Langfuse Cloud, US region: traces"]
   chatops["Alert webhook: Slack or Discord"]
   client -->|startConversation, sendMessage, recordSolved| conv
@@ -155,7 +155,7 @@ What the inspection found, and how this design treats it:
 | listWaitlist | client → Follow-ups → read `waitlist_entries` | sync | n/a |
 | getHealth | uptime checker → Monitoring.getHealth → reply, then insert `pings` | sync; ping insert best-effort after the reply | no, by design |
 | admin reset-scheduling | operator → Scheduling.resetScheduling → supplied database | sync | yes |
-| admin rebuild-index | operator → Knowledge.rebuildIndex → OpenAI embeddings → index file → in-memory swap | sync | yes |
+| admin rebuild-index | operator → Knowledge.rebuildIndex → embeddings → index file → in-memory swap | sync | yes |
 | admin eval-candidates | command line → Monitoring → read `eval_candidates` | sync | n/a |
 | runEval, rebuildIndex, resetScheduling, exportEvalCandidates | command line → the same module functions, or the admin routes when pointed at the deployed app | sync | as above |
 
@@ -936,7 +936,7 @@ indexStatus() -> { loaded: boolean, version: string | null, passages: integer }
 
 | To | Sent | Comes back | Test double |
 |---|---|---|---|
-| Embeddings (OpenAI `text-embedding-3-small`) | a batch of passage texts at build; the query text at search | vectors | a deterministic fake that hashes text into a vector |
+| Embeddings (`text-embedding-3-small` through OpenRouter, OpenAI direct as the fallback) | a batch of passage texts at build; the query text at search | vectors | a deterministic fake that hashes text into a vector |
 
 ### Must hold
 - Only passages from `current` files are indexed; superseded and agent-only files are never passages, so the 48-hour cancellation text, the $79 diagnostic fee, the 90-day warranty and the $149 membership price cannot be returned (FR-2.2, FR-2.7, VR-3).
@@ -1254,7 +1254,7 @@ None — only the client, the uptime checker and the command line call this modu
 | OpenRouter key usage | the API key | cumulative spend on the key **[verify]** what it reports for bring-your-own-key calls | a fake returning a fixed number, or an error |
 | Alert webhook (Slack or Discord incoming webhook) | one text message when spend first reaches the threshold | an HTTP status; ignored | a recorder |
 
-Embedding spend (OpenAI) is a manual line from a setting added to `totalUsd` (`STACK.md` §7).
+Embeddings go through OpenRouter, so their spend is in the key usage; `OPENAI_SPEND_USD` is a manual line used only if the OpenAI fallback is in use (`STACK.md` §7).
 
 ### Must hold
 - Writes only `flags`, `eval_candidates` and `pings`; everything else is read.
@@ -1403,7 +1403,7 @@ The judge is given the scenario's expected facts and the transcript and returns,
 | Backup | The host's scheduled volume backups are on [verify]. Before every `resetScheduling`, the supplied file is copied aside, and the app database is copied with SQLite's backup function, so a reset or eval run never loses the only copy. Closes the former open question 10 |
 | Security headers and cross-origin | Every response carries a strict content policy (scripts and styles from the app's own files only, so htmx and the chart file are served by the app), no framing, no content sniffing, and a referrer policy. No cross-origin access is allowed: pages and API share one origin, so no CORS middleware is added. The admin token is compared in constant time |
 | Alerts | A missed uptime check emails the builder (the uptime service). A failed deploy and the spend threshold post to the alert webhook (`ALERT_WEBHOOK_URL`). The business view shows the spend banner either way |
-| Settings | One typed settings object reads, by name, and refuses to start if a required one is missing: `SCHEDULING_DB_PATH`, `SEED_DB_PATH`, `APP_DB_PATH`, `INDEX_PATH`, `KB_DIR`, `REFERENCE_DATE`, `REFERENCE_TIME`, `AGENT_MODEL`, `SAFETY_MODEL`, `CALLER_MODEL`, `JUDGE_MODEL`, `EMBEDDING_MODEL`, the model price table used for the cost estimate, `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ADMIN_TOKEN`, `TURN_DEADLINE`, `IDLE_CLOSE_MINUTES`, `SPEND_ALERT_USD` (default 100, CO-1), `OPENAI_SPEND_USD`, `ALERT_WEBHOOK_URL`, `LANGFUSE_HOST` (the US region), `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `DEMO_FAULT_INJECTION`, and the rate and size caps. Secrets are environment variables only (DP-3, CP-2) |
+| Settings | One typed settings object reads, by name, and refuses to start if a required one is missing: `SCHEDULING_DB_PATH`, `SEED_DB_PATH`, `APP_DB_PATH`, `INDEX_PATH`, `KB_DIR`, `REFERENCE_DATE`, `REFERENCE_TIME`, `AGENT_MODEL`, `SAFETY_MODEL`, `CALLER_MODEL`, `JUDGE_MODEL`, `EMBEDDING_MODEL`, the model price table used for the cost estimate, `OPENROUTER_API_KEY`, `OPENAI_API_KEY` (only if the embeddings fallback is used), `ADMIN_TOKEN`, `TURN_DEADLINE`, `IDLE_CLOSE_MINUTES`, `SPEND_ALERT_USD` (default 100, CO-1), `OPENAI_SPEND_USD`, `ALERT_WEBHOOK_URL`, `LANGFUSE_BASE_URL` (the US region), `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `DEMO_FAULT_INJECTION`, and the rate and size caps. Secrets are environment variables only (DP-3, CP-2) |
 
 ### Where each stack need is met
 
