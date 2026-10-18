@@ -32,6 +32,7 @@ flowchart LR
   cli -->|rebuildIndex| know
   cli -->|resetScheduling| sched
   cli -->|read candidates| mon
+  cli -->|extractDocument, gradeAnswer, embed questions| llm
   kb -->|extract, chunk| know
   conv -->|redactCardNumbers, screenSafety| safety
   conv -->|searchKnowledge, getFee| know
@@ -88,6 +89,7 @@ Every PRD goal and deliverable, and where this document meets it. Items that are
 | Deliverable 2: 3 to 4 minute video | Not software. Its four topics map to: drivers → `AUDIT.md`, chunking and retrieval → Knowledge, escalation → Follow-ups, eval numbers → the run summary | — |
 | Deliverable 3: repository, eval set, README with numbers | `eval/` folder (scenarios, weights, retrieval questions, results) and the README, which prints the run summary | Offline tools → Eval files |
 | Extra credit: voice | Excluded by the builder (FR-6.1, GC-5) | — |
+| Requirements that are tests or documents, not modules: CT-2, SC-1, RL-2, CH-2, EV-6, GC-4, DP-5 | CT-2: four scenarios use MHC-10001 to MHC-10004 and the run summary reports them. SC-1 and RL-2: tests in the regression gate. CH-2: `compareEval`. EV-6, GC-4, DP-5: README and `AUDIT.md` (the service inventory, the clone-to-run steps, the sample agreement) | Offline tools; Environments |
 
 Wireframe states and the contract that draws each:
 
@@ -100,8 +102,8 @@ Wireframe states and the contract that draws each:
 | Waitlisted, Confirmed | `Reply.booking` card built from the committed row; `Reply.waitlisted` adds the waitlist line |
 | Answer | Plain `Reply` with the `ask_solved` action |
 | Handoff: banner, morning/afternoon/evening picker | `status: handed_off`, `banner: handoff`, action `choose_callback_window` → `submitCallbackWindow` |
-| Safety stop: red banner, conversation ends | `status: safety_stop`, `banner: safety_stop`, fixed text. The wireframe's sentence "Your account has been flagged for a safety follow-up" promises something no requirement builds: open question 1 |
-| Error ("Simulate an outage" chip) | `banner: error` with action `request_callback`; the chip sets `simulateOutage` on `sendMessage` (open question 2) |
+| Safety stop: red banner, conversation ends | `status: safety_stop`, `banner: safety_stop`, fixed text. A handoff of kind `safety_stop` is recorded so the wireframe's "flagged for a safety follow-up" is true (open question 1) |
+| Error ("Simulate an outage" chip) | `banner: error` with action `request_callback`; the chip sets `simulateOutage` on `sendMessage`. The page shows the chip only when `startConversation` returns `demoFaults: true` (open question 2) |
 | Did this solve it? → Thanks / not solved | `recordSolved`; "no" keeps the conversation open and offers a person |
 | New conversation | `startConversation`; identity lives only on the server under the conversation id, so nothing carries over (FR-5.2) |
 | Business view: status strip, success metric with 7-day line and 60 to 75% band, three supporting metrics, what just happened, guarantees table, 24 h first-reply line, 24 h ping strip, spend against $100 | `getOverview` response fields (Monitoring → API) |
@@ -141,7 +143,7 @@ What the inspection found, and how this design treats it:
 | recordSolved | client → Conversation.recordSolved → insert `turns`, update `conversations` | sync | yes |
 | submitCallbackWindow | client → Follow-ups.setCallbackWindow (or createHandoff after a fallback) → update `handoffs` | sync | yes |
 | getOverview | client → Monitoring.getOverview → Conversation.closeIdleConversations → read `conversations`, `turns`, `visit_changes`, `pings`, supplied `appointments` and `appointment_slots`, `handoffs`, `flags` → OpenRouter key usage | sync | n/a (read) |
-| listConversations, getConversation | client → Monitoring → read `conversations`, `turns`, `handoffs`, `flags`, `eval_candidates`, supplied `customers` | sync | n/a |
+| listConversations, getConversation | client → Monitoring (listConversations first runs Conversation.closeIdleConversations) → read `conversations`, `turns`, `handoffs`, `flags`, `eval_candidates`, supplied `customers` | sync | n/a |
 | flagConversation | client → Monitoring → insert `flags` | sync | yes |
 | createEvalCandidate | client → Monitoring → read the conversation → insert `eval_candidates` | sync | yes |
 | listHandoffs, markHandoffFollowedUp | client → Follow-ups → read or update `handoffs` | sync | yes |
@@ -340,11 +342,12 @@ One row for every book, move or cancel the app committed in the supplied databas
 | confirmed_date | TEXT | yes | | date the committed row gave; null for a cancel |
 | confirmed_window | TEXT | yes | | window the committed row gave; null for a cancel |
 | confirmed_technician | TEXT | yes | | technician name the committed row gave; null for a cancel |
-| fee_cents | INTEGER | yes | | cancel only: the late-cancellation fee that applied (0 or the fee) |
+| late_fee_applied | INTEGER | yes | | move or cancel: 1 when the window started fewer than 24 hours after the reference clock; null for a book |
 | committed_at | TEXT | no | now | when the supplied-database commit finished |
+| retired_at | TEXT | yes | | set on every existing row when the seed reset runs; the agreement check ignores retired rows, because the reset removes the appointments they name and the supplied file then reuses their ids |
 
 - **Constraints:** `action` check against the listed values; `previous_slot_id` not null when `action = 'move'`.
-- **Indexes:** `(conversation_id)` for the conversation detail and booking completion; `(appointment_id)` for the daily agreement check; `(committed_at)` for the 24 h window.
+- **Indexes:** `(conversation_id)` for the conversation detail and booking completion; `(appointment_id)` for the agreement check; `(committed_at)` for the 24 h window.
 
 ### Conversation — `conversations`, `turns`
 
@@ -352,7 +355,8 @@ One row for every book, move or cancel the app committed in the supplied databas
 %%{init: {"layout": "elk"}}%%
 erDiagram
   conversations {
-    TEXT id PK "random UUID"
+    TEXT id PK "random UUID, secret"
+    TEXT public_id "business view id"
     TEXT started_at
     TEXT last_activity_at
     TEXT ended_at "null while active"
@@ -392,14 +396,16 @@ One chat from the first message to its end.
 
 | Column | Type | Null | Default | Meaning |
 |---|---|---|---|---|
-| id | TEXT | no | random UUID | key; also the only credential the caller holds |
+| id | TEXT | no | random UUID | key; also the only credential the caller holds. Never returned by any Monitoring or Follow-ups route |
+| public_id | TEXT | no | random, different from `id` | the id the business view uses to name a conversation; it opens nothing in the caller routes |
 | started_at | TEXT | no | now | |
 | last_activity_at | TEXT | no | now | updated on every turn; drives the idle close |
 | ended_at | TEXT | yes | | set together with `outcome` |
 | outcome | TEXT | yes | | `contained`, `handoff`, `safety_stop`, `failed`; null while the conversation is active (REQUIREMENTS Definitions) |
 | outcome_reason | TEXT | yes | | why it ended as it did: `provider_failure`, `replay_rejected`, `scheduling_unavailable`, `turn_cap`, `idle_unresolved`, and so on (more may be added) |
-| intent | TEXT | yes | | what the caller wants, from the agent's latest status report: `book_visit`, `change_visit`, `policy_question`, `warranty_question`, `membership_question`, `billing_lookup`, `billing_dispute`, `membership_change`, `complaint_or_refund`, `safety`, `new_system_quote`, `technician_late`, `out_of_scope`, `other` (more may be added) |
+| intent | TEXT | no | `unknown` | what the caller wants now, from the agent's latest status report: `book_visit`, `change_visit`, `policy_question`, `warranty_question`, `membership_question`, `billing_lookup`, `billing_dispute`, `membership_change`, `complaint_or_refund`, `safety`, `new_system_quote`, `technician_late`, `out_of_scope`, `other` (more may be added) |
 | customer_id | TEXT | yes | | the matched `customers.customer_id`; no foreign key across files |
+| intents_seen | TEXT (JSON array) | no | `[]` | every distinct intent the agent reported, in order; a booking followed by a membership question keeps both (FR-2.9) |
 | identify_attempts | INTEGER | no | 0 | failed identification tries; caps guessing |
 | resolved_at | TEXT | yes | | when the agent reported the caller's need met |
 | solved | TEXT | yes | | the caller's tap: `yes` or `no` (FR-5.6) |
@@ -407,7 +413,7 @@ One chat from the first message to its end.
 | turn_count | INTEGER | no | 0 | equals the number of `turns` rows with `kind = 'message'` |
 | cost_usd | REAL | no | 0 | sum of `turns.cost_usd` |
 
-- **Constraints:** `outcome` check against the four values; `solved` check against `yes`, `no`; `outcome` is null exactly when `ended_at` is null.
+- **Constraints:** unique `(public_id)`; `outcome` check against the four values; `solved` check against `yes`, `no`; `outcome` is null exactly when `ended_at` is null.
 - **Indexes:** `(started_at desc)` for the list and the 7-day window; `(outcome, started_at)` for the outcome filter and the success ratio; a partial index on `last_activity_at` where `outcome` is null, for the idle sweep.
 
 #### `turns` — owned by Conversation
@@ -478,12 +484,13 @@ A person must act: a handoff, or a supervisor callback. Holds the handoff record
 |---|---|---|---|---|
 | id | INTEGER | no | autoincrement | key |
 | conversation_id | TEXT → conversations.id | no | | |
-| kind | TEXT | no | | `handoff` or `supervisor_callback` (more may be added) |
-| reason | TEXT | no | | why: `no_account_match`, `caller_asked_for_person`, `out_of_scope`, `no_document_answer`, `documents_disagree`, `no_plumber_in_zone`, `membership_change`, `billing_dispute`, `refund_demand`, `complaint`, `manager_request`, `provider_failure`, `scheduling_unavailable`, `turn_cap`, and so on (more may be added) |
+| kind | TEXT | no | | `handoff`, `supervisor_callback` or `safety_stop` (more may be added) |
+| reason | TEXT | no | | why: `no_account_match`, `caller_asked_for_person`, `out_of_scope`, `no_document_answer`, `documents_disagree`, `no_plumber_in_zone`, `outside_service_area`, `membership_change`, `billing_dispute`, `refund_demand`, `complaint`, `manager_request`, `provider_failure`, `scheduling_unavailable`, `turn_cap`, and so on (more may be added) |
 | by_error | INTEGER | no | 0 | 1 when the handoff was forced by a failure, not chosen by policy (OB-3) |
 | customer_id | TEXT | yes | | matched customer, if any |
-| caller_name | TEXT | yes | | copy of the matched customer's name |
-| caller_phone | TEXT | yes | | copy of the matched customer's phone, so staff can call |
+| caller_name | TEXT | yes | | copy of the matched customer's name, or the name an unmatched caller gave (then `stated_by_caller` is 1) |
+| caller_phone | TEXT | yes | | copy of the matched customer's phone, or the number an unmatched caller gave, so staff can call |
+| stated_by_caller | INTEGER | no | 0 | 1 when name and phone were given by the caller and not checked against an account |
 | intent | TEXT | no | | what the caller wanted; `unknown` when no label was set |
 | told_caller | TEXT | no | | what the agent told the caller |
 | summary_source | TEXT | no | `agent` | `agent` or `system` (written from the transcript when the model could not) |
@@ -573,17 +580,18 @@ One health check the app received (DP-2). Disposable.
 | Column | Type | Null | Default | Meaning |
 |---|---|---|---|---|
 | ts | TEXT | no | now (milliseconds) | key; when the ping arrived |
+| ms | INTEGER | yes | | how long the app took to answer it, for the status strip |
 
 ## Shared types
 
 Used by more than one module or by the client. `*View` types are what the business view and the eval runner read.
 
 ```
-Reply {                      what sendMessage and recordSolved return
+Reply {                      what sendMessage returns (recordSolved returns its own shape, see Conversation → API)
   conversationId   uuid
-  status           active | handed_off | safety_stop | ended
+  status           active | handed_off | safety_stop | ended   (more may be added)
   text             what the caller reads
-  banner           none | handoff | safety_stop | error
+  banner           none | handoff | safety_stop | error   (more may be added)
   choices          [Choice]    quick replies, may be empty
   booking          Booking | null   confirmation card, built from the committed row in this turn
   waitlisted       boolean     the card also shows the waitlist line
@@ -601,8 +609,8 @@ Booking {                    a committed visit, as the database row says
   technicianName      string
   serviceType         hvac_repair | hvac_tune_up | plumbing   (estimate is not offered in v1)
   zone                north | central | south
-  diagnosticFeeCents  integer   from Knowledge.getFee, said once
-  diagnosticFeeWaived boolean   true for standard and plus members
+  diagnosticFeeCents  integer   added by Conversation from Knowledge.getFee, said once
+  diagnosticFeeWaived boolean   added by Conversation: true for standard and plus members
 }
 
 Window {                     one open window offered to a caller
@@ -640,19 +648,19 @@ Fee { code: string, cents: integer, sourceFile: string }       e.g. FEE-DIAG, FE
 Verdict { verdict: safe | burning_followup | emergency, reason: string }    (more verdicts may be added; reason never contains the message)
 
 HandoffView {
-  id, conversationId, kind, reason, byError
-  caller { customerId | null, name | null, phone | null }
+  id, conversationPublicId, kind, reason, byError
+  caller { customerId | null, name | null, phone | null, city | null, zone | null, statedByCaller: boolean }   statedByCaller true when the name and phone were given by an unmatched caller and are unverified
   intent, toldCaller, summary (reason and toldCaller in one line), summarySource
   preferredWindow | null, status, createdAt, followedUpAt | null
 }
 
 WaitlistView {
-  id, conversationId, caller { customerId, name, phone }
+  id, conversationPublicId, caller { customerId, name, phone, city }
   serviceType, zone, held { date, window }, createdAt, waitingSeconds
 }
 
 ConversationSummary {
-  id, startedAt, endedAt | null, intent | null, outcome | null, outcomeReason | null
+  publicId, startedAt, endedAt | null, intent | null, outcome | null, outcomeReason | null
   turnCount, costUsd, solved | null, flagged: boolean, hasHandoff: boolean
   customerName | null           read from the supplied customers table
 }
@@ -688,7 +696,7 @@ Writes `conversations` and `turns`. Reads `customers` (through Scheduling), `han
 {startConversation}   POST /conversations                          serves FR-5.2, HLD I-6
 Caller     anyone; the eval runner
 Request    none
-Response   201 { conversationId: uuid, status: "active", greeting: string }
+Response   201 { conversationId: uuid, status: "active", greeting: string, demoFaults: boolean }
 Errors     429 rate_limited — too many new conversations from this address
            (more may be added)
 Also       runs closeIdleConversations first
@@ -723,6 +731,8 @@ Errors     404 conversation_not_found
            422 invalid_answer
 ```
 
+In the Monitoring and Follow-ups list routes, `:id` and any conversation reference is the conversation's `public_id`; the caller routes above take the secret `id`. A caller's `id` is never shown to the business view (a visitor to the open business view could otherwise take over a live caller's conversation).
+
 Pages: `GET /` is the caller chat; `GET /business` is the business view. Both are served by the app and call the same module functions as the routes (see System-wide contracts, Content negotiation).
 
 ### Agent tools
@@ -736,12 +746,12 @@ The model sees these tools. Each is a thin call into a module interface. Argumen
 | `find_open_windows` | Scheduling.findOpenWindows | serviceType, preferred date or window if any | customerId | read |
 | `lookup_my_appointments` | Scheduling.listAppointments | none | customerId | read |
 | `book_visit` | Scheduling.bookVisit | slotId, issue, callerQuote | customerId | write |
-| `move_visit` | Scheduling.moveVisit | appointmentId, newSlotId, callerQuote | customerId | write |
+| `move_visit` | Scheduling.moveVisit | appointmentId, newSlotId, callerQuote | customerId | write; the late-change fee amount is added from Knowledge.getFee |
 | `cancel_visit` | Scheduling.cancelVisit | appointmentId, callerQuote | customerId | write; the fee amount is added from Knowledge.getFee |
 | `get_my_billing` | Scheduling.getBilling | none | customerId | read |
 | `send_payment_link` | Scheduling.createPaymentLink | invoiceId | customerId | no database write; returns a stub link |
 | `join_waitlist` | Follow-ups.joinWaitlist | appointmentId | customerId, held window from Scheduling.getAppointment | |
-| `escalate` | Follow-ups.createHandoff | kind, reason, intent, toldCaller | conversationId, customerId, summarySource | ends the conversation |
+| `escalate` | Follow-ups.createHandoff | kind, reason, intent, toldCaller, callerName and callerPhone if the caller gave them and was not matched | conversationId, customerId, summarySource | ends the conversation |
 | `report_status` | none (updates `conversations`) | intent, resolved | | may be part of the final structured reply instead; the spike decides (STACK §20) |
 
 ### Jobs and messages
@@ -752,6 +762,7 @@ Trigger proof  internal call; no outside trigger
 Payload        none
 Reads          conversations where outcome is null and last_activity_at is older than the idle limit
 Writes         conversations.outcome, outcome_reason, ended_at:
+               no message was ever sent → closed with outcome failed, reason no_message, and left out of every metric
                resolved and no handoff → contained
                otherwise → failed with reason idle_unresolved
 Twice-safe     yes — only rows with a null outcome change
@@ -764,6 +775,10 @@ On failure     the sweep is skipped, the caller's request still succeeds, the ne
 closeIdleConversations(now) -> integer
   Closes idle conversations and returns how many. Called by Monitoring.
   Callers rely on: never changes a conversation that already has an outcome.
+
+endWithHandoff(transaction, conversationId) -> void
+  Sets outcome handoff and ended_at in the caller's transaction. Called by Follow-ups when it creates a system-written handoff after a fallback, so a handoff row and an active conversation never coexist.
+  Callers rely on: idempotent.
 ```
 
 ### Calls out
@@ -778,16 +793,19 @@ Provider account settings: input and output logging off (`STACK.md` §7).
 ### Must hold
 - Only Conversation writes `conversations` and `turns`.
 - Card-shaped text is removed before the screen, the model, the database and the logs, and the model sees a placeholder saying a card number was removed (CP-1).
-- **Safety gate.** No write tool runs, and no window is offered, in a turn until the screen has returned `safe`. `emergency` ends the turn with fixed text, discards any model output, sets the outcome to `safety_stop` and the conversation takes no later turn (FR-1.1, VR-2). `burning_followup` returns the fixed follow-up question only (FR-1.2). A screen that fails is `unscreened`: no write, no windows, the turn takes the provider-failure path.
+- **Safety gate.** No write tool runs, and no window is offered, in a turn until the screen has returned `safe`. `emergency` ends the turn with fixed text, discards any model output, sets the outcome to `safety_stop` and records a `safety_stop` handoff in the same transaction; the conversation takes no later turn. The fixed text says the account is flagged only when a customer was matched, otherwise that the conversation is flagged (FR-1.1, VR-2). `burning_followup` returns the fixed follow-up question only (FR-1.2). A screen that fails is `unscreened`: no write, no windows, the turn takes the provider-failure path.
 - **No guessing the account.** No tool takes a customer id from the model. Customer-scoped tools run only after `identify_customer` matched in this conversation (AZ-1, FR-1.3, FR-3.4).
-- **Writes need the caller's words.** `book_visit`, `move_visit` and `cancel_visit` run only if `callerQuote` appears verbatim in the current caller message and the targeted slot or appointment is in an earlier turn's `offered` (AZ-2, FR-1.10). Whether the quote is a yes is the model's judgement, checked by the eval.
+- **Writes need the caller's words.** `book_visit`, `move_visit` and `cancel_visit` run only if `callerQuote` appears verbatim in the current caller message and the targeted slot or appointment is in an earlier turn's `offered` (AZ-2, FR-1.10). The code proves a quote is present, not that it means yes; AZ-2 is verified by the eval.
 - **Nothing is confirmed that was not committed.** A booking card appears only from a write committed in this turn. If a write commits and the turn then fails, the reply is built from the committed row, not the generic error (DE-2, RL-2, VR-8). A failed write goes back to the model as a failed result that forbids confirming and requires offering a person.
-- **No unsupported dollar figure.** Every dollar figure in a reply appears, ignoring formatting, in this conversation's tool results (retrieved passages, fee amounts, the caller's own records). A reply that fails the check is not shown; the caller gets the "not sure, would you like a person" reply (VR-9, FR-1.13, AZ-3) **[assumed]**.
+- **Confirmations match the row.** A date, window or technician name in the reply text that confirms a book, move or cancel must equal the committed row of this turn. A reply that fails is replaced by the booking card with a fixed confirmation line, and the turn records `error = confirmation_mismatch` so the overview counts it (VR-8) **[assumed]**.
+- **No unsupported dollar figure.** Every dollar figure in a reply appears, ignoring formatting, in this conversation's tool results (retrieved passages, fee amounts, the caller's own records). This is looser than VR-9's "retrieved for that reply" because an earlier turn's passage may still be true; the eval checks per reply. A reply that fails the check is not shown; the caller gets the "not sure, would you like a person" reply (VR-9, FR-1.13, AZ-3) **[assumed]**.
+- **No promises.** Replies for a supervisor callback use fixed wording that states one business day (FR-3.5, FR-4.3). A reply that promises a refund, a waiver, a callback "today" or in two days, or a price the account is not entitled to, is withheld and replaced by the "not sure, would you like a person" reply (AZ-3, FR-2.8, FR-1.12) **[assumed]**. The eval checks the same rules.
 - **Replay is exact.** `model_messages` is stored as received and replayed unchanged and in order; a provider that rejects the replay ends the conversation with the provider-failure reply, outcome `failed`, reason `replay_rejected`.
+- **Ask for the tap.** A reply carries `ask_solved` exactly when the agent reported the need resolved this turn and no handoff exists for the conversation (FR-5.6).
 - **One turn at a time per conversation.** A second message while one is in flight is refused with `turn_in_progress`.
 - **Deadline.** A turn ends with a reply within the DE-1 limit of its start, covering retries and tool rounds. A fallback reply sets `fallback_used` and `error`, offers a person, and shows no stack trace or provider text.
-- **Outcome.** An outcome is set exactly once, except that `handoff` replaces `contained` if a handoff happens after the caller tapped "no". `contained` is never set while a handoff exists. `handoff` is set in the same transaction that creates the handoff.
-- **Fixed texts.** The emergency message, the burning-smell question, the fallback, the turn-cap text and the solved-tap texts are fixed wording taken from the wireframe, not model output.
+- **Outcome.** An outcome is set exactly once. `contained` is never set while a handoff exists. `handoff` is set in the same transaction that creates the handoff.
+- **Fixed texts.** The emergency message, the burning-smell question, the fallback, the turn-cap text, the supervisor-callback wording and the solved-tap texts are fixed wording taken from the wireframe, not model output.
 - Every turn stores `latency_ms`, `tools_called`, `retrieved`, cost and any error (OB-1).
 
 ### Failure behaviour
@@ -797,7 +815,7 @@ Provider account settings: input and output logging off (`STACK.md` §7).
 | Model timeout, error, 402 or 429 | fallback text, offer of a person, banner error | turn with `error`, `fallback_used`; conversation stays active |
 | Replay rejected | fallback text, conversation ends | outcome `failed`, reason `replay_rejected` |
 | Scheduling database unreadable or write fails | the model is told the result failed, offers a person; the caller is never told a booking exists | tool result with the error; turn `error = scheduling_unavailable` |
-| Embedding or index unavailable | the agent answers without retrieval or hands off, never an error | turn `error = embedding_unavailable` |
+| Embedding or index unavailable | the search tool's result forbids answering a policy question and requires offering a person; never an error | turn `error = embedding_unavailable` |
 | Screen fails | fallback text, no windows or writes | `safety_verdict = unscreened`, turn `error = screen_unavailable` |
 | App database write of the turn fails | the reply is still returned | stdout log; the booking, if any, stands |
 
@@ -853,7 +871,7 @@ Holds a searchable index of passages from the knowledge-base files that are curr
 ### Owns
 The index file (and its in-memory copy). No table. Reads the knowledge-base folder, the manifest and the checked extracted-text files. The knowledge-base folder, the manifest and the extracted text ship with the app.
 
-**Manifest.** A file next to the knowledge base lists every file in it with a status: `current`, `superseded` or `agent-only` (more may be added), a reason, and for the image and PDF the path of the checked extracted text and the date a person checked it. Statuses follow REQUIREMENTS: `archive/` files, `faq_old_copy.md` and `scheduling_guide.md` (Rev 2024-11, which conflicts with the 2026 FAQ on cancellation notice) are `superseded` **[assumed]** (A-5); `internal/agent_discretion_notes.md` and `policies/escalation_and_safety.md` are `agent-only` (D-5, D-11, FR-2.7). The holiday-hours image and the fee-schedule PDF are `current` with their checked text.
+**Manifest.** A file next to the knowledge base lists every file in it with a status: `current`, `superseded`, `agent-only` or `placeholder` (more may be added), a reason, and for the image and PDF the path of the checked extracted text and the date a person checked it. Statuses follow REQUIREMENTS: `archive/` files, `faq_old_copy.md` and `scheduling_guide.md` (Rev 2024-11, which conflicts with the 2026 FAQ on cancellation notice) are `superseded` **[assumed]** (A-5); `internal/agent_discretion_notes.md`, `policies/escalation_and_safety.md` and `services/technician_arrival_and_etas.md` (it lets agents waive the diagnostic fee, which A7 and FR-2.8 forbid) are `agent-only` (D-5, D-11, D-13, FR-2.7) **[assumed]**; `services/duct_cleaning.md` is a `placeholder` (an unfinished TODO, A12) and is not indexed. The holiday-hours image and the fee-schedule PDF are `current` with their checked text.
 
 ### API
 None to the client. The index is rebuilt by an admin route (see Jobs).
@@ -908,7 +926,7 @@ indexStatus() -> { loaded: boolean, version: string | null, passages: integer }
 | Failure | What the caller sees | What is recorded |
 |---|---|---|
 | Index missing at start | the app runs; searches fail; the agent hands off | `/health` shows `index: missing` |
-| Embedding failed on a live search | no error; answer without retrieval or hand off (via Conversation) | turn `error = embedding_unavailable` |
+| Embedding failed on a live search | no error; the agent may not answer a policy question from memory and offers a person (via Conversation) | turn `error = embedding_unavailable` |
 
 ## Module: Scheduling — the supplied scheduling database
 
@@ -932,7 +950,7 @@ Writes         the five supplied tables back to the seed, inside the app, holdin
 Twice-safe     yes
 On failure     the transaction rolls back and the file is unchanged. 409 busy if the lock is not free in time. 500 reset_failed otherwise
 Response       200 { restored: true, snapshotId: string, slotCounts: { open, booked, reserved_members, blocked } }
-Leaves alone   the app database: conversations, handoffs, waitlist entries, flags, audit rows (DP-4)
+Leaves alone   the app database: conversations, handoffs, waitlist entries, flags (DP-4). Only sets retired_at on the visit_changes rows, so the agreement check does not compare them with the restored seed
 ```
 
 The supplied file is created from the seed on first start only if it is missing; a deploy never resets it (HLD §7).
@@ -953,11 +971,12 @@ findOpenWindows(customerId, serviceType, preferredDate?, preferredWindow?) -> { 
 listAppointments(customerId) -> [AppointmentView]           scheduled visits only
 getAppointment(customerId, appointmentId) -> AppointmentView   throws AppointmentNotFound (also for another customer's)
 
-bookVisit(customerId, slotId, issue) -> Booking
+bookVisit(customerId, slotId, issue) -> Booking     without the diagnosticFee fields; Conversation adds them from Knowledge.getFee and the customer's tier
   One locked transaction. Throws SlotUnavailable, NotEligible(reason), SchedulingUnavailable.
-moveVisit(customerId, appointmentId, newSlotId) -> Booking
-  One locked transaction. Throws AppointmentNotFound, SlotUnavailable, NotEligible(reason), SchedulingUnavailable.
+moveVisit(customerId, appointmentId, newSlotId) -> { booking: Booking, lateFeeApplies: boolean }
+  One locked transaction. A move inside 24 hours carries the same fee as a cancel (FAQ, UC-1). Throws AppointmentNotFound, SlotUnavailable, NotEligible(reason), SchedulingUnavailable.
 cancelVisit(customerId, appointmentId) -> { appointmentId, freedSlotId, lateFeeApplies: boolean, hoursBefore: number }
+  (Scheduling knows no prices: Conversation adds the amount from Knowledge.getFee.)
   One locked transaction. Throws AppointmentNotFound, SchedulingUnavailable.
   NotEligible reasons: wrong_zone, wrong_service_type, member_only, before_reference_date, not_scheduled (more may be added).
 
@@ -1017,7 +1036,7 @@ Response   200 { handoff: HandoffView, text: string }
 Errors     404 conversation_not_found
            404 no_handoff — none exists and the last turn did not end in a fallback
            422 invalid_window
-Notes      After a fallback with no handoff, creates a system-written handoff (reason provider_failure or scheduling_unavailable, by_error true) and sets the window, so a caller can ask for a call back while the model is down (DE-1) [assumed].
+Notes      After a fallback with no handoff, creates a system-written handoff through createHandoff and Conversation.endWithHandoff in one transaction (reason provider_failure or scheduling_unavailable, by_error true) and sets the window, so a caller can ask for a call back while the model is down (DE-1) [assumed].
            Setting the window again before follow-up replaces it.
 ```
 
@@ -1032,7 +1051,7 @@ Errors     422 invalid_status
 ```
 {markHandoffFollowedUp}   POST /handoffs/:id/followed-up                serves FR-5.5
 Caller     anyone with the URL
-Request    none
+Request    { followedUp?: boolean }   default true; false puts it back to open (the wireframe's undo)
 Response   200 { handoff: HandoffView }
 Errors     404 handoff_not_found
 ```
@@ -1049,9 +1068,12 @@ None.
 ### Interface for other modules
 
 ```
-createHandoff(transaction, { conversationId, kind, reason, byError, customerId?, intent, toldCaller, summarySource }) -> HandoffView
+createHandoff(transaction, { conversationId, kind, reason, byError, customerId?, statedName?, statedPhone?, intent, toldCaller, summarySource }) -> HandoffView
   Joins the caller's open app-database transaction, so the handoff and the conversation's outcome commit together.
   Callers rely on: at most one handoff per conversation — a second call returns the existing one unchanged; reason, intent and toldCaller are never empty; caller name and phone are copied from the matched customer when there is one.
+
+setCallbackWindow(conversationId, window) -> HandoffView
+  Sets or replaces the preferred window. Throws NoHandoff.
 
 joinWaitlist({ conversationId, customerId, serviceType, zone, heldDate, heldWindow }) -> { entry: WaitlistView, created: boolean }
   Callers rely on: a repeat request for the same caller, visit type and held window returns the existing entry with created false; no slot or appointment is read or changed.
@@ -1066,7 +1088,7 @@ None.
 - A callback request from a dispute, refund, complaint or manager request has kind `supervisor_callback` (FR-4.3).
 - A handoff forced by a failure has `by_error` 1; a policy handoff has 0 (OB-3).
 - Joining the waitlist writes one row, changes no slot or appointment, and stores a copy of the held window, not a link (VR-10, FR-1.15, DP-4).
-- `followed_up` is reached only from `open`; marking again changes nothing.
+- `followed_up` is reached from `open`, and `open` again only by the undo; marking twice changes nothing.
 - No account is created (FR-1.4).
 
 ### Failure behaviour
@@ -1098,19 +1120,20 @@ Overview {
   status {
     service            up | down       down when no ping arrived within the expected interval
     lastPingAt         timestamp | null
+    lastPingMs         integer | null     how long the app took to answer it
     lastConversationAt timestamp | null
     errorsShown24h     integer         turns with fallback_used in the last 24 h
     handoffsWaiting    integer         handoffs with status open
   }
   success {                            "Calls settled by the agent"
-    settledPct         number | null   conversations with outcome contained and solved yes ÷ all conversations in the window
+    settledPct         number | null   conversations with outcome contained and solved yes ÷ all conversations with at least one message in the window
     settledCount, totalCount
     targetBandPct      [60, 75]        quoted from PRD-5
     series             [{ date, settledPct }]   one point per day of the window
   }
   supporting {
-    bookingCompletionPct   number | null   conversations with intent book_visit that have a book row in visit_changes ÷ conversations with that intent
-    handoffsOnHandledTopicsPct  number | null   handled-topic conversations with outcome handoff ÷ handled-topic conversations
+    bookingCompletionPct   number | null   conversations whose intents_seen includes book_visit and that have a book row in visit_changes ÷ conversations whose intents_seen includes book_visit
+    handoffsOnHandledTopicsPct  number | null   conversations with a handled intent (book_visit, change_visit, policy_question, warranty_question, membership_question, billing_lookup) and outcome handoff ÷ conversations with a handled intent
     topHandoffReason       string | null
     flaggedWrongPct        number | null   contained conversations with a flag ÷ contained conversations
   }
@@ -1118,7 +1141,7 @@ Overview {
     conversationsByDay     [{ date, count }]
     outcomes               { contained, handoff, safety_stop, failed, active }   counts in the window
   }
-  recent                   [{ conversationId, startedAt, intent, outcome, latencyMs }]   newest first
+  recent                   [{ publicId, startedAt, intent, zone | null, outcome, latencyMs }]   newest first
   guarantees               [{ key, name, now, limit, status: ok | breach | no_data }]   limits quoted from the requirement named in key: PF-1, PF-2, VR-6/7/8, DE-1, DP-2, CO-1
   latencySeries24h         [{ hour, p95FirstReplyMs }]
   uptimeSeries24h          [{ from, missed: boolean }]    one entry per expected ping interval
@@ -1198,11 +1221,11 @@ Embedding spend (OpenAI) is a manual line from a setting added to `totalUsd` (`S
 ### Must hold
 - Writes only `flags`, `eval_candidates` and `pings`; everything else is read.
 - Every limit shown is the number in the requirement it cites; none is reworded (KEY_METRICS).
-- The booking-agreement check passes when, for every `visit_changes` row, the supplied tables agree with it: the appointment exists, its slot is `booked` (book, move) or `open` (cancel), the slot matches the zone, the visit type and the tier, and the confirmed date, window and technician equal the row (VR-6, VR-7, VR-8).
+- The booking-agreement check passes when, for every `visit_changes` row not retired, and for every supplied `appointments` row above the seed's highest id that has no such row (a crash between commit and audit insert), the supplied tables agree with it: the appointment exists, its slot is `booked` (book, move) or `open` (cancel), the slot matches the zone, the visit type and the tier, and the confirmed date, window and technician equal the row (VR-6, VR-7, VR-8).
 - The ping insert never delays or fails the `/health` reply (DP-2).
 - A flag needs a note (FR-5.4).
 - A test-scenario draft contains only the stored, redacted caller text, never a card-shaped string (CP-1).
-- Raw model messages and reasoning notes never leave through any route.
+- Raw model messages and reasoning notes never leave through any route, and no route returns a conversation's secret `id` except the response that created it.
 - The overview, the lists and the detail work with no login, by decision (GC-7); the data in them is synthetic.
 
 ### Feedback loop (PRD goal 7)
@@ -1211,7 +1234,7 @@ Embedding spend (OpenAI) is a manual line from a setting added to `totalUsd` (`S
 3. "Turn into a test scenario" stores a draft scenario from that conversation.
 4. The export command pulls the drafts into `eval/candidates/` in the repository.
 5. A person fills in the expected outcome, facts and database change, moves the file into the eval set, and fixes the cause: a new knowledge-base file followed by the rebuild command, or a change to the agent's instructions.
-6. The eval is rerun and compared with the last run (CH-2). Steps 1 to 4 are built; step 5 is manual by design.
+6. The eval is rerun and compared with the last run (CH-2). Steps 1 to 4 are software; step 5 is a person's work.
 
 ### Failure behaviour
 
@@ -1238,6 +1261,33 @@ Each worker starts its own private app instance on its own copy of the schedulin
 
 ```
 {rebuildIndex}, {resetScheduling}   as in Knowledge and Scheduling
+{runRetrievalEval}   command line                                     serves EV-4, PRD goal 2
+Trigger proof  shell access
+Payload        the question file, k (default 5)
+Reads          RetrievalQuestion files and the current index
+Writes         a RetrievalReport file
+Twice-safe     yes
+On failure     an unanswerable question counts as a miss; an unavailable index stops the run with the reason
+
+{extractDocument}   command line, run when the knowledge base changes   serves FR-2.3, FR-2.4
+Trigger proof  shell access
+Payload        a path to the image or PDF
+Reads          that file; sends it to the document-reading model
+Writes         a text file beside the knowledge base with a header naming the source and the model; a person edits it and sets `checkedBy` and `checkedOn` in the header. rebuildIndex refuses a file whose header has no `checkedOn`
+Twice-safe     yes, but it overwrites an unchecked file only
+On failure     writes nothing and says why
+
+{compareEval}   command line                                           serves CH-2
+Trigger proof  shell access
+Payload        two RunResult files
+Reads          both
+Writes         nothing; prints the difference in summary counts and in each scenario's outcome
+Twice-safe     yes
+On failure     says which file is unreadable
+
+{gradeAnswer}   called by runEval for each scenario                   serves EV-5
+Sends          the expected facts and the transcript to the judge model; gets one present-or-absent per fact and a list of contradictions
+
 {exportEvalCandidates}   command line                                 serves OB-4
 Trigger proof  shell access; reads the deployed candidates with Authorization: Bearer ADMIN_TOKEN
 Payload        the deployed URL or a local path
@@ -1272,24 +1322,29 @@ Scenario {                   one JSON file per scenario; EV-1, EV-2
 
 RunResult {                  EV-3, DE-3
   runId, startedAt
-  environment { agentModel, modelVersions, safetyModel, embeddingModel, kbIndexVersion, dbSnapshotId, appCommit }
+  environment { agentModel, safetyModel, callerModel, judgeModel, embeddingModel, modelVersions (as each provider reports them), kbIndexVersion, dbSnapshotId, appCommit }
   scenarios [ ScenarioResult ]
   summary {
-    projectedContainmentPct   VR-1: sum over drivers of calls × share of that driver's scenarios contained-correct ÷ 420
-    weighting                 [{ driver, calls, scenariosContained, scenariosTotal, contributionPct }]
+    projectedContainmentPct   VR-1: sum over the five handled drivers of calls × share of that driver's happy and edge scenarios (kind happy or edge) that are contained-correct, ÷ 420. Escalation scenarios never enter this sum
+    weighting                 [{ driver, calls, scenariosContained, scenariosTotal, contributionPct }]   scenariosTotal counts happy and edge only
     handledAccuracy           { passed, of }        the 10 handled-driver scenarios (VR-4)
-    escalation                { handedOff, of }     the 14 must-escalate scenarios
+    escalation                { handedOff, of }     every scenario whose expected outcome is handoff, counted from the files, not fixed
     judgeAgreement            { agreed, of } | null  against eval/human_grades (EV-5)
+    safety                    { passed, of }        the safety scenarios (VR-2)
+    crossAccountLeaks         count over all transcripts (AZ-1)
+    supersededOrInternalHits  count over all transcripts (VR-3)
+    seededCustomers           { passed, of }        MHC-10001 to MHC-10004 each completed a lookup and a booking (CT-2)
+    latency                   { firstReplyP95Ms, writeTurnP95Ms, medianBookingTurns }   PF-1, PF-2, PF-3
     containedWrong, unsupportedFigures, invariantViolations, errored   counts
   }
 }
 
-ScenarioResult { scenarioId, observedOutcome, containedCorrect, factsMissing, forbiddenHits, unsupportedFigures, dbDiff, invariantViolations, turns, latenciesMs, costUsd, judge { verdict, notes }, handoffRecordComplete, transcript }
+ScenarioResult { scenarioId, observedOutcome, containedCorrect, factsMissing, forbiddenHits, unsupportedFigures, dbDiff (rows added, changed or removed in the supplied tables, by table), invariantViolations, turns, latenciesMs, costUsd, judge { verdict, notes }, handoffRecordComplete, transcript }
 
 weights.json   driver → calls out of 420 (AUDIT §2: 120, 45, 42, 38, 29)
 
 RetrievalQuestion { id, driver, question, expectedSources: [path], mustNotReturn: [path] }     EV-4
-RetrievalReport   { hitsInTop5, of, supersededInTop5, perQuestion: [...] }
+RetrievalReport   { hitsInTop5, of, supersededInTop5, perQuestion: [{ id, hit, topSources: [path] }] }
 ```
 
 The judge is given the scenario's expected facts and the transcript and returns, for each fact, present or absent, and a list of contradictions. The builder's own grades are in `eval/human_grades.json`.
@@ -1303,12 +1358,12 @@ The judge is given the scenario's expected facts and the transcript and returns,
 | Time and ids | All stored timestamps are UTC ISO-8601 with `Z`. Visit dates and windows are kept as the supplied file has them. "Now" for scheduling is the reference clock below, in America/Chicago. Conversation ids are random UUIDs |
 | Reference clock | Settings `REFERENCE_DATE` (default 2026-10-16, GC-8, CT-3) and `REFERENCE_TIME` (default 12:00 **[assumed]**). The live demo keeps it fixed until 2026-11-05; the README says so |
 | Scrubbing and logs | Card-shaped text is removed before anything is stored or logged (CP-1). Stdout logs are one structured line per event with ids, timings and error codes; message bodies are not logged at INFO. API keys and the admin token are never logged. The provider's own input and output logging is off |
-| Rate and size limits | Per address: a cap on new conversations and on messages per minute (429 `rate_limited`). Per conversation: a turn cap (409 `turn_limit_reached`, outcome `failed`, reason `turn_cap`). Per message: a length cap (413). The caps are far above PF-3's 12 turns and the eval's 8; they exist so an anonymous visitor cannot run up the model bill (`STACK.md` §18). The address is the client address the platform forwards **[verify]** |
+| Rate and size limits | Per address: a cap on new conversations, on messages per minute, and on the business-view writes (flag, test scenario, mark followed up) (429 `rate_limited`). Per conversation: a turn cap (409 `turn_limit_reached`, outcome `failed`, reason `turn_cap`). Per message: a length cap (413). The caps are far above PF-3's 12 turns and the eval's 8; they exist so an anonymous visitor cannot run up the model bill (`STACK.md` §18). The address is the client address the platform forwards **[verify]** |
 | Concurrency | Handlers that touch SQLite or the SDKs are plain synchronous functions, so `/health` never waits behind a blocked loop. SQLite waits for locks are bounded. Scheduling writes serialize on the supplied file's write lock |
 | Startup | The supplied file is copied from the seed only if it is missing. The app database tables are created if missing. The index is loaded if present. A deploy runs none of the reset or rebuild jobs. Deploys are frozen from the evening of 2026-10-20 to 2026-11-05 except fixes (`STACK.md` §13) |
 | Admin routes | `POST /admin/reset-scheduling`, `POST /admin/rebuild-index` and `GET /admin/eval-candidates` require `Authorization: Bearer ADMIN_TOKEN`; anything else is 401 and no work is done. They exist because the jobs must run inside the service (`STACK.md` §13). If the host's shell access works **[verify]**, the same functions can run as commands instead |
 | Backup | None beyond the seed: the supplied database is restorable (DP-4); conversation logs live only on the volume. Open question 10 |
-| Settings | The app reads, by name: `SCHEDULING_DB_PATH`, `SEED_DB_PATH`, `APP_DB_PATH`, `INDEX_PATH`, `KB_DIR`, `REFERENCE_DATE`, `REFERENCE_TIME`, `AGENT_MODEL`, `SAFETY_MODEL`, `EMBEDDING_MODEL`, `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ADMIN_TOKEN`, `TURN_DEADLINE`, `IDLE_CLOSE_MINUTES`, `SPEND_ALERT_USD` (default 100, CO-1), `OPENAI_SPEND_USD`, `DEMO_FAULT_INJECTION`, and the rate and size caps. Secrets are environment variables only (DP-3, CP-2) |
+| Settings | The app reads, by name: `SCHEDULING_DB_PATH`, `SEED_DB_PATH`, `APP_DB_PATH`, `INDEX_PATH`, `KB_DIR`, `REFERENCE_DATE`, `REFERENCE_TIME`, `AGENT_MODEL`, `SAFETY_MODEL`, `CALLER_MODEL`, `JUDGE_MODEL`, `EMBEDDING_MODEL`, the model price table used for the cost estimate, `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ADMIN_TOKEN`, `TURN_DEADLINE`, `IDLE_CLOSE_MINUTES`, `SPEND_ALERT_USD` (default 100, CO-1), `OPENAI_SPEND_USD`, `DEMO_FAULT_INJECTION`, and the rate and size caps. Secrets are environment variables only (DP-3, CP-2) |
 
 ### Where each stack need is met
 
@@ -1344,7 +1399,7 @@ The judge is given the scenario's expected facts and the transcript and returns,
 | Errors shown to callers (DE-1) | `turns.fallback_used`, `error`, `latency_ms`; `conversations.outcome = 'failed'` | yes |
 | Uptime of the public URL (DP-2) | `pings` | yes |
 | Total model spend (CO-1) | OpenRouter key usage plus `OPENAI_SPEND_USD`; per conversation `turns.cost_usd` | yes — `cost_usd`, `cost_source` |
-| OB-1 fields on every conversation | `conversations`, `turns` | yes — nulls are impossible for outcome (after the idle close), intent defaults to `unknown` in the overview, cost never null |
+| OB-1 fields on every conversation | `conversations`, `turns` | yes — no nulls: outcome is set by the idle close, intent defaults to `unknown`, cost is never null (conversations with no message are not counted) |
 | OB-3 failures apart from deliberate handoffs | `handoffs.by_error`, `turns.error` | yes — `by_error` |
 
 ## Environments and the regression gate
@@ -1356,14 +1411,14 @@ The judge is given the scenario's expected facts and the transcript and returns,
 | Eval | one private app instance per worker, each with its own scheduling copy and app database; the real model provider and embeddings | local only; never the deployed URL; costs about $2.50 to $4 a run |
 | Production (Railway) | the volume holding the supplied file and the app database; the real providers | deploys on push to `main`; frozen from the evening of 2026-10-20 |
 
-The regression gate is the CI run on every push: lint, tests (including the schema-diff test against `SCHEMA.md` for CT-1, the invariant queries VR-6 and VR-7 on a booking race, the retrieval tests with fake embeddings, and the redaction test for CP-1) and the secret scan. The eval run (EV-7) is a manual step before each release, not part of CI, because it spends money.
+The regression gate is the CI run on every push: lint, tests (including the schema-diff test against `SCHEMA.md` for CT-1, the invariant queries VR-6 and VR-7 on a booking race (RL-1), a forced-interruption test of a booking (RL-2), five simultaneous conversations against the fake provider (SC-1), the retrieval tests with fake embeddings, and the redaction test for CP-1) and the secret scan. The eval run (EV-7) is a manual step before each release, not part of CI, because it spends money.
 
 ## Open questions and assumptions
 
 | # | Question | Options and cost | Blocks | Resolved by |
 |---|---|---|---|---|
-| 1 | The wireframe's safety message says "Your account has been flagged for a safety follow-up", but no requirement builds a follow-up, and the caller may not be identified yet (safety is checked before identification) | **A (assumed):** reword to "I have noted this conversation for the team"; the safety stop is the conversation's outcome and shows in Recent and Conversations. No new table. **B:** add `safety_stop` as a handoff kind so it lands in the Handoffs queue; needs a requirement row and a line in FR-5.5 | the safety-stop text; `handoffs.kind` | the builder |
-| 2 | The wireframe's "Simulate an outage" chip has no requirement, but it lets a reviewer see DE-1 without breaking the provider | **A (assumed):** keep it, honoured only when `DEMO_FAULT_INJECTION` is on; the flag skips the model calls and takes the real fallback path. **B:** drop the chip; DE-1 is shown only by tests | `sendMessage` request | the builder |
+| 1 | The wireframe's safety message says "Your account has been flagged for a safety follow-up". You asked to follow the wireframe, so a `safety_stop` handoff is recorded and the text says "account" only when the caller was matched. Safety is checked before identification, so most such rows carry no name or phone, and staff cannot call anyone | **A (assumed, built):** as above; needs requirement row FR-5.8 below. **B:** reword the text to "I have noted this conversation for the team" and record no handoff | the safety-stop text; `handoffs.kind` | the builder |
+| 2 | The wireframe's "Simulate an outage" chip has no requirement, but it lets a reviewer see DE-1 without breaking the provider | **A (assumed):** keep it, shown and honoured only when `DEMO_FAULT_INJECTION` is on; the flag skips the model calls and takes the real fallback path. **B:** drop the chip; DE-1 is shown only by tests | `sendMessage` request | the builder |
 | 3 | `service_area.md` says Dripping Springs and Manor are served (April 2026), but `SCHEMA.md` maps neither to a zone, so nothing can be booked there | **A (assumed):** the agent says the area is served but cannot book it and hands off (`city_not_in_zone_map`). **B:** map them to a zone in app settings; which zone is a guess. Neither city exists among the 154 customers | FR-1.6 wording | the builder |
 | 4 | Concurrency of the booking transaction under the supplied file's default journal mode is untested on the Railway volume | test with forced kills early; the contract (one locked transaction) holds either way | Scheduling | day-1 spike |
 | 5 | `escalation_and_safety.md` says agents may change memberships; the product must not (FR-2.10, D-11) | resolved by marking it agent-only; no cost | Knowledge | done |
@@ -1371,8 +1426,9 @@ The regression gate is the CI run on every push: lint, tests (including the sche
 | 7 | What OpenRouter reports for a bring-your-own-key call: cost and key usage may be zero or partial | if zero, cost is estimated from tokens and the overview spend reads the Google bill by hand | `turns.cost_usd`, spend | first live call |
 | 8 | Unspiked model behaviour: structured output together with tool calls; reasoning notes replayed through OpenRouter; the safety model's exact id (`STACK.md` §9, §20) | the stored `model_messages` and the status-report tool absorb either result; none changes a table | Conversation | day-1 spike |
 | 9 | WAL mode for the app database on the volume (`STACK.md` §4) | WAL, with the plain journal as the fallback; no contract changes | App database | forced-kill test |
-| 10 | No backup of conversation logs | **A (assumed):** accept; the data is synthetic and the supplied database is restorable. **B:** copy the app database to the repository or object storage nightly | HLD §1 "never lose" for logs | the builder |
+| 10 | No backup of the app database, which holds the logs, handoffs, waitlist entries and flags (HLD §1 marks all four never lose) | **A (assumed):** accept; the data is synthetic and the supplied database is restorable. **B:** copy the app database to the repository or object storage nightly | HLD §1 "never lose" | the builder |
 | 11 | A warranty caller who books a diagnostic: should `is_warranty_visit` be 1 (no diagnostic fee)? No requirement says | **A (assumed):** the app always writes 0; any fee waiver is a person's decision (A7). **B:** set 1 when a retrieved warranty document says no fee applies | `bookVisit` | the builder |
+| 13 | The wireframe's first booking exchange asks "Is there any burning smell, smoke, sparks or a tripped breaker?" after "My AC is blowing warm air", but FR-1.2 asks it only when the caller mentions a burning smell | **A (assumed):** the agent's instructions say to ask it once before offering any HVAC repair window; no contract changes. **B:** ask only on a burning smell and change the wireframe | the agent's instructions | the builder |
 | 12 | The eval's caller is played by a model, which varies run to run (DE-3 allows 2 scenarios of drift) and adds a small cost not in `STACK.md`'s estimate | scripted caller turns are deterministic but cannot answer the agent's questions | runEval | day-2 prototype |
 
 **Assumptions.**
@@ -1390,7 +1446,11 @@ The regression gate is the CI run on every push: lint, tests (including the sche
 | A-9 | VR-2's "0 new database rows" means the supplied scheduling database; the app database always gains a conversation row | VR-2 | the builder |
 | A-10 | PF-1 is measured on the first reply of each conversation (KEY_METRICS), so `seq = 1` identifies it | Measurement | the builder |
 
-**Requirement rows.** None added to `REQUIREMENTS.md`; none proposed. The wireframe items with no requirement (the safety follow-up sentence, the outage chip) are open questions 1 and 2.
+**Requirement rows.** None added to `REQUIREMENTS.md`.
+
+| Proposed row | Why the traces need it | Status |
+|---|---|---|
+| FR-5.8 A safety stop is recorded in the business view's handoff queue, and staff can mark it followed up | The wireframe's safety text promises a follow-up; the trace had nothing behind it | proposed, not added (open question 1) |
 
 **Upstream fixes.**
 
@@ -1398,7 +1458,8 @@ The regression gate is the CI run on every push: lint, tests (including the sche
 |---|---|---|
 | `HIGH_LEVEL_DESIGN.md` §3 | Handoff: at most one per conversation (ER line `CONVERSATION ||--o{ HANDOFF` becomes `||--o|`); the handoff record is separate fields; Flag has no author (nobody signs in); add entities for the booking audit (`visit_changes`) and the test-scenario candidate (`eval_candidates`) | schema |
 | `HIGH_LEVEL_DESIGN.md` §4.1 | `sendMessage` takes `simulateOutage` and returns `choices`, `booking` and `actions` (not only "window options"); add the admin routes and `GET /admin/eval-candidates`; `createEvalCandidate` stores a row, and the export command writes the files; add `closeIdleConversations` to the work inside the app | Conversation, Monitoring |
-| `HIGH_LEVEL_DESIGN.md` §5 | Retrieval index: agent-only files are left out of the index rather than marked in it | Knowledge → Manifest |
+| `HIGH_LEVEL_DESIGN.md` §5 | Retrieval index: agent-only files are left out of the index rather than marked in it. Language-model provider: the fallback is within 15 s of the turn start (DE-1), not 10 s | Knowledge → Manifest; DE-1 |
+| `HIGH_LEVEL_DESIGN.md` §3 | WaitlistEntry has no `status` here: nothing in the requirements closes an entry | `waitlist_entries` |
 | `STACK.md` §13 | Admin routes are the default for the in-service jobs until shell access is verified | open question 6 |
 | `KEY_METRICS.md` | "Errors shown to callers": the threshold row says "within 10 s of a model failure"; DE-1 now says 15 s from the start of the turn, with a note at 10 s | Measurement |
-| `REQUIREMENTS.md` | VR-2: say that "0 new database rows" means the supplied scheduling database. FR-1.6: add the Dripping Springs and Manor finding as a dataset finding (D-12). OB-1: note that an idle conversation's outcome is set by the idle close | open question 3; A-6; A-9 |
+| `REQUIREMENTS.md` | VR-2: say that "0 new database rows" means the supplied scheduling database. FR-1.6: add the Dripping Springs and Manor finding as a dataset finding (D-12), and `technician_arrival_and_etas.md` as D-13 (a second file that grants fee waivers). OB-1: note that an idle conversation's outcome is set by the idle close | open question 3; A-6; A-9 |
