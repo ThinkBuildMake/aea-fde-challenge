@@ -1415,6 +1415,8 @@ The regression gate is the CI run on every push: lint, tests (including the sche
 
 ## Open questions and assumptions
 
+**Decided 2026-10-18:** the builder accepted the recommended option on every question that offered a choice (1, 2, 3, 6, 10, 11, 12, 13). Rows marked **A (assumed)** are therefore settled; questions 4, 5, 7, 8 and 9 are day-1 checks, not decisions.
+
 | # | Question | Options and cost | Blocks | Resolved by |
 |---|---|---|---|---|
 | 1 | The wireframe's safety message says "Your account has been flagged for a safety follow-up". You asked to follow the wireframe, so a `safety_stop` handoff is recorded and the text says "account" only when the caller was matched. Safety is checked before identification, so most such rows carry no name or phone, and staff cannot call anyone | **A (assumed, built):** as above; needs requirement row FR-5.8 below. **B:** reword the text to "I have noted this conversation for the team" and record no handoff | the safety-stop text; `handoffs.kind` | the builder |
