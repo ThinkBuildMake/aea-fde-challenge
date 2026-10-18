@@ -2,7 +2,7 @@
 
 **What this document is.** A comparison of candidate technologies for each module, and the choice for each. `REQUIREMENTS.md` defines what the system must do; requirement IDs (e.g. `PF-1`) appear here only as the reason a choice wins or loses. Which components exist and the load they carry are in `HIGH_LEVEL_DESIGN.md`; how the pieces fit together is designed in `ARCHITECTURE.md`.
 
-**How the shortlist was built.** Each module's options were researched against `REQUIREMENTS.md`, `HIGH_LEVEL_DESIGN.md`, `USERS.md`, `AUDIT.md` and `KEY_METRICS.md`, with deciding facts checked on 2026-10-17. A separate agent that hadn't seen the research then checked the chosen stack for conflicts. It found no blocker and 28 findings; the ones that change a choice or add a need from the design are applied below, and the ones that were conflicts between requirements or errors in the high-level design are settled in those documents.
+**How the shortlist was built.** Each module's options were researched against `REQUIREMENTS.md`, `HIGH_LEVEL_DESIGN.md`, `USERS.md`, `AUDIT.md` and `KEY_METRICS.md`, with deciding facts checked on 2026-10-17. A separate agent that hadn't seen the research then checked the chosen stack for conflicts. It found no blocker and 28 findings; the ones that change a choice or add a need from the design are applied below, and the ones that were conflicts between requirements or errors in the high-level design are settled in those documents. On 2026-10-18 the stack was re-researched against industry practice (agent frameworks, observability, evaluation, retrieval, app layer and hosting). It kept the hand-written agent loop, SQLite, htmx, Railway and the custom eval runner, and added tracing, alerting, backups, migrations and security basics (modules 4, 13 to 18); the changes were not re-run through the separate conflict check, only the new items are marked **[verify]**.
 
 **Markers.** **[verify]** = an external fact checked on 2026-10-17 (often from secondary sources) that should be re-confirmed before it's relied on. Go-live prerequisites, open choices and open questions are in the last sections.
 
@@ -15,7 +15,7 @@
 | 1 | Language and web server | Python 3.12, FastAPI, one uvicorn process | Builder's choice; SQLite built in (GC-6, SC-2) |
 | 2 | Web client | Jinja2 pages with htmx, no build step | Two chat screens and four tables (HLD §5) |
 | 3 | Scheduling database | Supplied SQLite file, unchanged | GC-6, CT-1 |
-| 4 | App database | SQLite, separate file, same volume | Survives the seed reset (DP-4); 10 MB (HLD §2) |
+| 4 | App database | SQLite, separate file, same volume; numbered migrations, volume backups | Survives the seed reset (DP-4); 10 MB (HLD §2) |
 | 5 | Retrieval index | In-memory vectors with numpy | About 40 passages (HLD §3); PRD-2, EV-4 |
 | 6 | Embeddings | OpenAI `text-embedding-3-small` | $0.02 per million tokens; no trial cap |
 | 7 | Model access | OpenRouter, with the builder's own Google key (BYOK) | Approved provider (GC-4); one place to swap models |
@@ -25,11 +25,11 @@
 | 11 | Orchestration | `openai` Python SDK on OpenRouter, hand-written tool loop | Log every turn (OB-1); commit before "booked" (RL-2) |
 | 12 | Eval harness | Custom Python runner, LLM judge, pytest | EV-3 to EV-7, SC-2 |
 | 13 | Hosting | Railway Hobby plan, one service, 1 GB volume | Approved (GC-4); disk survives deploys (HLD §7) |
-| 14 | Uptime checker | UptimeRobot free tier | 5-minute external ping (DP-2) at $0 (GC-4) |
-| 15 | Secrets | Railway environment variables, gitleaks in CI | DP-3, CP-2 |
-| 16 | CI/CD | GitHub Actions, Railway deploy on push to `main` | Free; no gate needed beyond tests |
-| 17 | Observability | The app's own business view plus stdout logs | FR-5.3, OB-1 |
-| 18 | Authentication | None for callers (the business view is also open, by decision) | DP-1, GC-5 |
+| 14 | Uptime checker and alerts | UptimeRobot free tier with email alerts; Railway deploy-failed webhook; a spend alert to a chat webhook | 5-minute external ping (DP-2) at $0 (GC-4); a miss reaches a person |
+| 15 | Secrets and settings | Railway environment variables read by one typed settings class; gitleaks in CI and pre-commit | DP-3, CP-2 |
+| 16 | CI/CD and tooling | GitHub Actions (ruff, pyright, pytest, gitleaks, pip-audit), Dependabot, `uv` lockfile; Railway deploys on push to `main` only after CI passes | Tested deploys; pinned versions |
+| 17 | Observability | The app's own business view, JSON logs on stdout, and Langfuse Cloud (US region, Hobby free tier) for traces | FR-5.3, OB-1; trace inspection for a reviewer |
+| 18 | Authentication and abuse limits | None for callers (the business view is also open, by decision); per-IP rate limits, security headers | DP-1, GC-5; GC-3 |
 
 **Cost (total over the build, ending 2026-11-05; token prices from OpenRouter listings [verify]):**
 
@@ -37,6 +37,7 @@
 |---|---|
 | Model use: 4 to 6 eval runs at about $2.50 to $4 each, prompt tuning, live traffic | $20 to $45 |
 | Embeddings (OpenAI) | under $1; fund $5 |
+| Langfuse Cloud Hobby (50,000 units a month, 30-day retention, 2 users) | $0 [verify] |
 | OpenRouter fee on credits | 5.5% on a purchase if credits are used; reduced under BYOK [verify] |
 | Hosting (Railway Hobby, about 3 weeks) | $5 to $10 |
 | Uptime checker, CI | $0 |
@@ -66,6 +67,9 @@ At these prices the high-level design's cost envelope (§6) is about 1.5 to 2 ti
 | BYOK ("bring your own key") | Using your own account with the model's maker, so the maker bills you for tokens directly and the middleman only passes the request on. |
 | Preview model | A model its maker still calls unfinished. It may change or be switched off with notice. |
 | Rate limit | A cap on how many requests a service accepts per minute. Going over returns an error, code 429. |
+| Trace | A record of one conversation turn as a tree of steps (the model call, each tool call) with timings, token counts and cost, kept so a person can inspect what happened. |
+| Langfuse | A service that stores and displays traces and runs experiments over test cases; the cloud version is hosted by its maker. |
+| Migration | A numbered script that changes the database's tables, applied once and in order when the app starts. |
 
 **Data and storage**
 
@@ -124,7 +128,7 @@ At these prices the high-level design's cost envelope (§6) is about 1.5 to 2 ti
 
 **Choice: SQLite, WAL mode, with a fallback.** Fits HLD §3 and §5.
 
-**Needs from the design.** Store each reply from the model as the raw message it returned, including its reasoning notes (module 8). Test WAL on the volume early with forced kills (RL-2); if it misbehaves, switch the app database to the plain journal setting. Waitlist entries store a copy of the held slot (date, window, zone), not a pointer to an appointment row, because the reset removes appointments (DP-4).
+**Needs from the design.** Store each reply from the model as the raw message it returned, including its reasoning notes (module 8). Test WAL on the volume early with forced kills (RL-2); if it misbehaves, switch the app database to the plain journal setting. Schema changes are numbered `.sql` files applied at start and tracked by SQLite's `user_version`, with a lock-wait timeout and foreign keys on for this file only. Turn on Railway's volume backups [verify]. A reviewer rewards a reasoned database choice, so keep a short note on why SQLite rather than Postgres (the supplied database must stay SQLite, CT-1; one writer at 0.3 turns/s; a second engine doubles the reset story). Waitlist entries store a copy of the held slot (date, window, zone), not a pointer to an appointment row, because the reset removes appointments (DP-4).
 
 ## 5. Retrieval index
 
@@ -133,7 +137,7 @@ At these prices the high-level design's cost envelope (§6) is about 1.5 to 2 ti
 | **numpy, in memory** ✅ | About 40 passages (HLD §3) is one small file. No dependency to run. Easy to rebuild with one command (CH-1). | No filtering or ranking features; if EV-4 misses, a second ranking step must be added by hand. |
 | sqlite-vec or Chroma | Standard vector-store features. | Another dependency for 40 rows. |
 
-**Choice: numpy.** PRD-2 and EV-4 require retrieval evaluated alone; the size does not (HLD §5).
+**Choice: numpy.** PRD-2 and EV-4 require retrieval evaluated alone; the size does not (HLD §5). The index file records the embedding model, its dimensions and a hash of the passage text, and a build refuses a mismatch.
 
 **Needs from the design.** Mark `escalation_and_safety.md` agent-only like `internal/`, since it sits outside that folder but tells agents to do things FR-2.8 and FR-2.10 forbid (FR-2.7).
 
@@ -198,9 +202,9 @@ At these prices the high-level design's cost envelope (§6) is about 1.5 to 2 ti
 | LangChain or LangGraph | Ready-made agent patterns. | Hidden retries and hidden state work against OB-1; its handling of Gemini reasoning notes through OpenRouter is reported broken in places [verify]. |
 | Raw HTTP calls | No library. | Rebuilds what the SDK already provides. |
 
-**Choice: `openai` SDK, hand-written loop.** OB-1 and RL-2.
+**Choice: `openai` SDK, hand-written loop.** OB-1 and RL-2. Re-checked 2026-10-18 against Pydantic AI, LangGraph with LangChain, the OpenAI Agents SDK and Google ADK: none is verified to replay Gemini's reasoning notes through OpenRouter (LangChain has reported failures), and the safety gate, customer binding and exact history stay custom code in every one. Pydantic is used for tool argument schemas and validation. Pydantic AI is the fallback if a Claude model is added or the tools pass about 20.
 
-**Needs from the design.** Set an explicit timeout and no automatic retries on each model call, with one deadline for the whole turn that covers retries and tool rounds. The SDK defaults to ten minutes and two retries, which would defeat DE-1. Spike structured output together with tool calling on this model in week one; if it misbehaves, put the reply in a final "respond" tool instead [verify].
+**Needs from the design.** Persist the provider's raw JSON assistant message, not the SDK's object. Set an explicit timeout and no automatic retries on each model call, with one deadline for the whole turn that covers retries and tool rounds. The SDK defaults to ten minutes and two retries, which would defeat DE-1. Spike structured output together with tool calling on this model in week one; if it misbehaves, put the reply in a final "respond" tool instead [verify].
 
 ## 12. Eval harness
 
@@ -223,7 +227,7 @@ At these prices the high-level design's cost envelope (§6) is about 1.5 to 2 ti
 
 **Choice: Railway Hobby.** The least setup before 2026-10-21 (GC-1).
 
-**Needs from the design.** Freeze deploys from the evening of 2026-10-20 through 2026-11-05 except for fixes; 99% over about 15 days allows about 3.5 hours down (DP-2). Seed the volume only when the file is missing, never on deploy. Run the reset (DP-4) and index rebuild (CH-1) inside the service by one command or a protected admin route, never an open one (GC-5). Use plain `railway run` for neither: it runs on your machine and does not see the volume [verify].
+**Needs from the design.** Freeze deploys from the evening of 2026-10-20 through 2026-11-05 except for fixes; 99% over about 15 days allows about 3.5 hours down (DP-2). Turn on "Wait for CI" so a failing commit never deploys, set a health-check path, and write down the rollback steps (Railway restores the previous image; whether the volume is untouched is [verify]). Keep CI fast, because a CI wait can slow a fix during the freeze. Seed the volume only when the file is missing, never on deploy. Run the reset (DP-4) and index rebuild (CH-1) inside the service with `railway ssh` (register an SSH key first and test it before the freeze), with a bearer-token admin route as the fallback, never an open one (GC-5). Plain `railway run` does not see the volume.
 
 ## 14. Uptime checker
 
@@ -234,11 +238,11 @@ At these prices the high-level design's cost envelope (§6) is about 1.5 to 2 ti
 
 **Choice: UptimeRobot free.** DP-2 asks for exactly this at $0 (GC-4).
 
-**Needs from the design.** The ping write must be best-effort so the response never waits on the database; the app's own ping log is the evidence for DP-2.
+**Needs from the design.** The ping write must be best-effort so the response never waits on the database; the app's own ping log is the evidence for DP-2. A monitor nobody hears about is not monitoring: UptimeRobot emails on a miss; Railway posts a failed deploy to a chat webhook; the app posts once to the same webhook when cumulative spend passes the CO-1 threshold (Slack and Discord webhooks are free; UptimeRobot's own webhook alerts look paid [verify]).
 
 ## 15. Secrets
 
-**Choice: Railway environment variables, plus the gitleaks binary in CI.** DP-3 and CP-2. A committed `.env` fails CP-2. Run the binary directly with full history (`fetch-depth: 0`); the hosted action needs a licence on organization repositories.
+**Choice: Railway environment variables read by one typed settings class (pydantic-settings), plus the gitleaks binary in CI and as a pre-commit hook.** DP-3 and CP-2. A committed `.env` fails CP-2. The settings class fails at start if a required variable is missing. Run the binary directly with full history (`fetch-depth: 0`); the hosted action needs a licence on organization repositories.
 
 ## 16. CI/CD
 
@@ -247,17 +251,26 @@ At these prices the high-level design's cost envelope (§6) is about 1.5 to 2 ti
 | **GitHub Actions (ruff, pytest, gitleaks); Railway deploys on push to `main`** ✅ | Free for this size. | A failing commit can still deploy unless Railway waits for CI [verify]. |
 | Railway deploys alone | Zero setup. | No test gate. |
 
-**Choice: GitHub Actions.** Pin exact versions in a lockfile and set the Python version explicitly in the build.
+**Choice: GitHub Actions.** Dependencies are pinned in a `uv` lockfile and the Python version is set explicitly in the build. CI runs ruff, pyright on the app code, pytest, gitleaks and `pip-audit`; Dependabot watches pip and Actions. "Wait for CI" in Railway holds a deploy until the workflow passes (documented; it needs an `on: push` workflow).
 
 ## 17. Observability
 
-**Choice: the app's own business view plus stdout logs.** FR-5.3 and OB-1 already require the data. A separate monitoring service means another account and bill for a 400-conversation system. Do not log message bodies at INFO.
+**Choice: the app's own business view, JSON logs on stdout, and Langfuse Cloud (US region, Hobby free tier) for traces.** FR-5.3 and OB-1 already require the data in our own tables, and the business view must work if a vendor is down, so Langfuse sits beside it and replaces nothing. Re-checked 2026-10-18 against LangSmith (5,000 traces a month, one seat), Arize Phoenix (no verified free cloud), Helicone (10,000 requests, 7-day retention, future unclear after the Mintlify purchase), Braintrust (14-day retention), Pydantic Logfire (good only with Pydantic AI) and plain OpenTelemetry (no UI). Langfuse is MIT-licensed with a self-host path if the free tier runs out. Do not log message bodies at INFO.
+
+| Option | Pros | Cons |
+|---|---|---|
+| **Langfuse Cloud Hobby** ✅ | 50,000 units a month and 30-day retention cover about 400 conversations to 2026-11-05; datasets and experiments for the eval; no server to run | One more vendor and key; free-tier caps (30 API requests a minute) [verify]; sees whatever we send |
+| LangSmith | Deep LangChain support | 5,000 traces and one seat; self-host needs Enterprise |
+| Arize Phoenix | OpenTelemetry-native | No verified free cloud; self-host loses data on redeploy without Postgres |
+| Plain OpenTelemetry and logs | Nothing new | No trace UI for a reviewer |
+
+**Needs from the design.** Send traces from our own code, built only from the text left after card-shaped strings were removed (CP-1), plus ids, tool names, outcome, cost and latency; a masking hook drops any run of 13 to 19 digits. Tracing is fire-and-forget: a Langfuse failure never delays or fails a turn. Use the conversation's public id, never its secret id, as the Langfuse session id. OpenRouter's Broadcast feed to Langfuse is not used, because it fires before our scrubber. Test CP-1 against Langfuse as well as the logs.
 
 ## 18. Authentication
 
 **Choice: none for the caller chat.** DP-1 requires no login. The business view and its write actions (flag, mark followed up) are open to anyone with the URL; see open questions.
 
-**Needs from the design.** Per-IP and per-conversation rate limits, a turn cap and a message-length cap, so an anonymous visitor cannot run up the model bill (GC-3).
+**Needs from the design.** Per-IP rate limits with `slowapi` (the client address comes from `X-Forwarded-For` behind Railway's proxy [verify]), a per-conversation turn cap and a message-length cap, so an anonymous visitor cannot run up the model bill (GC-3). Security headers (a strict content policy, no framing, no sniffing; htmx is served from our own files so the policy stays strict). No cross-origin access: pages and API share one origin, so no CORS middleware. The admin token is compared in constant time. `pip-audit` and Dependabot cover dependencies.
 
 ---
 
@@ -268,7 +281,10 @@ At these prices the high-level design's cost envelope (§6) is about 1.5 to 2 ti
 | OpenRouter account; your Google key added under BYOK; about $50 of credit if any traffic is billed there | minutes to an hour | Every model call |
 | OpenAI account with a $5 prepaid balance | minutes | Embeddings |
 | Railway account on the Hobby plan, volume created | minutes | Deployment |
-| UptimeRobot account and one HTTP monitor on `/health` | minutes | DP-2 evidence |
+| UptimeRobot account, one HTTP monitor on `/health`, email alerts on | minutes | DP-2 evidence and alerts |
+| Langfuse Cloud account in the US region (us.cloud.langfuse.com), a project, and its public and secret keys in Railway variables | minutes | Traces |
+| A Slack or Discord incoming webhook for alerts (deploy failed, spend threshold) | minutes | Alerts |
+| Railway: volume backups on, "Wait for CI" on, an SSH key registered for `railway ssh` | minutes | Backups, tested deploys, admin jobs |
 | GitHub repository secrets for deploy | minutes | CI |
 
 ## 20. Open choices
@@ -282,6 +298,10 @@ At these prices the high-level design's cost envelope (§6) is about 1.5 to 2 ti
 | WAL mode for the app database | WAL | Forced-kill test on the Railway volume |
 | A second ranking step for retrieval | None | EV-4 result; add only if fewer than 18 of 20 hit |
 | Cost field under BYOK | Read from OpenRouter key usage | Check what OpenRouter reports for a BYOK call [verify] |
+| Pydantic AI instead of the hand-written loop | Keep the loop | Day-1 test: Gemini reasoning notes survive a two-round multi-turn run, per-call timeout and zero retries can be set, raw messages can be stored and replayed |
+| Langfuse free-tier fit and card text | Hobby is enough | Units used after the first 50 conversations; CP-1 test with 5 card-shaped messages against Langfuse |
+| `railway ssh` for admin jobs | Use it | Test with a registered key before the freeze; else the admin routes |
+| OpenAI embeddings through OpenRouter | Keep OpenAI direct | Test `openai/text-embedding-3-small` on OpenRouter; moves only if it works and removes a vendor |
 
 ## 21. Open questions
 
@@ -293,6 +313,8 @@ None. The conflicts between requirements that the stack check found (fallback ti
 
 - [Railway pricing plans](https://docs.railway.com/pricing/plans)
 - [Railway volumes reference](https://docs.railway.com/volumes/reference)
+- [Langfuse pricing](https://langfuse.com/pricing) and [LangSmith pricing](https://www.langchain.com/pricing) (checked 2026-10-18 by a research agent; free-tier numbers [verify])
+- [OpenRouter reasoning tokens](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens) and [Pydantic AI OpenRouter docs](https://pydantic.dev/docs/ai/models/openrouter/)
 - [OpenRouter: Gemini 3 Flash Preview](https://openrouter.ai/google/gemini-3-flash-preview)
 - [OpenRouter: Gemini 3.1 Flash Lite](https://openrouter.ai/google/gemini-3.1-flash-lite)
 - [OpenRouter pricing and fees (secondary)](https://amnic.com/blogs/openrouter-pricing)
