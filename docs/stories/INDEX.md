@@ -2,7 +2,7 @@
 
 Written 2026-10-18 from `USERS.md`, `REQUIREMENTS.md`, `KEY_METRICS.md`, `HIGH_LEVEL_DESIGN.md`, `STACK.md`, `ARCHITECTURE.md`, `AUDIT.md`, `USERS_handoff.md`, the PRD (`AEA_FDE_Challenge.txt`) and the [Meridian Agent Wireframe](https://claude.ai/artifact/JY5CoLpz2ViQzaD8sMQ7Sa) (boards "1. Caller chat" and "2. Business view").
 
-**Deadline.** Due Wed 2026-10-21 11:59 PM Central (GC-1). From the morning of 2026-10-18 that is about 3.5 working days for 15 stories, roughly 4 a day. That is tight. If the build falls behind, GC-1's order applies: booking, answers and eval numbers first (S01 to S06, S13, S14), then handoff and failures (S05, S10), then the business view (S11, S12), then the rest (S07, S08, S09, S15). Dropping a story still needs the builder's say-so.
+**Deadline.** Due Wed 2026-10-21 11:59 PM Central (GC-1). From the morning of 2026-10-18 that is about 3.5 working days for 16 stories, roughly 4 to 5 a day. That is tight. If the build falls behind, GC-1's order applies: booking, answers and eval numbers first (S01 to S06, S13, S14), then handoff and failures (S05, S10), then the business view (S11, S12), then the rest (S07, S08, S09, S15, S16). Dropping a story still needs the builder's say-so.
 
 ## Following the wireframe
 
@@ -30,6 +30,7 @@ Each UI story has at least one criterion tagged `wireframe` that names the wiref
 | Business: Waitlist tab | S07 |
 | Business: Overview tab | S11 |
 | Business: Conversations tab | S12 |
+| Business: "Open trace" link in the conversation detail (an addition, not in the wireframe) | S16 |
 
 ## Order
 | # | Story | Blocked by | Review gate | Demo in one line |
@@ -49,6 +50,7 @@ Each UI story has at least one criterion tagged `wireframe` that names the wiref
 | S13 | Prove retrieval finds the right document | S02 | blocking | One command prints the right document in the top 5 for at least 18 of 20 questions |
 | S14 | Run the 31 scenarios and print the containment numbers | S07, S08, S09, S10, S13 | blocking | One command prints 31 results, projected containment, accuracy and escalation |
 | S15 | Safe to leave running until 2026-11-05 | S06, S11 | blocking | A 429 on spam, a green secret scan, 0 double bookings in 20 races, one spend alert |
+| S16 | See every turn as a trace in Langfuse | S09, S12 | blocking | "Open trace" on a turn opens its Langfuse trace; card numbers and a Langfuse outage leave no mark |
 
 ## Requirement coverage
 | Requirement | Threshold (quoted) | Story | Criterion |
@@ -99,7 +101,7 @@ Each UI story has at least one criterion tagged `wireframe` that names the wiref
 | FR-4.5 | out-of-scope drivers handed off | S14 | 5 (LT-1, NS-1) |
 | FR-5.1 | type messages, see replies and escalation or safety indication | S01, S03, S04 | S01-3, S03-1, S04-1 |
 | FR-5.2 | new conversation, no carried identity | S01 | 4 |
-| FR-5.3 | business view of volume, containment, escalations, failures, latency | S11 | 1–7 |
+| FR-5.3 | business view of volume, containment, escalations, failures, latency | S11, S16 | S11-1 to S11-7, S16-2 |
 | FR-5.4 | flag a conversation with a note | S12 | 3, 4 |
 | FR-5.5 | handoffs listed, marked followed up | S05 | 1, 2, 3 |
 | FR-5.6 | "yes, that solved it" or "no", recorded | S02, S04 | S02-7, S04-6 |
@@ -117,17 +119,17 @@ Each UI story has at least one criterion tagged `wireframe` that names the wiref
 | VR-6, VR-7, VR-8 | "0 violations" / "0 mismatches" | S06, S08, S14 | S06-4, S08-3, S14-6 |
 | VR-9 | "0 unsupported figures" | S14 | 6 |
 | VR-10 | "writes exactly 1 row ... asking twice ... writes 1 row, not 2" | S07 | 3, 4 |
-| PF-1 | "p95 time to first visible reply ≤ 6 s" | S01, S11 | S01-3, S11-6 |
+| PF-1 | "p95 time to first visible reply ≤ 6 s" | S01, S11, S16 | S01-3, S11-6, S16-5 |
 | PF-2 | "p95 time for a turn containing a database write ≤ 10 s" | S11 | 6 |
 | PF-3 | "Median conversation for the booking scenarios ≤ 12 caller turns" | S14 | demo step 4 |
 | RL-1 | "0 double bookings over 20 repeated races" | S15 | 4 |
 | RL-2 | "0 orphans after 10 forced interruptions" | S15 | 5 |
 | RL-3 | "both unanswerable scenarios (WA-3 and T-8) end in a handoff" | S04, S14 | S04-4, S14-5 |
-| OB-1 | "100% of conversations are stored with ..." | S12 | 2 |
+| OB-1 | "100% of conversations are stored with ..." | S12, S16 | S12-2, S16-1 |
 | OB-2 | "reflects a new conversation within 1 minute" | S11 | 2 |
 | OB-3 | failures "separately countable from deliberate handoffs" | S10 | 5 |
 | OB-4 | flagged conversation → candidate scenario with one command | S12 | 5, 6 |
-| CP-1 | "0 card numbers appear in stored logs after sending 5 messages" | S09, S12 | S09-4, S12-7 |
+| CP-1 | "0 card numbers appear in stored logs after sending 5 messages" | S09, S12, S16 | S09-4, S12-7, S16-3 |
 | CP-2 / DP-3 | "0 secrets (API keys) in the repository history" | S15 | 3 |
 | CT-1 | "0 changed or dropped columns/tables" | S15 | demo step 2 (schema-diff test in CI) |
 | CT-2 | "MHC-10001 to MHC-10004 each complete a lookup and a booking" | S14 | 7 |
@@ -148,7 +150,6 @@ Each UI story has at least one criterion tagged `wireframe` that names the wiref
 | GC-2, GC-4 | video, README and service inventory | — | deliverable work outside the stories |
 
 ## Icebox
-- **Langfuse Cloud tracing** (`ARCHITECTURE.md` → Conversation → Calls out; `STACK.md` §17). The builder iceboxed it on 2026-10-18. OB-1 is already met by the app's own tables, logs and business view, so dropping it costs a nice-to-have trace UI and no requirement. Open question 14 (Langfuse free tier and card text) goes with it.
 - **Voice** (FR-6.1, PRD extra credit). Excluded by the builder.
 - **Later iterations** (FR-6.2): estimate booking, late-technician handling, and the autopay, upgrade and cancel-membership actions. Each is handed off in v1 and checked in S04 and S14.
 
@@ -158,9 +159,10 @@ Each UI story has at least one criterion tagged `wireframe` that names the wiref
 - **Not confirmed:** the holiday-hours PNG was not read (that needs the model). The OpenRouter, Gemini, embeddings, Railway and UptimeRobot calls were not made. These are the architecture's day-1 checks (open questions 4, 6, 7, 8, 9) and belong to S01's and S02's plans. No story depends on a result they could rule out, because the architecture's fallbacks change no contract.
 
 ## Architectural issues
-None that need an architecture amendment. Items 1 to 4 were applied to the design documents on 2026-10-18; item 5 stays a story-level choice.
+None that need an architecture amendment. Items 1 to 4 were applied to the design documents on 2026-10-18; item 5 stays a story-level choice; item 6 is a note on the set's size.
 1. **FR-5.8 added to `REQUIREMENTS.md`** (`ARCHITECTURE.md` open question 1, option A). S05 criterion 4 builds it. *Applied.*
 2. **`KEY_METRICS.md` "Errors shown to callers" now quotes DE-1**: 15 s from the turn start, with a note at 10 s. *Applied.*
 3. **D-12 (Dripping Springs and Manor) and D-13 (`technician_arrival_and_etas.md` is agent-only) are now in `REQUIREMENTS.md`**, in FR-1.6 and FR-2.7. So are the VR-2 and OB-1 notes, and the architecture's `HIGH_LEVEL_DESIGN.md` fixes. *Applied.*
-4. **Langfuse is iceboxed** (see Icebox) and marked so in `STACK.md`, `ARCHITECTURE.md` and `HIGH_LEVEL_DESIGN.md`, with its design kept for later. It is an outbound side channel, so dropping it changes no table, route or module contract. *Applied.*
+4. **Langfuse tracing is in v1** (builder, 2026-10-18), built by S16. It was briefly iceboxed and is now restored in `STACK.md` and `ARCHITECTURE.md`; `HIGH_LEVEL_DESIGN.md` now shows it as the trace store, as `ARCHITECTURE.md`'s upstream fixes asked. *Applied.*
 5. **Several Should-level eval checks are demo steps in S14, not acceptance criteria** (DE-3 run record, EV-5 judge agreement, PF-3 turn count, CH-2 compare, the README numbers). With them, S14 would have 12 criteria. They are printed by the same command S14 builds, so they are checked at the S14 demo. Split S14 if the builder wants them as criteria.
+6. **The set has 16 stories**, one over the story-writer's limit of 15. S16 is kept separate so that S01 and S12 stay at 7 criteria each and tracing has its own privacy review. It can be merged into S12 if the builder prefers 15.

@@ -26,6 +26,7 @@ flowchart LR
   evalr[Eval runner] -->|same conversation operations against a private copy, sync| app
   uptime[Uptime checker] -->|health ping every 5 minutes, sync| app
   app -->|spend alert, once, async| alert[Alert webhook]
+  app -->|scrubbed trace per turn, fire and forget, async| lf[Trace store: Langfuse Cloud]
 ```
 
 ## 1. Sizing answers
@@ -183,6 +184,7 @@ flowchart LR
 | `embedText` | App server (`sendMessage`), `rebuildIndex` | question or passage | vector | under 1 s | FR-2, EV-4 |
 | `extractDocument` (read the holiday image and fee table) | `rebuildIndex` | image, PDF | text | seconds, once per build | FR-2.3, FR-2.4 |
 | `gradeAnswer` | `runEval` | expected facts, actual reply | verdict | seconds | EV-5 |
+| `sendTrace` (fire and forget) | App server (`sendMessage`) | one trace per turn: spans for the safety screen, model calls and tool calls, with scrubbed text, ids, timings, tokens and cost | trace id, or nothing on failure | background, never waited on | OB-1, CP-1 |
 
 ## 5. Components
 
@@ -236,13 +238,15 @@ flowchart LR
 
 **Why it exists:** a missed check or runaway spend must reach a person (CO-1, DP-2). The app posts once to a Slack or Discord incoming webhook when cumulative spend passes the CO-1 threshold; Railway posts a failed deploy to the same webhook. **Provided by platform:** the chat service's free webhook.
 
+### Trace store
+
+**Why it exists:** a reviewer or the builder needs to see what happened inside one turn: the safety screen, each model call and each tool call, with timings, tokens and cost (OB-1, FR-5.3). The app's own tables stay the source of truth; the trace store sits beside them and replaces nothing. Traces carry only text with card-shaped strings removed (CP-1). Sending is fire-and-forget, so an outage there never delays or fails a turn. **Provided by platform:** Langfuse Cloud, US region, Hobby free tier (`STACK.md` §17).
+
 ### Uptime checker
 
 **Why it exists:** DP-2 needs a ping every 5 minutes from outside the app. The app records each ping it receives; a gap is a miss. **Provided by platform:** a free-tier external service (GC-4).
 
 **What to add next**
-
-Trace export to Langfuse Cloud is designed in `ARCHITECTURE.md` but iceboxed for v1 (builder, 2026-10-18); the business view and logs meet OB-1 without it.
 
 Final at this scale: capped at 5 simultaneous conversations (SC-1) for a review window ending 2026-11-05 (DP-2). No queue (the longest operation is a 10 s turn), cache (every read is under 10 ms), scheduler (the two periodic checks run when someone opens the overview), second instance, load balancer, object storage or CDN is justified. The first thing that will strain is the model provider's rate limit during a 4-way eval run; if `runEval` logs rate-limit errors, lower the parallelism rather than add a component.
 
@@ -254,6 +258,7 @@ Final at this scale: capped at 5 simultaneous conversations (SC-1) for a review 
 | Scheduling and app databases | in the disk | in the disk |
 | Retrieval index and embeddings | under $1 | under $1 |
 | Uptime checker | $0 (free tier) | $0 |
+| Trace store (Langfuse Cloud Hobby) | $0 (free tier) | $0 |
 | Model provider, live traffic (a few hundred conversations) | $5 to $10 | same |
 | Model provider, eval runs: about $2.50 to $4 each, 4 to 6 runs, plus prompt tuning | $15 to $35 | same |
 | **Total** | **about $30 to $55 over the build** | **same** |

@@ -28,7 +28,7 @@
 | 14 | Uptime checker and alerts | UptimeRobot free tier with email alerts; Railway deploy-failed webhook; a spend alert to a chat webhook | 5-minute external ping (DP-2) at $0 (GC-4); a miss reaches a person |
 | 15 | Secrets and settings | Railway environment variables read by one typed settings class; gitleaks in CI and pre-commit | DP-3, CP-2 |
 | 16 | CI/CD and tooling | GitHub Actions (ruff, pyright, pytest, gitleaks, pip-audit), Dependabot, `uv` lockfile; Railway deploys on push to `main` only after CI passes | Tested deploys; pinned versions |
-| 17 | Observability | The app's own business view and JSON logs on stdout; Langfuse Cloud traces iceboxed for v1 (builder, 2026-10-18) | FR-5.3, OB-1 |
+| 17 | Observability | The app's own business view, JSON logs on stdout, and Langfuse Cloud (US region, Hobby free tier) for traces | FR-5.3, OB-1; trace inspection for a reviewer |
 | 18 | Authentication and abuse limits | None for callers (the business view is also open, by decision); per-IP rate limits, security headers | DP-1, GC-5; GC-3 |
 
 **Cost (total over the build, ending 2026-11-05; token prices from OpenRouter listings [verify]):**
@@ -37,7 +37,7 @@
 |---|---|
 | Model use: 4 to 6 eval runs at about $2.50 to $4 each, prompt tuning, live traffic | $20 to $45 |
 | Embeddings (through OpenRouter credits) | under $1; fund $5 |
-| Langfuse Cloud Hobby (50,000 units a month, 30-day retention, 2 users) | $0; not used in v1 (tracing iceboxed for v1 (builder, 2026-10-18)) |
+| Langfuse Cloud Hobby (50,000 units a month, 30-day retention, 2 users) | $0 [verify] |
 | OpenRouter fee on credits | 5.5% on a purchase if credits are used; reduced under BYOK [verify] |
 | Hosting (Railway Hobby, about 3 weeks) | $5 to $10 |
 | Uptime checker, CI | $0 |
@@ -255,8 +255,6 @@ At these prices the high-level design's cost envelope (§6) is about 1.5 to 2 ti
 
 ## 17. Observability
 
-**Iceboxed 2026-10-18 (builder): v1 ships with the business view and JSON logs only.** The Langfuse choice below is kept as the design for when tracing is turned on; nothing in v1 depends on it, because OB-1 is met by the app's own tables.
-
 **Choice: the app's own business view, JSON logs on stdout, and Langfuse Cloud (US region, Hobby free tier) for traces.** FR-5.3 and OB-1 already require the data in our own tables, and the business view must work if a vendor is down, so Langfuse sits beside it and replaces nothing. Re-checked 2026-10-18 against LangSmith (5,000 traces a month, one seat), Arize Phoenix (no verified free cloud), Helicone (10,000 requests, 7-day retention, future unclear after the Mintlify purchase), Braintrust (14-day retention), Pydantic Logfire (good only with Pydantic AI) and plain OpenTelemetry (no UI). Langfuse is MIT-licensed with a self-host path if the free tier runs out. Do not log message bodies at INFO.
 
 | Option | Pros | Cons |
@@ -284,7 +282,7 @@ At these prices the high-level design's cost envelope (§6) is about 1.5 to 2 ti
 | OpenRouter credit of about $50 covers chat fallbacks and embeddings; an OpenAI account with $5 only if the embeddings test fails | minutes | Embeddings |
 | Railway account on the Hobby plan, volume created | minutes | Deployment |
 | UptimeRobot account, one HTTP monitor on `/health`, email alerts on | minutes | DP-2 evidence and alerts |
-| Langfuse Cloud account in the US region (us.cloud.langfuse.com), a project, and its public and secret keys in Railway variables | minutes | Traces (only when tracing is turned on; iceboxed for v1 (builder, 2026-10-18)) |
+| Langfuse Cloud account in the US region (us.cloud.langfuse.com), a project, and its public and secret keys in Railway variables | minutes | Traces |
 | A Slack or Discord incoming webhook for alerts (deploy failed, spend threshold) | minutes | Alerts |
 | Railway: volume backups on, "Wait for CI" on, an SSH key registered for `railway ssh` | minutes | Backups, tested deploys, admin jobs |
 | GitHub repository secrets for deploy | minutes | CI |
@@ -301,7 +299,7 @@ At these prices the high-level design's cost envelope (§6) is about 1.5 to 2 ti
 | A second ranking step for retrieval | None | EV-4 result; add only if fewer than 18 of 20 hit |
 | Cost field under BYOK | Read from OpenRouter key usage | Check what OpenRouter reports for a BYOK call [verify] |
 | Pydantic AI instead of the hand-written loop | Keep the loop | Day-1 test: Gemini reasoning notes survive a two-round multi-turn run, per-call timeout and zero retries can be set, raw messages can be stored and replayed |
-| Langfuse free-tier fit and card text (iceboxed with tracing) | Hobby is enough | Units used after the first 50 conversations; CP-1 test with 5 card-shaped messages against Langfuse |
+| Langfuse free-tier fit and card text | Hobby is enough | Units used after the first 50 conversations; CP-1 test with 5 card-shaped messages against Langfuse |
 | `railway ssh` for admin jobs | Use it | Test with a registered key before the freeze; else the admin routes |
 | Embeddings through OpenRouter | Use OpenRouter | Day-1 test of `openai/text-embedding-3-small` on OpenRouter; OpenAI direct only if it fails |
 

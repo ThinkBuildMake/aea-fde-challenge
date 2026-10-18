@@ -24,6 +24,7 @@ flowchart LR
   adb[("App database: SQLite")]
   idx[("Retrieval index: in memory plus a file")]
   llm["Language-model provider: OpenRouter chat and embeddings"]
+  lf["Langfuse Cloud, US region: traces"]
   chatops["Alert webhook: Slack or Discord"]
   client -->|startConversation, sendMessage, recordSolved| conv
   client -->|submitCallbackWindow| fup
@@ -44,6 +45,8 @@ flowchart LR
   know -->|embed question and passages| llm
   know -->|search, load, swap| idx
   mon -->|key usage| llm
+  conv -->|scrubbed trace spans, fire and forget| lf
+  evalr -->|experiment results, optional| lf
   mon -->|spend alert, once| chatops
   sched -->|locked reads and writes| sdb
   sched -->|visit_changes audit rows| adb
@@ -442,7 +445,7 @@ One caller message and the reply, or one tap on "did this solve it".
 | latency_ms | INTEGER | no | | request received to reply returned |
 | error | TEXT | yes | | `provider_timeout`, `provider_error`, `replay_rejected`, `scheduling_unavailable`, `embedding_unavailable`, `screen_unavailable`, `figure_check_failed`, and so on (more may be added) |
 | fallback_used | INTEGER | no | 0 | 1 when the reply is a fixed fallback text (DE-1) |
-| trace_id | TEXT | yes | | the Langfuse trace for this turn, so the business view can link to it; null when tracing was off or failed. Always null in v1: tracing is iceboxed for v1 (builder, 2026-10-18) |
+| trace_id | TEXT | yes | | the Langfuse trace for this turn, so the business view can link to it; null when tracing was off or failed |
 | prompt_tokens | INTEGER | yes | | as the provider reported |
 | completion_tokens | INTEGER | yes | | as the provider reported |
 | cost_usd | REAL | no | 0 | the provider's reported cost, else tokens times the configured price; never null (OB-1) |
@@ -809,7 +812,7 @@ Provider account settings: input and output logging off (`STACK.md` §7).
 |---|---|---|---|
 | Langfuse Cloud, US region (traces) | per turn, a trace with spans for the safety screen, each model call and each tool call: timings, token counts, cost, model, tool names, outcome, and the redacted caller and reply text; the session id is the conversation's public id | nothing the turn needs | an in-memory recorder; tracing off |
 
-**Tracing is iceboxed for v1 (builder, 2026-10-18).** The v1 app sends no traces; the Langfuse row above is the design for when tracing is turned on. When it is, tracing is fire-and-forget: a Langfuse error, timeout or outage never delays or fails a turn. OpenRouter's own Broadcast feed to Langfuse is not used, because it sends before the card scrubber runs.
+Tracing is fire-and-forget: a Langfuse error, timeout or outage never delays or fails a turn. OpenRouter's own Broadcast feed to Langfuse is not used, because it sends before the card scrubber runs.
 
 ### Must hold
 - Only Conversation writes `conversations` and `turns`.
@@ -828,7 +831,7 @@ Provider account settings: input and output logging off (`STACK.md` §7).
 - **Outcome.** An outcome is set exactly once. `contained` is never set while a handoff exists. `handoff` is set in the same transaction that creates the handoff.
 - **Fixed texts.** The emergency message, the burning-smell question, the fallback, the turn-cap text, the supervisor-callback wording and the solved-tap texts are fixed wording taken from the wireframe, not model output.
 - Every turn stores `latency_ms`, `tools_called`, `retrieved`, cost and any error (OB-1).
-- **Traces carry only scrubbed text** (applies when tracing is turned on; iceboxed for v1 (builder, 2026-10-18)). Spans are built from text left after card-shaped strings were removed, plus ids, tool names, outcome, cost and latency; a masking step drops any run of 13 to 19 digits before a span leaves the app (CP-1). Raw model messages and reasoning notes are not sent. The secret conversation id is never a span attribute.
+- **Traces carry only scrubbed text.** Spans are built from text left after card-shaped strings were removed, plus ids, tool names, outcome, cost and latency; a masking step drops any run of 13 to 19 digits before a span leaves the app (CP-1). Raw model messages and reasoning notes are not sent. The secret conversation id is never a span attribute.
 
 ### Failure behaviour
 
@@ -1292,7 +1295,7 @@ Twice-safe     yes — each run has its own id and output
 On failure     a scenario that errors is reported as failed, not skipped, and the run continues; the summary lists the errored ones
 ```
 
-Each worker starts its own private app instance on its own copy of the scheduling database, reseeded before every scenario, and plays a scenario over the same routes a caller uses. The caller is played by a model given the scenario's brief. After each scenario the runner reads the worker's files directly to compute the database difference, the invariant queries (VR-6, VR-7, VR-8) and the figure check against the logged retrieved text (VR-9). Cost of the caller model is counted in the run. When tracing is turned on (it is iceboxed for v1 (builder, 2026-10-18)), each scenario run may also be reported to Langfuse as an experiment item; the RunResult file stays the source of truth (DE-3).
+Each worker starts its own private app instance on its own copy of the scheduling database, reseeded before every scenario, and plays a scenario over the same routes a caller uses. The caller is played by a model given the scenario's brief. After each scenario the runner reads the worker's files directly to compute the database difference, the invariant queries (VR-6, VR-7, VR-8) and the figure check against the logged retrieved text (VR-9). Cost of the caller model is counted in the run. Each scenario run may also be reported to Langfuse as an experiment item; the RunResult file stays the source of truth (DE-3).
 
 ```
 {rebuildIndex}, {resetScheduling}   as in Knowledge and Scheduling
@@ -1400,7 +1403,7 @@ The judge is given the scenario's expected facts and the transcript and returns,
 | Backup | The host's scheduled volume backups are on [verify]. Before every `resetScheduling`, the supplied file is copied aside, and the app database is copied with SQLite's backup function, so a reset or eval run never loses the only copy. Closes the former open question 10 |
 | Security headers and cross-origin | Every response carries a strict content policy (scripts and styles from the app's own files only, so htmx and the chart file are served by the app), no framing, no content sniffing, and a referrer policy. No cross-origin access is allowed: pages and API share one origin, so no CORS middleware is added. The admin token is compared in constant time |
 | Alerts | A missed uptime check emails the builder (the uptime service). A failed deploy and the spend threshold post to the alert webhook (`ALERT_WEBHOOK_URL`). The business view shows the spend banner either way |
-| Settings | One typed settings object reads, by name, and refuses to start if a required one is missing: `SCHEDULING_DB_PATH`, `SEED_DB_PATH`, `APP_DB_PATH`, `INDEX_PATH`, `KB_DIR`, `REFERENCE_DATE`, `REFERENCE_TIME`, `AGENT_MODEL`, `SAFETY_MODEL`, `CALLER_MODEL`, `JUDGE_MODEL`, `EMBEDDING_MODEL`, the model price table used for the cost estimate, `OPENROUTER_API_KEY`, `OPENAI_API_KEY` (only if the embeddings fallback is used), `ADMIN_TOKEN`, `TURN_DEADLINE`, `IDLE_CLOSE_MINUTES`, `SPEND_ALERT_USD` (default 100, CO-1), `OPENAI_SPEND_USD`, `ALERT_WEBHOOK_URL`, `LANGFUSE_BASE_URL` (the US region), `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` (optional: tracing is iceboxed for v1 (builder, 2026-10-18)), `DEMO_FAULT_INJECTION`, and the rate and size caps. Secrets are environment variables only (DP-3, CP-2) |
+| Settings | One typed settings object reads, by name, and refuses to start if a required one is missing: `SCHEDULING_DB_PATH`, `SEED_DB_PATH`, `APP_DB_PATH`, `INDEX_PATH`, `KB_DIR`, `REFERENCE_DATE`, `REFERENCE_TIME`, `AGENT_MODEL`, `SAFETY_MODEL`, `CALLER_MODEL`, `JUDGE_MODEL`, `EMBEDDING_MODEL`, the model price table used for the cost estimate, `OPENROUTER_API_KEY`, `OPENAI_API_KEY` (only if the embeddings fallback is used), `ADMIN_TOKEN`, `TURN_DEADLINE`, `IDLE_CLOSE_MINUTES`, `SPEND_ALERT_USD` (default 100, CO-1), `OPENAI_SPEND_USD`, `ALERT_WEBHOOK_URL`, `LANGFUSE_BASE_URL` (the US region), `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `DEMO_FAULT_INJECTION`, and the rate and size caps. Secrets are environment variables only (DP-3, CP-2) |
 
 ### Where each stack need is met
 
@@ -1419,7 +1422,7 @@ The judge is given the scenario's expected facts and the transcript and returns,
 | §12 One scheduling copy per worker; separate app database; run locally | Offline tools → runEval |
 | §13 Seed only if missing; commands run inside the service; deploy freeze | System-wide → Startup, Admin routes |
 | §14 Ping write best-effort | Monitoring → getHealth |
-| §17 No message bodies at INFO; traces carry scrubbed text only; Langfuse failure never affects a turn | System-wide → Scrubbing and logs; Conversation → Calls out, Must hold (tracing iceboxed for v1 (builder, 2026-10-18)) |
+| §17 No message bodies at INFO; traces carry scrubbed text only; Langfuse failure never affects a turn | System-wide → Scrubbing and logs; Conversation → Calls out, Must hold |
 | §14 Alerts reach a person | System-wide → Alerts; Monitoring → checkSpendAlert |
 | §4 Migrations, lock-wait timeout, backups | Database schema → Migrations; System-wide → Backup |
 | §15, §16 Typed settings; pinned dependencies; scans | System-wide → Settings; Environments |
@@ -1471,7 +1474,7 @@ The regression gate is the CI run on every push: lint, tests (including the sche
 | 10 | Backup of the app database (logs, handoffs, waitlist entries, flags) | **Decided 2026-10-18:** the host's volume backups plus a pre-reset copy (System-wide → Backup) | — | the builder |
 | 11 | A warranty caller who books a diagnostic: should `is_warranty_visit` be 1 (no diagnostic fee)? No requirement says | **A (assumed):** the app always writes 0; any fee waiver is a person's decision (A7). **B:** set 1 when a retrieved warranty document says no fee applies | `bookVisit` | the builder |
 | 13 | The wireframe's first booking exchange asks "Is there any burning smell, smoke, sparks or a tripped breaker?" after "My AC is blowing warm air", but FR-1.2 asks it only when the caller mentions a burning smell | **A (assumed):** the agent's instructions say to ask it once before offering any HVAC repair window; no contract changes. **B:** ask only on a burning smell and change the wireframe | the agent's instructions | the builder |
-| 14 | Langfuse Cloud: does the free tier's 50,000 units a month hold, and does it ever receive a card-shaped string? | check units after the first 50 conversations; run CP-1's five card-shaped messages and search Langfuse. If it leaks, tracing is turned off and logs remain | Conversation → Calls out | iceboxed with tracing (builder, 2026-10-18); test before tracing is turned on |
+| 14 | Langfuse Cloud: does the free tier's 50,000 units a month hold, and does it ever receive a card-shaped string? | check units after the first 50 conversations; run CP-1's five card-shaped messages and search Langfuse. If it leaks, tracing is turned off and logs remain | Conversation → Calls out | day-1 test |
 | 15 | Where the alert webhook points: a Slack or Discord workspace is needed | the builder names one; without it, alerts stay as the business view banner and the uptime email | alerts | the builder |
 | 12 | The eval's caller is played by a model, which varies run to run (DE-3 allows 2 scenarios of drift) and adds a small cost not in `STACK.md`'s estimate | scripted caller turns are deterministic but cannot answer the agent's questions | runEval | day-2 prototype |
 
@@ -1500,7 +1503,7 @@ The regression gate is the CI run on every push: lint, tests (including the sche
 
 | Document | Change | Behind it |
 |---|---|---|
-| `HIGH_LEVEL_DESIGN.md` §2 and §5 | Add the alert webhook as an external service Monitoring posts to. Langfuse Cloud is not added: tracing is iceboxed for v1 (builder, 2026-10-18) | Summary diagram |
+| `HIGH_LEVEL_DESIGN.md` §2 and §5 | Add Langfuse Cloud as an external service the Conversation module sends scrubbed traces to, and the alert webhook as an external service Monitoring posts to | Summary diagram |
 | `HIGH_LEVEL_DESIGN.md` §3 | Handoff: at most one per conversation (ER line `CONVERSATION ||--o{ HANDOFF` becomes `||--o|`); the handoff record is separate fields; Flag has no author (nobody signs in); add entities for the booking audit (`visit_changes`) and the test-scenario candidate (`eval_candidates`) | schema |
 | `HIGH_LEVEL_DESIGN.md` §4.1 | `sendMessage` takes `simulateOutage` and returns `choices`, `booking` and `actions` (not only "window options"); add the admin routes and `GET /admin/eval-candidates`; `createEvalCandidate` stores a row, and the export command writes the files; add `closeIdleConversations` to the work inside the app | Conversation, Monitoring |
 | `HIGH_LEVEL_DESIGN.md` §5 | Retrieval index: agent-only files are left out of the index rather than marked in it. Language-model provider: the fallback is within 15 s of the turn start (DE-1), not 10 s | Knowledge → Manifest; DE-1 |

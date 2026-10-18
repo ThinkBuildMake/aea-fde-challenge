@@ -49,4 +49,4 @@ The app runs unattended at a public URL for two weeks after the deadline. An ano
    Then the alert webhook receives exactly one message with the total and the threshold (CO-1)
 
 #### Not in this story
-- Langfuse tracing — iceboxed (INDEX)
+- Langfuse tracing — picked up by S16
