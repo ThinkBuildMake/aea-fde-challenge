@@ -103,7 +103,7 @@ Disputes, refunds, complaints and manager requests are different work: the calle
 | | |
 |---|---|
 | **Trigger** | The caller says something is broken or they need a tune-up and want someone out, or asks about a visit they already have (confirm it, move it, cancel it). |
-| **Input** | A problem in plain words, their name and phone, a preferred day, their city. |
+| **Input** | A problem in plain words, their name plus phone, account number or service address, a preferred day, their city. |
 | **What they need to see** | A clear yes or no: either "you're booked, Thursday 8 to 12, with [tech name]" or "nothing opens that day, here are the nearest options." For an existing visit, the date, window and tech on file, and what moving or cancelling it costs (free more than 24 hours ahead, $49 inside 24 hours). The diagnostic fee, said once, in plain terms ($89, credited toward the repair, waived for members). If nothing can be booked, a clear handoff, not a dead end. |
 | **What they do with it** | Accept a window, pick another, or ask for a person. They decide; the agent never books without a yes. |
 | **Time available** | A booking call in the data runs about 137 seconds at the median; appointment changes about 90 seconds. |
@@ -149,7 +149,7 @@ The value is in the conditional and contradictory cases, and in saying "I don't 
 | | |
 |---|---|
 | **Trigger** | The caller asks for their balance, asks to pay an invoice, or doesn't recognise an invoice line. |
-| **Input** | Their name and phone number, sometimes an invoice number. |
+| **Input** | Their name plus phone number, account number or service address, sometimes an invoice number. |
 | **What they need to see** | Their own balance or invoice, the line items in plain words, and a way to pay that never involves reading a card number aloud. |
 | **What they do with it** | Pay through the link they are sent, or accept the explanation, or say they still disagree. |
 | **Time available** | Billing lookups run about 90 to 115 seconds at the median. |
@@ -174,7 +174,7 @@ This is the weakest of the three cases. If the supplied invoice data is thin, th
 | # | Feature | Use case | What it does for the caller | Acceptable in v1 |
 |---|---|---|---|---|
 | 1 | Safety check on every call | UC-1 | Gas, CO, sparks or smoke gets "leave the house, call 911," not a booking. A burning smell gets the follow-up question first. | Never books these. Triggers on the first mention, before any other question *(assumed)*. |
-| 2 | Find the caller's account by name and phone | UC-1, UC-3 | They don't repeat an account number. | No match: the agent says it can't find the account and hands off to a person; it does not create accounts *(assumed, A6)*. |
+| 2 | Find the caller's account by name plus phone, account number or service address (A16 in `REQUIREMENTS.md`) | UC-1, UC-3 | They don't repeat an account number. | No match: the agent says it can't find the account and hands off to a person; it does not create accounts *(assumed, A6)*. |
 | 3 | Check availability and book | UC-1 | They hear a yes or a set of alternatives, with date, window and tech name. The booking is written to the scheduling database. A caller who wants an earlier window can join a waitlist while keeping the later booking. | A confirmed booking is the bar *(PRD)*. Matches the caller's zone, service type and membership tier. |
 | 4 | Answer fee, membership, warranty, hours and service-area questions | UC-2 | A short, correct answer with the condition that matters. | Wrong answer is worse than a handoff *(PRD)*. When the current documents don't settle it, the agent says so and hands off *(assumed, A4)*. |
 | 5 | Look up balance and invoice line items; send a payment link | UC-3 | They see what they owe and why, and pay without saying a card number. | Their own account only. |

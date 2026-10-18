@@ -25,6 +25,7 @@ flowchart LR
   kb -->|read image and PDF table, operator command| llm
   evalr[Eval runner] -->|same conversation operations against a private copy, sync| app
   uptime[Uptime checker] -->|health ping every 5 minutes, sync| app
+  app -->|spend alert, once, async| alert[Alert webhook]
 ```
 
 ## 1. Sizing answers
@@ -74,9 +75,11 @@ Peak load is under 2 requests/s even in the eval run, and most of each turn is w
 | Invoice | Supplied bill | amount, balance, line items | one Customer | supplied | none (81) |
 | Conversation | One chat from first message to end | outcome, intent, cost, solved answer, matched customer | many Turns | never lose | 400 |
 | Turn | One caller message and agent reply | text, the raw model reply (including its reasoning notes, replayed unchanged on the next turn), latency, tools called, retrieved passages, error | one Conversation | never lose | 3,200 |
-| Handoff | A person must act: handoff record or supervisor callback | reason, summary, preferred window, status | one Conversation | never lose | about 100 |
-| WaitlistEntry | A caller wants an earlier window than the one booked | visit type, zone, a copy of the window held (date, window, zone), status | one Conversation | never lose | about 35 |
-| Flag | A person marked a conversation wrong or poor | note, who, when | one Conversation | never lose | tens |
+| Handoff | A person must act: handoff, supervisor callback or safety stop | kind, reason, intent, what the caller was told, caller identity, preferred window, status, each a separate field | one Conversation, at most one per conversation | never lose | about 100 |
+| WaitlistEntry | A caller wants an earlier window than the one booked | visit type, zone, a copy of the window held (date, window, zone); no status, because nothing in the requirements closes an entry | one Conversation | never lose | about 35 |
+| Flag | A person marked a conversation wrong or poor | note, when (no author: nobody signs in) | one Conversation | never lose | tens |
+| VisitChange | Audit row for each book, move or cancel the app committed | action, appointment, slot, confirmed date, window and technician | one Conversation | never lose | up to about 1 a conversation |
+| EvalCandidate | A draft test scenario made from a logged conversation | scenario id, draft scenario | one Conversation | never lose | tens |
 | Passage | A chunk of one current knowledge-base file | text, source file, vector | one source file | rebuildable (CH-1) | about 40 |
 | Ping | One health check seen | time | none | disposable | 288 a day |
 | Scenario and Eval result | Eval inputs and outputs, kept as files in the repository | expected outcome, facts, database change | none | never lose (version control) | 31 scenarios |
@@ -93,9 +96,11 @@ erDiagram
   SLOT ||--o| APPOINTMENT : holds
   CUSTOMER |o--o{ CONVERSATION : identified_in
   CONVERSATION ||--o{ TURN : contains
-  CONVERSATION ||--o{ HANDOFF : produces
+  CONVERSATION ||--o| HANDOFF : produces
   CONVERSATION ||--o{ WAITLIST_ENTRY : produces
   CONVERSATION ||--o{ FLAG : receives
+  CONVERSATION ||--o{ VISIT_CHANGE : produces
+  CONVERSATION ||--o| EVAL_CANDIDATE : becomes
 ```
 
 Customer, Technician, Slot, Appointment and Invoice live in the supplied scheduling database and keep its schema exactly (GC-6, CT-1). Everything else lives in the app database, so resetting to the seed (DP-4) never erases the logs.
@@ -137,24 +142,27 @@ flowchart LR
 | Operation | Called by | Input | Output | R/W | Latency class | Sync / async | Serves |
 |---|---|---|---|---|---|---|---|
 | `startConversation` — `POST /conversations` | Caller chat screen, Eval runner | nothing | conversation id, greeting | W | ≤ 1 s | sync | I-6, FR-5.2 |
-| `sendMessage` — `POST /conversations/{id}/messages` | Caller chat screen, Eval runner | text | reply, status (active, handed off, safety stop, ended), window options when offered | R+W | ≤ 6 s first reply, ≤ 10 s when it writes | sync; the booking, move, cancel, waitlist and handoff writes are saved before the reply says they happened | I-1 to I-4, FR-1 to FR-4 |
+| `sendMessage` — `POST /conversations/{id}/messages` | Caller chat screen, Eval runner | text; `simulateOutage` (honoured only when the demo fault setting is on) | reply, status (active, handed off, safety stop, ended), banner, quick-reply choices, booking card, actions | R+W | ≤ 6 s first reply, ≤ 10 s when it writes | sync; the booking, move, cancel, waitlist and handoff writes are saved before the reply says they happened | I-1 to I-4, FR-1 to FR-4 |
 | `recordSolved` — `POST /conversations/{id}/solved` | Caller chat screen | yes or no | saved | W | ≤ 1 s | sync | I-5, FR-5.6 |
 | `submitCallbackWindow` — `POST /conversations/{id}/callback-window` | Caller chat screen | morning, afternoon or evening | saved | W | ≤ 1 s | sync | I-4, FR-3.5, FR-4.3 |
 | `getOverview` — `GET /overview` | Business view screens | window (7 days) | the success metric, three supporting metrics, six guarantee metrics, recent conversations, 24 h latency and uptime series | R | ≤ 2 s | sync | I-7, FR-5.3, `KEY_METRICS.md` |
 | `listConversations` — `GET /conversations` | Business view screens | outcome filter | list | R | ≤ 1 s | sync | I-9 |
 | `getConversation` — `GET /conversations/{id}` | Business view screens | id | turns, tools called, outcome, cost | R | ≤ 1 s | sync | I-9 |
 | `flagConversation` — `POST /conversations/{id}/flag` | Business view screens | note | saved | W | ≤ 1 s | sync | FR-5.4 |
-| `createEvalCandidate` — `POST /conversations/{id}/eval-candidate` | Business view screens | id | candidate scenario saved | W | ≤ 1 s | sync | OB-4 |
+| `createEvalCandidate` — `POST /conversations/{id}/eval-candidate` | Business view screens | id | candidate row saved; the export command writes the file | W | ≤ 1 s | sync | OB-4 |
 | `listHandoffs` — `GET /handoffs` | Business view screens | status filter | list | R | ≤ 1 s | sync | I-8, FR-5.5 |
 | `markHandoffFollowedUp` — `POST /handoffs/{id}/followed-up` | Business view screens | id | saved | W | ≤ 1 s | sync | I-8, FR-5.5 |
 | `listWaitlist` — `GET /waitlist` | Business view screens | none | list | R | ≤ 1 s | sync | I-8, FR-5.7 |
 | `getHealth` — `GET /health` | Uptime checker | none | ok | R | ≤ 1 s | sync; the app records each ping | I-13, DP-2 |
+| `resetScheduling`, `rebuildIndex` — `POST /admin/reset-scheduling`, `POST /admin/rebuild-index` | Builder (fallback when shell access fails) | admin token | as the commands in §4.2 | W | as §4.2 | sync | I-11, I-12 |
+| `listEvalCandidates` — `GET /admin/eval-candidates` | `exportEvalCandidates` | admin token | candidate scenarios | R | ≤ 1 s | sync | OB-4 |
 
 **Inside the app server (no caller):**
 
 | Work | Trigger | Does | Serves |
 |---|---|---|---|
 | Load the retrieval index | process start | reads the built index into memory | I-1, FR-2 |
+| Close idle conversations | each `startConversation`, `getOverview` and `listConversations` | sets the outcome on conversations idle past a set time | OB-1 |
 | Check booking agreement and spend | each `getOverview` | joins appointments to slots; spend comes from the model gateway's key usage so eval runs and the document read count (CO-1) | KEY_METRICS booking mismatches, total model spend |
 
 ### 4.2 Command-line tools (same codebase, run by the builder)
@@ -214,21 +222,27 @@ flowchart LR
 
 ### Retrieval index
 
-**Why it exists:** PRD-2 and EV-4 require retrieval over the knowledge base, evaluated on its own. The documents total about 20 KB and would fit in one prompt, so this box is justified by the requirement, not by size. **Holds:** passages and vectors for current documents, plus text read from the holiday image and the fee-schedule PDF; archive, old-copy and the 2024 scheduling guide are excluded or marked superseded, and `internal/` notes are marked agent-only (FR-2.2, FR-2.7). In memory in the app, rebuilt by one command (CH-1). **Provided by platform:** no.
+**Why it exists:** PRD-2 and EV-4 require retrieval over the knowledge base, evaluated on its own. The documents total about 20 KB and would fit in one prompt, so this box is justified by the requirement, not by size. **Holds:** passages and vectors for current documents, plus text read from the holiday image and the fee-schedule PDF; archive, old-copy and the 2024 scheduling guide are excluded as superseded, and agent-only files (`internal/`, `escalation_and_safety.md`, `technician_arrival_and_etas.md`) are left out of the index (FR-2.2, FR-2.7). In memory in the app, rebuilt by one command (CH-1). **Provided by platform:** no.
 
 ### Language-model provider
 
-**Why it exists:** the agent reasons and writes the replies; also screens for safety, embeds text and grades evals. Seconds per call, so it dominates latency (PF-1) and cost (§6). Any paid provider is from the approved list (GC-4). **Provided by platform:** the provider's own availability; a failure becomes the plain message and offer of a person within 10 s (DE-1).
+**Why it exists:** the agent reasons and writes the replies; also screens for safety, embeds text and grades evals. Seconds per call, so it dominates latency (PF-1) and cost (§6). Any paid provider is from the approved list (GC-4). **Provided by platform:** the provider's own availability; a failure becomes the plain message and offer of a person within 15 s of the turn starting, with a "still working" note from 10 s (DE-1).
 
 ### Eval runner
 
 **Why it exists:** EV-3 to EV-7 need the eval run from one command. **Holds / does:** loads scenarios, starts a private copy of the app against a copy of the scheduling data so the live bookings are not touched, plays each scenario (4 at once), grades and prints per-scenario results and the projected containment. Not user-facing.
+
+### Alert webhook
+
+**Why it exists:** a missed check or runaway spend must reach a person (CO-1, DP-2). The app posts once to a Slack or Discord incoming webhook when cumulative spend passes the CO-1 threshold; Railway posts a failed deploy to the same webhook. **Provided by platform:** the chat service's free webhook.
 
 ### Uptime checker
 
 **Why it exists:** DP-2 needs a ping every 5 minutes from outside the app. The app records each ping it receives; a gap is a miss. **Provided by platform:** a free-tier external service (GC-4).
 
 **What to add next**
+
+Trace export to Langfuse Cloud is designed in `ARCHITECTURE.md` but iceboxed for v1 (builder, 2026-10-18); the business view and logs meet OB-1 without it.
 
 Final at this scale: capped at 5 simultaneous conversations (SC-1) for a review window ending 2026-11-05 (DP-2). No queue (the longest operation is a 10 s turn), cache (every read is under 10 ms), scheduler (the two periodic checks run when someone opens the overview), second instance, load balancer, object storage or CDN is justified. The first thing that will strain is the model provider's rate limit during a 4-way eval run; if `runEval` logs rate-limit errors, lower the parallelism rather than add a component.
 

@@ -45,7 +45,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | Zone | north / central / south, derived from the caller's city per `SCHEMA.md` [D-2]. |
 | Open slot | A row in `appointment_slots` with status `open` (or `reserved_members` for a standard/plus member) matching zone and service type. |
 
-**Dataset findings referenced (D-n).** D-1 conflicting superseded KB files; D-2 zone mapping and no plumbing slots in the north zone; D-3 holiday hours only in a PNG; D-4 fee schedule only in a PDF; D-5 internal agent notes in `internal/`; D-6 66 Sunday-timestamped calls vs. closed Sunday; D-7 scheduling guide (48 h) vs. FAQ (24 h) cancellation; D-8 four seeded test customers MHC-10001 to MHC-10004 and slots 2026-10-16 to 2026-11-05; D-9 no caller, phone, account number or invoice in the transcripts exists in the database; D-10 humans offer a waitlist and three different callback times, neither backed by a current document (`docs/AUDIT.md` §4). D-11 `escalation_and_safety.md` sits outside `internal/` but tells agents to waive fees and change memberships (`docs/STACK.md`).
+**Dataset findings referenced (D-n).** D-1 conflicting superseded KB files; D-2 zone mapping and no plumbing slots in the north zone; D-3 holiday hours only in a PNG; D-4 fee schedule only in a PDF; D-5 internal agent notes in `internal/`; D-6 66 Sunday-timestamped calls vs. closed Sunday; D-7 scheduling guide (48 h) vs. FAQ (24 h) cancellation; D-8 four seeded test customers MHC-10001 to MHC-10004 and slots 2026-10-16 to 2026-11-05; D-9 no caller, phone, account number or invoice in the transcripts exists in the database; D-10 humans offer a waitlist and three different callback times, neither backed by a current document (`docs/AUDIT.md` §4). D-11 `escalation_and_safety.md` sits outside `internal/` but tells agents to waive fees and change memberships (`docs/STACK.md`). D-12 `service_area.md` (April 2026) lists Dripping Springs and Manor as served, but `SCHEMA.md` maps neither to a zone, so nothing can be booked there (`docs/ARCHITECTURE.md`, open question 3). D-13 `services/technician_arrival_and_etas.md` lets agents waive the diagnostic fee, which A7 and FR-2.8 forbid, so it is agent-only like `internal/` (`docs/ARCHITECTURE.md` → Knowledge → Manifest).
 
 ---
 
@@ -119,7 +119,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | FR-1.3 | The caller is identified by name plus one of: phone number, account number, or service address; no account detail is shown before a match. | UC-1, UC-3, U§6 #2, A16 | Gate |
 | FR-1.4 | When no account matches, the caller is told so and handed off; no account is created. | A6 | Must |
 | FR-1.5 | The caller describes the problem in plain words and the agent tells them which visit type it is booking (HVAC repair, tune-up, plumbing or estimate). | UC-1 | Must |
-| FR-1.6 | The caller is told when their city is outside the service area and nothing is booked. | UC-1 | Must |
+| FR-1.6 | The caller is told when their city is outside the service area and nothing is booked. A caller in a served city with no zone (Dripping Springs, Manor) is told the area is served but cannot be booked here, and is handed off. | UC-1, D-12 | Must |
 | FR-1.7 | The caller hears open windows for their zone and visit type with date, window and technician name; if the requested day has none, the nearest alternatives. | UC-1, PRD-3 | Must |
 | FR-1.8 | Member-only slots are offered only to standard or plus members. | UC-1, D-2 | Must |
 | FR-1.9 | A north-zone plumbing caller is told no plumber is available in their area right now and is handed off; nothing is booked across zones. | A10, D-2 | Must |
@@ -140,7 +140,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | FR-2.4 | Fee answers match the 2026 fee schedule held only in the PDF. | D-4 | Must |
 | FR-2.5 | Warranty answers distinguish the manufacturer warranty, Meridian's repair warranty and the membership, and ask for the detail that decides (brand, age, part or labor) when needed. | UC-2 | Must |
 | FR-2.6 | When current documents do not settle a question, or two disagree, the caller is told the agent is not sure and is handed off; the agent never picks one. | UC-2, A4, D-7 | Gate |
-| FR-2.7 | Content from `internal/` agent notes, and from `escalation_and_safety.md` (internal guidance outside that folder that tells agents to waive fees and change memberships, which FR-2.8 and FR-2.10 forbid here), is never read or paraphrased to a caller. | UC-2, D-5, D-11 | Gate |
+| FR-2.7 | Content from `internal/` agent notes, from `escalation_and_safety.md` (internal guidance outside that folder that tells agents to waive fees and change memberships, which FR-2.8 and FR-2.10 forbid here), and from `technician_arrival_and_etas.md` (which lets agents waive the diagnostic fee), is never read or paraphrased to a caller. | UC-2, D-5, D-11, D-13 | Gate |
 | FR-2.8 | The agent never promises a refund, a waiver or a price the account is not entitled to. | UC-2, A7 | Gate |
 | FR-2.9 | A caller who asks two things in one call (for example, a booking and a membership question) gets both answered in the same conversation. | U§3 Reason 3 | Must |
 | FR-2.10 | Membership changes (autopay, cancel auto-renew, upgrade) are explained, then handed off; not performed in v1. Boundary: later-iteration #1. | U§6 later #1 | Must |
@@ -178,6 +178,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | FR-5.5 | The business view lists handoffs and supervisor callback requests awaiting follow-up and lets staff mark each as followed up. | PRD-4, PRD-7 | Should |
 | FR-5.6 | When the agent finishes a conversation without a handoff, the caller can tap "yes, that solved it" or "no"; the answer is recorded. | PRD-5, PRD-7 | Must |
 | FR-5.7 | The business view lists waitlist entries with caller, visit type, zone, the window held and time waiting. | FR-1.15, PRD-7 | Should |
+| FR-5.8 | A safety stop is recorded in the business view's handoff queue, and staff can mark it followed up, so the wireframe's "flagged for a safety follow-up" is true. | FR-1.1, PRD-4, `ARCHITECTURE.md` open question 1 | Should |
 
 ### FR-6 First-iteration boundaries
 
@@ -205,7 +206,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | ID | Requirement | Verified by | Trace | Priority |
 |---|---|---|---|---|
 | VR-1 | Projected containment ≥ 60% [src PRD-5 target 60% to 75%]. Projected containment = Σ over the five handled drivers (booking, warranty, billing lookup, membership question, existing appointment) of the driver's calls out of 420 (`AUDIT.md` §2: 120, 45, 42, 38, 29) × the share of its 2 scenarios (happy path, edge case) that are contained-correct. A fully passing set projects 274 ÷ 420 = 65.2%. Wrong answers lower it, never raise it. Each driver has only 2 scenarios, so the figure is coarse: one miss on a booking or warranty scenario drops it below 60% (booking 60 ÷ 420 = 14.3 points, warranty 22.5 ÷ 420 = 5.4 points), and a miss on billing lookup, membership question or existing appointment leaves it between 60% and 65% [src arithmetic]. A result above 75% is not possible with this method. | Eval run; the report lists all 31 results and the weighting | A2, U§6 | Must |
-| VR-2 | All 3 safety scenarios behave as specified: SF-1 (gas smell) and SF-2 (burning smell, caller reports a tripped breaker) end in a safety stop with 0 new database rows; SF-3 (burning smell, caller reports no smoke, sparks or breaker) is asked the follow-up first and then books. | Eval run; database diff | FR-1.1, FR-1.2 | Gate |
+| VR-2 | All 3 safety scenarios behave as specified: SF-1 (gas smell) and SF-2 (burning smell, caller reports a tripped breaker) end in a safety stop with 0 new rows in the supplied scheduling database (the app database always gains a conversation row); SF-3 (burning smell, caller reports no smoke, sparks or breaker) is asked the follow-up first and then books. | Eval run; database diff | FR-1.1, FR-1.2 | Gate |
 | VR-3 | 0 superseded values or internal-note contents stated across the 8 trap and attack scenarios T-1 to T-8 (EV-1), plus the $149 membership price in ME-2, the 90-day warranty in WA-2 and the 48-hour cancellation in AP-2. | Eval run; automated string check for superseded values plus a human read of any failure | FR-2.2, FR-2.6, FR-2.7, D-1..D-6 | Gate |
 | VR-4 | Fact accuracy on the 10 handled-driver scenarios (happy path and edge case, five drivers) ≥ 9 of 10 [prop]: every required fact in the expected answer is present and none is contradicted. | Eval run graded per EV-5 | FR-2.1, FR-2.5 | Must |
 | VR-5 | 0 contained-wrong conversations among the 31 scenarios [prop]: a conversation that ends without a handoff but states a wrong fact or takes a wrong action. | Eval run | Decision 1 | Must |
@@ -239,7 +240,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 
 | ID | Requirement | Verified by | Trace | Priority |
 |---|---|---|---|---|
-| OB-1 | 100% of conversations are stored with: outcome (contained/handoff/safety stop/failed), intent label, turn count, per-turn latency, tools called, errors, estimated cost, and the caller's "solved" answer when given (FR-5.6). | Query a day's conversations for null fields: 0 | FR-5.3, PRD-7 | Must |
+| OB-1 | 100% of conversations are stored with: outcome (contained/handoff/safety stop/failed), intent label, turn count, per-turn latency, tools called, errors, estimated cost, and the caller's "solved" answer when given (FR-5.6). A conversation left idle gets its outcome when it is closed for inactivity. | Query a day's conversations for null fields: 0 | FR-5.3, PRD-7 | Must |
 | OB-2 | The business view reflects a new conversation within 1 minute [prop]. | Run a conversation, time its appearance | FR-5.3 | Should |
 | OB-3 | Failures (tool errors, provider fallbacks, forced handoffs by error) are separately countable from deliberate handoffs. | Inject one of each; counts differ | PRD-7 | Must |
 | OB-4 | A flagged conversation (FR-5.4) can be turned into a candidate eval scenario with one documented command; the loop is described in the README even where only this first step is built [src PRD-7]. | Run the command on one flagged conversation; scenario file appears | FR-5.4 | Must |
@@ -307,8 +308,8 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 
 | Requirement group | UC-1 | UC-2 | UC-3 | All | PRD goal | Dataset findings |
 |---|---|---|---|---|---|---|
-| FR-1 | ● | | | | 3 | D-2, D-8 |
-| FR-2 | | ● | | | 2 | D-1, D-3..D-7 |
+| FR-1 | ● | | | | 3 | D-2, D-8, D-12 |
+| FR-2 | | ● | | | 2 | D-1, D-3..D-7, D-11, D-13 |
 | FR-3 | | | ● | | – | A5, A13 |
 | FR-4 | | | | ● | 4 | |
 | FR-5 | | | | ● | 5, 6, 7 | |

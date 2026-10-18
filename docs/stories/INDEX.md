@@ -104,7 +104,7 @@ Each UI story has at least one criterion tagged `wireframe` that names the wiref
 | FR-5.5 | handoffs listed, marked followed up | S05 | 1, 2, 3 |
 | FR-5.6 | "yes, that solved it" or "no", recorded | S02, S04 | S02-7, S04-6 |
 | FR-5.7 | waitlist with caller, visit type, zone, window held, time waiting | S07 | 5 |
-| FR-5.8 (proposed, `ARCHITECTURE.md` OQ 1) | safety stop in the handoff queue | S05 | 4 |
+| FR-5.8 | safety stop in the handoff queue | S05 | 4 |
 | FR-6.1, FR-6.2 | no voice; no estimates, late-tech or membership actions | all | boundary: no story builds them |
 | AZ-1 | "0 of 2 cross-account scenarios ... disclose" | S09, S14 | S09-5, S09-6, S14-6 |
 | AZ-2 | "0 cancellations or moves occur without an explicit caller yes" | S08 | 6 |
@@ -158,9 +158,9 @@ Each UI story has at least one criterion tagged `wireframe` that names the wiref
 - **Not confirmed:** the holiday-hours PNG was not read (that needs the model). The OpenRouter, Gemini, embeddings, Railway and UptimeRobot calls were not made. These are the architecture's day-1 checks (open questions 4, 6, 7, 8, 9) and belong to S01's and S02's plans. No story depends on a result they could rule out, because the architecture's fallbacks change no contract.
 
 ## Architectural issues
-None that need an architecture amendment. Five upstream items, recorded so they are not lost:
-1. **FR-5.8 is proposed, not added to `REQUIREMENTS.md`** (`ARCHITECTURE.md` open question 1, option A accepted 2026-10-18). S05 criterion 4 builds it. Adding the row is a requirements edit only.
-2. **`KEY_METRICS.md` still says "fallback message within 10 s of a model failure"**, but DE-1 says 15 s from the turn start, with a note at 10 s. The fix is listed under the architecture's upstream fixes and not yet applied. The stories quote DE-1.
-3. **D-12 (Dripping Springs and Manor) and D-13 (`technician_arrival_and_etas.md` is agent-only)** are listed in the architecture's upstream fixes and not yet in `REQUIREMENTS.md`. S02 criterion 6 and S13 rely on the architecture's resolution.
-4. **Langfuse is iceboxed** (see Icebox). It is an outbound side channel, so dropping it changes no table, route or module contract.
+None that need an architecture amendment. Items 1 to 4 were applied to the design documents on 2026-10-18; item 5 stays a story-level choice.
+1. **FR-5.8 added to `REQUIREMENTS.md`** (`ARCHITECTURE.md` open question 1, option A). S05 criterion 4 builds it. *Applied.*
+2. **`KEY_METRICS.md` "Errors shown to callers" now quotes DE-1**: 15 s from the turn start, with a note at 10 s. *Applied.*
+3. **D-12 (Dripping Springs and Manor) and D-13 (`technician_arrival_and_etas.md` is agent-only) are now in `REQUIREMENTS.md`**, in FR-1.6 and FR-2.7. So are the VR-2 and OB-1 notes, and the architecture's `HIGH_LEVEL_DESIGN.md` fixes. *Applied.*
+4. **Langfuse is iceboxed** (see Icebox) and marked so in `STACK.md`, `ARCHITECTURE.md` and `HIGH_LEVEL_DESIGN.md`, with its design kept for later. It is an outbound side channel, so dropping it changes no table, route or module contract. *Applied.*
 5. **Several Should-level eval checks are demo steps in S14, not acceptance criteria** (DE-3 run record, EV-5 judge agreement, PF-3 turn count, CH-2 compare, the README numbers). With them, S14 would have 12 criteria. They are printed by the same command S14 builds, so they are checked at the S14 demo. Split S14 if the builder wants them as criteria.
