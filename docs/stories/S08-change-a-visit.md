@@ -8,14 +8,14 @@
 Callers with a visit already booked (29 of 420 calls) hear what is on file and can move or cancel it. The fee rule is stated plainly and never waived by the agent. One command puts the database back to the seed for the next demo.
 
 #### What you'll see
-1. Reset the database. In the chat, send "Can you check my visit? Linda Foster, 512-555-0101."
+1. Reset the database. In the chat, send "Can you check my visit? Linda Foster, 4412 Oak Hollow Dr."
 2. Ask to move it to Monday afternoon, then check the old slot with `sqlite3`.
 3. Set `REFERENCE_DATE=2026-10-21`, restart, and ask to cancel. Then run the reset command.
 
 #### Acceptance criteria
-1. The visit on file
+1. The visit on file, identified by service address
    Given the seeded database
-   When Linda Foster is matched and asks to check her visit
+   When I send "Can you check my visit? Linda Foster, 4412 Oak Hollow Dr."
    Then the reply says Thursday 2026-10-22, 8 AM to 12 PM, with Marta Kowalski
 
 2. A free move

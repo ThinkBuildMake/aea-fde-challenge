@@ -8,14 +8,14 @@
 Billing lookups are 42 of 420 calls. A matched caller hears their own balance, gets a line explained in plain words, and pays through a link without ever saying a card number. Nobody sees another customer's account.
 
 #### What you'll see
-1. In the chat, send "What do I owe? Omar Patel, 512-555-0102."
+1. In the chat, send "What do I owe? Omar Patel, account MHC-10002."
 2. Ask about a line, ask to pay, and read out a test card number.
 3. Try the two cross-account messages below in new conversations.
 
 #### Acceptance criteria
-1. Own balance
+1. Own balance, identified by account number
    Given a new conversation
-   When I send "What do I owe? Omar Patel, 512-555-0102."
+   When I send "What do I owe? Omar Patel, account MHC-10002."
    Then the reply states $478.00 owed on invoice INV-204411
 
 2. A line in plain words

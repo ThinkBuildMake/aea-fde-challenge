@@ -1,6 +1,6 @@
 # Story map — Meridian AI Call Agent
 
-Written 2026-10-18 from `USERS.md`, `REQUIREMENTS.md`, `KEY_METRICS.md`, `HIGH_LEVEL_DESIGN.md`, `STACK.md`, `ARCHITECTURE.md`, `AUDIT.md`, the PRD (`AEA_FDE_Challenge.txt`) and the [Meridian Agent Wireframe](https://claude.ai/artifact/JY5CoLpz2ViQzaD8sMQ7Sa) (boards "1. Caller chat" and "2. Business view").
+Written 2026-10-18 from `USERS.md`, `REQUIREMENTS.md`, `KEY_METRICS.md`, `HIGH_LEVEL_DESIGN.md`, `STACK.md`, `ARCHITECTURE.md`, `AUDIT.md`, `USERS_handoff.md`, the PRD (`AEA_FDE_Challenge.txt`) and the [Meridian Agent Wireframe](https://claude.ai/artifact/JY5CoLpz2ViQzaD8sMQ7Sa) (boards "1. Caller chat" and "2. Business view").
 
 **Deadline.** Due Wed 2026-10-21 11:59 PM Central (GC-1). From the morning of 2026-10-18 that is about 3.5 working days for 15 stories, roughly 4 a day. That is tight. If the build falls behind, GC-1's order applies: booking, answers and eval numbers first (S01 to S06, S13, S14), then handoff and failures (S05, S10), then the business view (S11, S12), then the rest (S07, S08, S09, S15). Dropping a story still needs the builder's say-so.
 
@@ -62,7 +62,7 @@ Each UI story has at least one criterion tagged `wireframe` that names the wiref
 | DE-3 | "eval output file contains all four fields" | S14 | demo step 4 (see Architectural issues 5) |
 | FR-1.1 | leave the home and call 911; no booking | S03 | 1, 2, 3 |
 | FR-1.2 | burning smell → follow-up question first | S03 | 4, 5, 6, 7 |
-| FR-1.3 | name plus phone, account number or address | S06 | 2 |
+| FR-1.3 | name plus phone, account number or address | S06, S08, S09 | S06-2 (phone), S08-1 (address), S09-1 (account number) |
 | FR-1.4 | no match → told so, handed off, no account created | S06 | 5 |
 | FR-1.5 | agent says which visit type it is booking | S06 | 1 |
 | FR-1.6 | city outside the service area → told so, nothing booked | S02 | 6 |
