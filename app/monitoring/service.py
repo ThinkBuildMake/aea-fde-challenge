@@ -251,7 +251,7 @@ def _latency_series(
 
 def _recent(ctx: AppContext, db: sqlite3.Connection) -> list[RecentConversation]:
     rows = db.execute(
-        "SELECT c.id, c.started_at, c.intent, c.outcome, c.customer_id, "
+        "SELECT c.public_id, c.started_at, c.intent, c.outcome, c.customer_id, "
         "(SELECT latency_ms FROM turns t WHERE t.conversation_id = c.id "
         "AND t.seq = 1 AND t.kind = 'message') FROM conversations c "
         "WHERE c.turn_count > 0 ORDER BY c.started_at DESC, c.rowid DESC LIMIT ?",
@@ -273,14 +273,14 @@ def _recent(ctx: AppContext, db: sqlite3.Connection) -> list[RecentConversation]
             log_event("overview_query_failed", figure="recent_zones")
     return [
         RecentConversation(
-            public_id=cid,
+            public_id=public,
             started_at=started,
             intent=intent,
             zone=zone_for_city(cities[cust]) if cust in cities else None,
             outcome=outcome,
             latency_ms=ms,
         )
-        for cid, started, intent, outcome, cust, ms in rows
+        for public, started, intent, outcome, cust, ms in rows
     ]
 
 

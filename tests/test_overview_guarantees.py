@@ -1,4 +1,5 @@
 import itertools
+import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -132,7 +133,13 @@ def test_latency_series_and_recent(client, db):
     assert bucket["p95FirstReplyMs"] == 5000
     assert series[0]["p95FirstReplyMs"] is None
     recent = body["recent"]
-    assert [r["publicId"] for r in recent] == cids[:5]
+    publics = [
+        db.execute("SELECT public_id FROM conversations WHERE id=?", (c,)).fetchone()[0]
+        for c in cids[:5]
+    ]
+    # The secret conversation id lets anyone post into the chat: never shown.
+    assert [r["publicId"] for r in recent] == publics
+    assert not any(c in json.dumps(body) for c in cids)
     assert set(recent[0]) == {
         "publicId",
         "startedAt",
