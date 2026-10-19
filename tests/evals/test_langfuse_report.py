@@ -168,3 +168,18 @@ def test_bad_grades_file_stops_the_eval_before_any_model_call(
     print(code, err)
     assert code == 1
     assert err == f"Invalid human grades file: {bad}\n"
+
+
+def test_grades_file_without_this_runs_scenarios_says_so(
+    live: Settings, tmp_path: Path
+):
+    scenarios = [s for s in eight_scenarios() if s.id == "SYN-BOOK-0"]
+    run = play(live, tmp_path, scenarios, human_grades={"BK-1": "pass"})
+
+    text = format_summary(run, grades_loaded=True)
+
+    assert run.summary.judge_agreement is None
+    assert (
+        "Judge agreement: not computed (grades file has no scenarios from this run)"
+        in text
+    )

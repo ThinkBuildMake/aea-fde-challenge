@@ -4,6 +4,7 @@
 import argparse
 import sys
 import tempfile
+from contextlib import closing
 from pathlib import Path
 
 from app.evals.caller import OpenRouterCaller
@@ -22,7 +23,9 @@ def _fraction(passed: int, of: int) -> str:
     return f"{passed} of {of}"
 
 
-def format_summary(run: RunResult) -> str:
+def format_summary(run: RunResult, grades_loaded: bool = False) -> str:
+    """`grades_loaded`: a human grades file was read, so a null judgeAgreement means it
+    graded none of this run's handled-driver scenarios."""
     s = run.summary
     env = run.environment
     latency = s.latency
@@ -47,6 +50,8 @@ def format_summary(run: RunResult) -> str:
         + (
             _fraction(s.judge_agreement.agreed, s.judge_agreement.of)
             if s.judge_agreement
+            else "not computed (grades file has no scenarios from this run)"
+            if grades_loaded
             else "not computed (no human grades)"
         ),
         f"Escalation handed off: {_fraction(s.escalation.handed_off, s.escalation.of)}",
@@ -98,8 +103,10 @@ def main(argv: list[str] | None = None) -> int:
     run_id = make_run_id()
     out = args.out or REPO_ROOT / "eval" / "runs" / f"{run_id}.json"
     provider = OpenRouterProvider(settings)
-    judge = OpenRouterJudge(settings)
-    with tempfile.TemporaryDirectory(prefix="meridian-eval-") as work:
+    with (
+        closing(OpenRouterJudge(settings)) as judge,
+        tempfile.TemporaryDirectory(prefix="meridian-eval-") as work,
+    ):
         run = run_eval(
             scenarios,
             load_weights(args.weights),
@@ -118,8 +125,9 @@ def main(argv: list[str] | None = None) -> int:
             judge=judge,
             human_grades=human_grades,
         )
-    judge.close()
-    sys.stdout.write(format_summary(run) + f"\n\nRecord written to {out}\n")
+    sys.stdout.write(
+        format_summary(run, human_grades is not None) + f"\n\nRecord written to {out}\n"
+    )
     return 0
 
 
