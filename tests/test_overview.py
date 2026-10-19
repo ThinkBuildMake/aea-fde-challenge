@@ -100,6 +100,15 @@ def test_settled_share(client, db):
     seed(db, turns=0)
     seed(db, started=ago(days=10), solved="yes")
     body = client.get("/overview").json()["success"]
+    print(
+        "settled",
+        body["settledPct"],
+        body["settledCount"],
+        body["totalCount"],
+        body["targetBandPct"],
+        "series points",
+        len(body["series"]),
+    )
     assert body["settledPct"] == 60
     assert (body["settledCount"], body["totalCount"]) == (6, 10)
     assert body["targetBandPct"] == [60, 75]
@@ -118,6 +127,7 @@ def test_booking_completion(client, db):
     seed(db, intents=("book_visit",))
     seed(db, intents=("billing_lookup",), booked=True)
     got = client.get("/overview").json()["supporting"]
+    print("bookingCompletionPct", got["bookingCompletionPct"])
     assert got["bookingCompletionPct"] == 75
 
 
@@ -127,6 +137,12 @@ def test_handoffs_on_handled_topics(client, db):
     seed(db, outcome="handoff", intent="billing_lookup", reason="no_document_answer")
     seed(db, outcome="handoff", intent="out_of_scope", reason="out_of_scope")
     got = client.get("/overview").json()["supporting"]
+    print(
+        "handoffsOnHandledTopicsPct",
+        got["handoffsOnHandledTopicsPct"],
+        "top reason",
+        got["topHandoffReason"],
+    )
     assert got["handoffsOnHandledTopicsPct"] == 20
     assert got["topHandoffReason"] == "no_document_answer"
 
@@ -137,6 +153,7 @@ def test_flagged_wrong(client, db):
         seed(db)
     seed(db, outcome="handoff", reason="policy", flagged=True)
     got = client.get("/overview").json()["supporting"]
+    print("flaggedWrongPct", got["flaggedWrongPct"])
     assert got["flaggedWrongPct"] == 16.7
 
 
@@ -152,6 +169,14 @@ def test_status_counts_kept_apart(client, db):
         "UPDATE handoffs SET status = 'followed_up' WHERE conversation_id = ?", (other,)
     )
     status = client.get("/overview").json()["status"]
+    print(
+        "errorsShown24h",
+        status["errorsShown24h"],
+        "handoffsWaiting",
+        status["handoffsWaiting"],
+        "lastConversationAt",
+        status["lastConversationAt"],
+    )
     assert status["errorsShown24h"] == 2
     assert status["handoffsWaiting"] == 1
     last = datetime.fromisoformat(status["lastConversationAt"])
@@ -165,6 +190,22 @@ def test_failing_flags_query_leaves_rest(client, db):
     res = client.get("/overview")
     assert res.status_code == 200
     body = res.json()
+    print(
+        "status",
+        res.status_code,
+        "flaggedWrongPct",
+        body["supporting"]["flaggedWrongPct"],
+        "settledPct",
+        body["success"]["settledPct"],
+        "booking",
+        body["supporting"]["bookingCompletionPct"],
+        "handled",
+        body["supporting"]["handoffsOnHandledTopicsPct"],
+        "outcomes",
+        body["volume"]["outcomes"],
+        "waiting",
+        body["status"]["handoffsWaiting"],
+    )
     assert body["supporting"]["flaggedWrongPct"] is None
     assert body["success"]["settledPct"] == 50
     assert body["supporting"]["bookingCompletionPct"] == 100
@@ -177,6 +218,7 @@ def test_failing_flags_query_leaves_rest(client, db):
 def test_bad_days_refused(client):
     for days in (0, 91):
         res = client.get(f"/overview?days={days}")
+        print("days", days, "->", res.status_code, res.json()["error"])
         assert res.status_code == 422
         assert res.json()["error"] == "invalid_days"
 
