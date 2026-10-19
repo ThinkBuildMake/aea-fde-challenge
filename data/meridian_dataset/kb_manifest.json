@@ -1,0 +1,76 @@
+{
+  "files": {
+    "archive/comfort_club_overview.md": {
+      "status": "superseded",
+      "reason": "Archived; replaced by membership/comfort_club_overview.md."
+    },
+    "archive/warranty_terms_2023.txt": {
+      "status": "superseded",
+      "reason": "Archived 2023 warranty terms; replaced by warranty/warranty_policy.md."
+    },
+    "faq/customer_faq.md": {
+      "status": "current",
+      "reason": "The 2026 customer FAQ."
+    },
+    "faq/faq_old_copy.md": {
+      "status": "superseded",
+      "reason": "Old copy of the FAQ; replaced by faq/customer_faq.md."
+    },
+    "faq/troubleshooting_before_you_call.md": {
+      "status": "current",
+      "reason": "Customer-facing checks before calling."
+    },
+    "internal/agent_discretion_notes.md": {
+      "status": "agent-only",
+      "reason": "Staff-only notes; never customer-facing (D-5, FR-2.7)."
+    },
+    "membership/comfort_club_overview.md": {
+      "status": "current",
+      "reason": "Current Comfort Club terms."
+    },
+    "policies/escalation_and_safety.md": {
+      "status": "agent-only",
+      "reason": "Staff-only escalation and safety rules (D-11)."
+    },
+    "policies/holiday_hours_2026.png": {
+      "status": "current",
+      "reason": "The 2026 holiday hours, read from the image.",
+      "text": "policies/holiday_hours_2026.png.txt",
+      "checkedOn": null
+    },
+    "policies/service_area.md": {
+      "status": "current",
+      "reason": "The service area."
+    },
+    "pricing/2026_fee_schedule.pdf": {
+      "status": "current",
+      "reason": "The 2026 fee schedule, read from the PDF.",
+      "text": "pricing/2026_fee_schedule.pdf.txt",
+      "checkedOn": null
+    },
+    "pricing/repair_price_book_2026.csv": {
+      "status": "current",
+      "reason": "The 2026 repair price book."
+    },
+    "services/duct_cleaning.md": {
+      "status": "placeholder",
+      "reason": "An unfinished TODO; not indexed (A12)."
+    },
+    "services/scheduling_guide.md": {
+      "status": "superseded",
+      "reason": "Rev 2024-11; conflicts with the 2026 FAQ on cancellation notice (A-5)."
+    },
+    "services/service_catalog.md": {
+      "status": "current",
+      "reason": "The service catalog."
+    },
+    "services/technician_arrival_and_etas.md": {
+      "status": "agent-only",
+      "reason": "Lets agents waive the diagnostic fee, which FR-2.8 forbids (D-13)."
+    },
+    "warranty/warranty_policy.md": {
+      "status": "current",
+      "reason": "The current warranty policy."
+    }
+  }
+}
