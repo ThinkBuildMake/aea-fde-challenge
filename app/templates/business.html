@@ -17,13 +17,30 @@
     {% include "fragments/overview.html" %}
   </div>
   {% else %}
-  <section class="panel table-frame" data-tab="{{ tab }}">
-    <h2>{{ tab | capitalize }}</h2>
-    <table>
-      <thead><tr><th>Item</th><th>Status</th></tr></thead>
-      <tbody><tr><td colspan="2" class="empty">No data yet</td></tr></tbody>
-    </table>
+  <div id="status-tiles" hx-get="/business?tab={{ tab }}" hx-trigger="every 30s" hx-select="#status-tiles" hx-swap="outerHTML">
+    {% include "fragments/tiles.html" %}
+  </div>
+  {% if tab == "handoffs" %}
+  <section class="card" data-tab="handoffs">
+    <h2 class="card-title">Handoffs and callback requests</h2>
+    <p class="note sub">Each row is what the person who follows up needs: who, why, what the caller was told.</p>
+    <div id="rows"></div>
   </section>
+  {% elif tab == "waitlist" %}
+  <section class="card" data-tab="waitlist">
+    <h2 class="card-title">Waitlist for earlier windows</h2>
+    <p class="note sub">Each caller already holds a later booked visit. Call them if an earlier window opens in their zone.</p>
+    <div id="rows"></div>
+  </section>
+  {% else %}
+  <div class="convos" data-tab="conversations">
+    <section class="card convo-list"><h2 class="card-title">Conversations</h2><div id="convo-list"></div></section>
+    <section class="card convo-detail" id="detail"></section>
+  </div>
+  {% endif %}
+  <script type="application/json" id="biz-data">{{ data | tojson }}</script>
+  <script src="/static/business.js" defer></script>
+  <script src="/static/{{ tab }}.js" defer></script>
   {% endif %}
 </main>
 {% endblock %}
