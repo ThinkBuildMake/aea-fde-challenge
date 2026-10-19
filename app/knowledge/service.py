@@ -1,4 +1,5 @@
 import hashlib
+from decimal import Decimal, InvalidOperation
 
 import numpy as np
 
@@ -13,6 +14,9 @@ from app.types import Fee, IndexStatus, Passage, RebuildIndexResult
 __all__ = ["EmbeddingUnavailable"]
 
 
+FIRM_FEES = ("FEE-DIAG", "FEE-LATE", "FEE-AH", "FEE-HOL")
+
+
 class IndexUnavailable(Exception):
     """No index is loaded."""
 
@@ -22,17 +26,61 @@ class UnknownFee(Exception):
 
 
 def search_knowledge(ctx: AppContext, query: str, k: int) -> list[Passage]:
-    """Stub: no passages."""
-    return []
+    """The k nearest passages of the loaded index, best first; only current files are in it."""
+    loaded = ctx.index.current()
+    if loaded is None:
+        raise IndexUnavailable("no index is loaded")
+    if k <= 0:
+        return []
+    vector = np.asarray(ctx.embedder.embed([query])[0], dtype=np.float32)
+    if vector.shape != (loaded.dims,):
+        raise EmbeddingUnavailable("query vector has the wrong length")
+    norms = np.linalg.norm(loaded.vectors, axis=1) * np.linalg.norm(vector)
+    scores = loaded.vectors @ vector / np.where(norms == 0, 1.0, norms)
+    best = np.argsort(-scores, kind="stable")[:k]
+    return [
+        Passage(
+            passage_id=(p := loaded.passages[i]).passage_id,
+            source_file=p.source_file,
+            section=p.section,
+            kind=p.kind,
+            text=p.text,
+            score=float(scores[i]),
+        )
+        for i in best
+    ]
 
 
 def get_fee(ctx: AppContext, code: str) -> Fee:
-    """Stub: no fee is known."""
+    """A firm fee read from the indexed current price book; ranges and unknown codes are refused."""
+    if code not in FIRM_FEES:
+        raise UnknownFee(code)
+    loaded = ctx.index.current()
+    if loaded is None:
+        raise IndexUnavailable("no index is loaded")
+    for p in loaded.passages:
+        if p.kind != "price_row":
+            continue
+        row = dict(line.split(": ", 1) for line in p.text.splitlines() if ": " in line)
+        if row.get("sku") != code:
+            continue
+        if row.get("low_price") != row.get("high_price"):
+            break
+        try:
+            cents = int(Decimal(row["low_price"]) * 100)
+        except (InvalidOperation, KeyError):
+            break
+        return Fee(code=code, cents=cents, source_file=p.source_file)
     raise UnknownFee(code)
 
 
 def index_status(ctx: AppContext) -> IndexStatus:
-    return IndexStatus(loaded=False, version=None, passages=0)
+    loaded = ctx.index.current()
+    if loaded is None:
+        return IndexStatus(loaded=False, version=None, passages=0)
+    return IndexStatus(
+        loaded=True, version=loaded.version, passages=len(loaded.passages)
+    )
 
 
 def rebuild_index(ctx: AppContext) -> RebuildIndexResult:
