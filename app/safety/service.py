@@ -1,7 +1,7 @@
 import json
 import re
 import time
-from typing import Literal, Protocol
+from typing import Literal, Protocol, get_args
 
 import httpx2
 import openai
@@ -15,17 +15,6 @@ CARD_RUN = re.compile(r"(?<!\d)\d(?:[ -]?\d){12,}(?!\d)")
 CARD_PLACEHOLDER = "[card number removed]"
 SAFETY_TIMEOUT_S = 8.0
 
-REASONS = (
-    "gas",
-    "carbon_monoxide",
-    "smoke",
-    "sparks",
-    "flames",
-    "tripped_breaker",
-    "burning_smell",
-    "followup_not_clear_no",
-    "no_hazard",
-)
 ReasonLabel = Literal[
     "gas",
     "carbon_monoxide",
@@ -37,6 +26,7 @@ ReasonLabel = Literal[
     "followup_not_clear_no",
     "no_hazard",
 ]
+REASONS = get_args(ReasonLabel)
 
 _SCHEMA = {
     "type": "object",
