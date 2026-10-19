@@ -118,6 +118,38 @@ def identify(customer_id: str) -> list[dict[str, Any]]:
     return [call]
 
 
+def identify_and_offer(
+    monkeypatch: pytest.MonkeyPatch, customer_id: str
+) -> list[dict[str, Any]]:
+    """Turn 1: match the caller and show slot 3 and appointment 7, so a later write may target them."""
+    stub(
+        monkeypatch,
+        "app.scheduling.service.find_open_windows",
+        OpenWindows(windows=[window(3)], matched_request=True, reason=None),
+    )
+    stub(
+        monkeypatch,
+        "app.scheduling.service.list_appointments",
+        [
+            AppointmentView(
+                appointment_id=7,
+                date="2026-10-21",
+                window="08:00-12:00",
+                technician_name="Jun Park",
+                service_type="hvac_repair",
+                zone="south",
+                issue="x",
+                late_cancel_fee_applies=False,
+            )
+        ],
+    )
+    return [
+        *identify(customer_id),
+        tool_call("w", "find_open_windows", serviceType="hvac_repair"),
+        tool_call("l", "lookup_my_appointments"),
+    ]
+
+
 def test_account_tools_use_the_matched_customer(
     started: Settings, monkeypatch: pytest.MonkeyPatch
 ):
@@ -222,8 +254,9 @@ def test_member_diagnostic_fee_is_waived_on_the_card(
     )
     _, replies = run(
         started,
-        identify("MHC-10001"),
+        identify_and_offer(monkeypatch, "MHC-10001"),
         [tool_call("b", "book_visit", slotId=3, issue="no cooling", callerQuote="yes")],
+        texts=["hi", "yes"],
     )
     card = replies[1]["booking"]
     assert card["diagnosticFeeCents"] == 8900
@@ -248,7 +281,7 @@ def test_late_cancel_carries_the_fee(
     )
     cid, _ = run(
         started,
-        identify("MHC-10002"),
+        identify_and_offer(monkeypatch, "MHC-10002"),
         [tool_call("c", "cancel_visit", appointmentId=7, callerQuote="yes")],
         texts=["hi", "yes"],
     )
@@ -344,8 +377,9 @@ def test_book_without_a_price_book_states_no_fee(
     monkeypatch.setattr("app.knowledge.service.get_fee", raise_unknown_fee)
     cid, replies = run(
         started,
-        identify("MHC-10002"),
+        identify_and_offer(monkeypatch, "MHC-10002"),
         [tool_call("b", "book_visit", slotId=3, issue="no cooling", callerQuote="yes")],
+        texts=["hi", "yes"],
     )
     out = tool_results(started, cid)[-1]
     assert out["ok"] is True and out["booking"]["diagnosticFeeCents"] is None
@@ -366,8 +400,9 @@ def test_move_without_a_price_book_states_no_fee(
     monkeypatch.setattr("app.knowledge.service.get_fee", raise_unknown_fee)
     cid, _ = run(
         started,
-        identify("MHC-10002"),
+        identify_and_offer(monkeypatch, "MHC-10002"),
         [tool_call("m", "move_visit", appointmentId=7, newSlotId=3, callerQuote="yes")],
+        texts=["hi", "yes"],
     )
     out = tool_results(started, cid)[-1]
     assert out["booking"]["diagnosticFeeCents"] is None
@@ -392,8 +427,9 @@ def test_move_late_fee_carries_the_amount(
     )
     cid, _ = run(
         started,
-        identify("MHC-10002"),
+        identify_and_offer(monkeypatch, "MHC-10002"),
         [tool_call("m", "move_visit", appointmentId=7, newSlotId=3, callerQuote="yes")],
+        texts=["hi", "yes"],
     )
     out = tool_results(started, cid)[-1]
     assert out["lateFeeApplies"] is True and out["lateFeeCents"] == 4900

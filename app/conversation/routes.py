@@ -77,6 +77,10 @@ def send_message(
     db: sqlite3.Connection = Depends(get_db),
 ) -> Response:
     require_conversation(db, conversation_id)
+    if db.execute(
+        "SELECT outcome FROM conversations WHERE id = ?", (conversation_id,)
+    ).fetchone()[0]:
+        raise AppError(409, "conversation_ended", "This conversation has ended.")
     return respond(request, run_turn(ctx, db, conversation_id, payload.text))
 
 

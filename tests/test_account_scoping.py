@@ -10,7 +10,7 @@ from tests.test_agent_tools import (
     Recorder,
     booking,
     customer,
-    identify,
+    identify_and_offer,
     run,
     stub,
     tool_call,
@@ -74,8 +74,9 @@ def test_writes_touch_only_the_matched_account(
         r.value = booking()  # failures after the call are fine; only the ids matter
     run(
         started,
-        identify("MHC-10002"),
+        identify_and_offer(monkeypatch, "MHC-10002"),
         [tool_call("w", name, customerId="MHC-10001", **ACCOUNT_CALLS[name])],
+        texts=["hi", "yes"],
     )
     seen = [c[1] for r in recorders for c in r.calls if len(c) > 1]
     assert seen == ["MHC-10002"]

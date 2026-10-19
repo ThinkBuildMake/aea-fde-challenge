@@ -7,6 +7,7 @@ from datetime import date
 from typing import Any
 
 from app.context import AppContext
+from app.conversation import guards
 from app.followups import service as followups
 from app.knowledge import service as knowledge
 from app.scheduling import service as scheduling
@@ -161,16 +162,32 @@ class ToolState:
         self.windows: list[Window] = []
         self.offered_slot_ids: list[int] = []
         self.offered_appointment_ids: list[int] = []
+        self.earlier_slot_ids: set[int] = set()
+        self.earlier_appointment_ids: set[int] = set()
         self.booking: Booking | None = None
         self.has_write = False
+        self.write_failed = False
         self.waitlisted = False
 
     def offer(
         self, slot_ids: Iterable[int] = (), appointment_ids: Iterable[int] = ()
     ) -> None:
         """Record the slots and appointments shown to the caller this turn."""
-        self.offered_slot_ids.extend(slot_ids)
-        self.offered_appointment_ids.extend(appointment_ids)
+        self.offered_slot_ids.extend(
+            i for i in slot_ids if i not in self.offered_slot_ids
+        )
+        self.offered_appointment_ids.extend(
+            i for i in appointment_ids if i not in self.offered_appointment_ids
+        )
+
+    def offered_json(self) -> str:
+        """This turn's offers as stored in turns.offered."""
+        return json.dumps(
+            {
+                "slotIds": self.offered_slot_ids,
+                "appointmentIds": self.offered_appointment_ids,
+            }
+        )
 
     def commit(self, booking: Booking | None = None) -> None:
         """Record a committed write; a booking puts its card on the reply."""
@@ -191,7 +208,7 @@ class ToolState:
             "FROM conversations WHERE id = ?",
             (conversation_id,),
         ).fetchone()
-        return cls(
+        state = cls(
             db,
             conversation_id,
             caller_text,
@@ -201,6 +218,10 @@ class ToolState:
             _tier_from(history) if conv["customer_id"] else None,
             conv["identify_attempts"],
         )
+        state.earlier_slot_ids, state.earlier_appointment_ids = guards.earlier_offered(
+            db, conversation_id
+        )
+        return state
 
 
 def _tier_from(history: list[dict[str, Any]]) -> str | None:
@@ -508,10 +529,33 @@ def run_tool(
     result: dict[str, Any]
     try:
         args = json.loads(call["function"].get("arguments") or "{}")
-        result = HANDLERS[name](ctx, state, args)
+        # An unidentified caller's write gets not_identified from the handler first.
+        refusal = (
+            guards.write_refusal(
+                name,
+                args,
+                state.caller_text,
+                state.earlier_slot_ids,
+                state.earlier_appointment_ids,
+            )
+            if name in guards.WRITE_TOOLS and state.customer_id is not None
+            else None
+        )
+        if refusal:
+            error = refusal
+            result = {
+                "ok": False,
+                "error": refusal,
+                "instruction": guards.FAILED_WRITE_INSTRUCTION,
+            }
+        else:
+            result = HANDLERS[name](ctx, state, args)
     except Exception as exc:  # noqa: BLE001 - the model gets the failure back as the tool result
         error = f"{type(exc).__name__}: {exc}"
         result = {"ok": False, "error": error}
+        if name in guards.WRITE_TOOLS:
+            result["instruction"] = guards.FAILED_WRITE_INSTRUCTION
+            state.write_failed = True
     ms = round((ctx.clock.monotonic() - started) * 1000)
     return result, {"name": name, "ok": error is None, "ms": ms, "error": error}
 
