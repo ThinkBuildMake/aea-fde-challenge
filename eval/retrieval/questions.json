@@ -1,0 +1,245 @@
+[
+  {
+    "id": "RQ-BK-1",
+    "driver": "booking",
+    "question": "What appointment windows can I pick from?",
+    "expectedSources": [
+      "faq/customer_faq.md"
+    ],
+    "mustNotReturn": [
+      "faq/faq_old_copy.md",
+      "services/technician_arrival_and_etas.md"
+    ]
+  },
+  {
+    "id": "RQ-BK-2",
+    "driver": "booking",
+    "question": "Can a technician come in the evening after work, like 5 or 6pm?",
+    "expectedSources": [
+      "faq/customer_faq.md"
+    ],
+    "mustNotReturn": [
+      "faq/faq_old_copy.md",
+      "services/scheduling_guide.md"
+    ]
+  },
+  {
+    "id": "RQ-BK-3",
+    "driver": "booking",
+    "question": "If I cancel my appointment tomorrow morning, will I be charged anything?",
+    "expectedSources": [
+      "faq/customer_faq.md",
+      "pricing/2026_fee_schedule.pdf",
+      "pricing/repair_price_book_2026.csv"
+    ],
+    "mustNotReturn": [
+      "services/scheduling_guide.md",
+      "faq/faq_old_copy.md",
+      "internal/agent_discretion_notes.md"
+    ]
+  },
+  {
+    "id": "RQ-BK-4",
+    "driver": "booking",
+    "question": "What happens if nobody is home when the technician shows up?",
+    "expectedSources": [
+      "faq/customer_faq.md",
+      "pricing/2026_fee_schedule.pdf"
+    ],
+    "mustNotReturn": [
+      "services/technician_arrival_and_etas.md",
+      "internal/agent_discretion_notes.md"
+    ]
+  },
+  {
+    "id": "RQ-BK-5",
+    "driver": "booking",
+    "question": "Do you send technicians out to Dripping Springs?",
+    "expectedSources": [
+      "policies/service_area.md"
+    ],
+    "mustNotReturn": [
+      "faq/faq_old_copy.md"
+    ]
+  },
+  {
+    "id": "RQ-BK-6",
+    "driver": "booking",
+    "question": "Are you open the day after Thanksgiving?",
+    "expectedSources": [
+      "policies/holiday_hours_2026.png"
+    ],
+    "mustNotReturn": [
+      "faq/faq_old_copy.md"
+    ]
+  },
+  {
+    "id": "RQ-BK-7",
+    "driver": "booking",
+    "question": "How much is a tune-up for my AC?",
+    "expectedSources": [
+      "services/service_catalog.md",
+      "pricing/repair_price_book_2026.csv",
+      "pricing/2026_fee_schedule.pdf"
+    ],
+    "mustNotReturn": [
+      "archive/comfort_club_overview.md"
+    ]
+  },
+  {
+    "id": "RQ-BK-8",
+    "driver": "booking",
+    "question": "My AC is blowing warm air. Is there anything I should check before you send someone?",
+    "expectedSources": [
+      "faq/troubleshooting_before_you_call.md"
+    ],
+    "mustNotReturn": [
+      "services/technician_arrival_and_etas.md"
+    ]
+  },
+  {
+    "id": "RQ-WA-1",
+    "driver": "warranty",
+    "question": "How long is the warranty on a repair you did?",
+    "expectedSources": [
+      "warranty/warranty_policy.md"
+    ],
+    "mustNotReturn": [
+      "archive/warranty_terms_2023.txt"
+    ]
+  },
+  {
+    "id": "RQ-WA-2",
+    "driver": "warranty",
+    "question": "I just bought a house. Does the labor warranty from the previous owner transfer to me?",
+    "expectedSources": [
+      "warranty/warranty_policy.md"
+    ],
+    "mustNotReturn": [
+      "archive/warranty_terms_2023.txt"
+    ]
+  },
+  {
+    "id": "RQ-WA-3",
+    "driver": "warranty",
+    "question": "I'm a Comfort Club member getting a new system installed. How long is the labor warranty?",
+    "expectedSources": [
+      "warranty/warranty_policy.md"
+    ],
+    "mustNotReturn": [
+      "archive/warranty_terms_2023.txt",
+      "archive/comfort_club_overview.md"
+    ]
+  },
+  {
+    "id": "RQ-WA-4",
+    "driver": "warranty",
+    "question": "The compressor on my Trane unit died. Is it still under warranty?",
+    "expectedSources": [
+      "warranty/warranty_policy.md"
+    ],
+    "mustNotReturn": [
+      "archive/warranty_terms_2023.txt"
+    ]
+  },
+  {
+    "id": "RQ-WA-5",
+    "driver": "warranty",
+    "question": "Do I have to pay the diagnostic fee when I call about a warranty claim?",
+    "expectedSources": [
+      "warranty/warranty_policy.md"
+    ],
+    "mustNotReturn": [
+      "archive/warranty_terms_2023.txt",
+      "faq/faq_old_copy.md"
+    ]
+  },
+  {
+    "id": "RQ-WA-6",
+    "driver": "warranty",
+    "question": "A power surge fried the part you repaired last month. Is that covered?",
+    "expectedSources": [
+      "warranty/warranty_policy.md"
+    ],
+    "mustNotReturn": [
+      "archive/warranty_terms_2023.txt"
+    ]
+  },
+  {
+    "id": "RQ-BI-1",
+    "driver": "billing",
+    "question": "How much is the diagnostic fee?",
+    "expectedSources": [
+      "faq/customer_faq.md",
+      "pricing/2026_fee_schedule.pdf",
+      "pricing/repair_price_book_2026.csv",
+      "services/service_catalog.md",
+      "membership/comfort_club_overview.md"
+    ],
+    "mustNotReturn": [
+      "faq/faq_old_copy.md",
+      "services/technician_arrival_and_etas.md",
+      "internal/agent_discretion_notes.md"
+    ]
+  },
+  {
+    "id": "RQ-BI-2",
+    "driver": "billing",
+    "question": "Can I pay the technician with a check?",
+    "expectedSources": [
+      "faq/customer_faq.md"
+    ],
+    "mustNotReturn": [
+      "faq/faq_old_copy.md"
+    ]
+  },
+  {
+    "id": "RQ-BI-3",
+    "driver": "billing",
+    "question": "I see two charges from you on my card. What is going on?",
+    "expectedSources": [
+      "faq/customer_faq.md"
+    ],
+    "mustNotReturn": [
+      "internal/agent_discretion_notes.md"
+    ]
+  },
+  {
+    "id": "RQ-BI-4",
+    "driver": "billing",
+    "question": "What is the fee for an emergency visit in the middle of the night?",
+    "expectedSources": [
+      "faq/customer_faq.md",
+      "pricing/2026_fee_schedule.pdf",
+      "pricing/repair_price_book_2026.csv"
+    ],
+    "mustNotReturn": [
+      "faq/faq_old_copy.md"
+    ]
+  },
+  {
+    "id": "RQ-BI-5",
+    "driver": "billing",
+    "question": "What discount do members get on repairs?",
+    "expectedSources": [
+      "membership/comfort_club_overview.md",
+      "pricing/2026_fee_schedule.pdf"
+    ],
+    "mustNotReturn": [
+      "archive/comfort_club_overview.md",
+      "internal/agent_discretion_notes.md"
+    ]
+  },
+  {
+    "id": "RQ-BI-6",
+    "driver": "billing",
+    "question": "How much does it cost to replace a capacitor?",
+    "expectedSources": [
+      "pricing/repair_price_book_2026.csv",
+      "services/service_catalog.md"
+    ],
+    "mustNotReturn": [
+      "internal/agent_discretion_notes.md"
+    ]
+  }
+]
