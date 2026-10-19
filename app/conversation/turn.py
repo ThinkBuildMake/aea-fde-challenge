@@ -8,6 +8,7 @@ from typing import Any
 
 from app.context import AppContext
 from app.conversation import guards, tools
+from app.errors import AppError
 from app.followups import service as followups
 from app.safety import service as safety
 from app.types import HandoffRecord, Reply, TurnInfo, Verdict
@@ -52,6 +53,10 @@ def _save_turn(
     """Store the turn and update the conversation in one transaction; `end` joins it."""
     db.execute("BEGIN IMMEDIATE")
     try:
+        if db.execute(
+            "SELECT outcome FROM conversations WHERE id = ?", (conversation_id,)
+        ).fetchone()[0]:
+            raise AppError(409, "conversation_ended", "This conversation has ended.")
         seq = db.execute(
             "SELECT COALESCE(MAX(seq), 0) + 1 FROM turns WHERE conversation_id = ?",
             (conversation_id,),

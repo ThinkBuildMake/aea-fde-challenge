@@ -216,16 +216,28 @@ def test_nothing_is_written_before_the_screen_says_safe(
             gate.set()
             return out
 
-    model = Model(results=[book_call(56, "There's a burning smell")])
+    model = Model(
+        results=[
+            result(assistant(calls=[windows_call()])),
+            result(assistant("Tuesday 8-10 is open.")),
+            book_call(56, "There's a burning smell"),
+        ]
+    )
     client = client_for(started, model, clock)
     cid = new_conversation(client)
     match(started, cid)
+    calls.verdicts = ["safe", "burning_followup", "safe"]
+    say(client, cid, "I need a visit")
+    calls.windows.clear()
+    gate.clear()
     reply = say(client, cid, "There's a burning smell")
     assert calls.books == [] and calls.windows == []
     assert reply["text"] == guards.BURNING_FOLLOWUP_TEXT
     assert reply["choices"] == [] and reply["booking"] is None
     assert reply["banner"] == "none" and reply["status"] == "active"
-    t = rows(started, "SELECT * FROM turns WHERE conversation_id = ?", cid)[0]
+    t = rows(started, "SELECT * FROM turns WHERE conversation_id = ? AND seq = 2", cid)[
+        0
+    ]
     assert t["safety_verdict"] == "burning_followup" and t["latency_ms"] >= 2000
     assert json.loads(t["model_messages"]) == [
         {"role": "user", "content": "There's a burning smell"},
@@ -398,3 +410,52 @@ def test_a_committed_booking_survives_a_failed_turn(started: Settings, calls: Ca
     stored = json.loads(t["model_messages"])
     assert stored[-1] == {"role": "assistant", "content": reply["text"]}
     assert stored[-2]["role"] == "tool"
+
+
+def test_a_conversation_closed_during_the_model_call_gets_no_turn(
+    started: Settings, calls: Calls
+):
+    for verdict in ("safe", "emergency"):
+        calls.verdicts = [verdict]
+        calls.handoffs.clear()
+
+        class Model(FakeModelProvider):
+            def complete(self, messages, *, tools=None, timeout_s):
+                conn = sqlite3.connect(started.APP_DB_PATH)
+                conn.execute(
+                    "UPDATE conversations SET outcome = 'failed', "
+                    "ended_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')"
+                )
+                conn.commit()
+                conn.close()
+                return super().complete(messages, tools=tools, timeout_s=timeout_s)
+
+        client = client_for(started, Model(results=[result(assistant("Hello."))]))
+        cid = new_conversation(client)
+        resp = client.post(f"/conversations/{cid}/messages", json={"text": "hi"})
+        assert resp.status_code == 409 and resp.json()["error"] == "conversation_ended"
+        assert rows(started, "SELECT * FROM turns WHERE conversation_id = ?", cid) == []
+        conv = rows(started, "SELECT * FROM conversations WHERE id = ?", cid)[0]
+        assert conv["turn_count"] == 0 and conv["outcome"] == "failed"
+        assert calls.handoffs == []
+        started_db = sqlite3.connect(started.APP_DB_PATH)
+        started_db.execute("DELETE FROM conversations")
+        started_db.commit()
+        started_db.close()
+
+
+def test_the_quote_must_be_a_whole_phrase_of_the_message():
+    refuse = guards.write_refusal
+    text = "yes please, the Tuesday one"
+    for quote in ("y", "ye", "es", "plea", "Tues", "a", " y "):
+        args = {"slotId": 56, "callerQuote": quote}
+        assert refuse("book_visit", args, text, {56}, set()) == (
+            "caller_quote_not_in_message"
+        )
+    for quote in ("yes", "yes please", "the Tuesday one", "Tuesday"):
+        args = {"slotId": 56, "callerQuote": quote}
+        assert refuse("book_visit", args, text, {56}, set()) is None
+    assert (
+        refuse("book_visit", {"slotId": 56, "callerQuote": "ok"}, "ok.", {56}, set())
+        is None
+    )

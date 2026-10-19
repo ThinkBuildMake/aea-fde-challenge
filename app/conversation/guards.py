@@ -1,6 +1,7 @@
 """Rules and fixed texts that decide what a turn may do, whatever the model proposes."""
 
 import json
+import re
 import sqlite3
 from typing import Any
 
@@ -57,6 +58,13 @@ def _is_id(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+def _quoted(quote: Any, caller_text: str) -> bool:
+    """The quote is at least two characters and sits in the message on word boundaries."""
+    if not isinstance(quote, str) or len(quote.strip()) < 2:
+        return False
+    return re.search(rf"(?<!\w){re.escape(quote)}(?!\w)", caller_text) is not None
+
+
 def write_refusal(
     name: str,
     args: dict[str, Any],
@@ -66,7 +74,7 @@ def write_refusal(
 ) -> str | None:
     """Why a write must not run, or None when the caller's words and an offered target back it."""
     quote = args.get("callerQuote")
-    if not isinstance(quote, str) or not quote.strip() or quote not in caller_text:
+    if not _quoted(quote, caller_text):
         return "caller_quote_not_in_message"
     for key, kind in _TARGET_KEYS[name]:
         value = args.get(key)
