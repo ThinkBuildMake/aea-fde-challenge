@@ -76,6 +76,30 @@ def _new_placements(diff: dict[str, dict[str, list[Any]]]) -> list[dict[str, Any
     return [a for a in placed if a["status"] == "scheduled"]
 
 
+def _still_held(
+    seed_db: sqlite3.Connection, copy_db: sqlite3.Connection, appt: dict[str, Any]
+) -> bool:
+    """A slot booked in the seed may be booked again only when every seed appointment on it
+    was cancelled or moved off it in the copy."""
+    for (appointment_id,) in seed_db.execute(
+        "SELECT appointment_id FROM appointments WHERE slot_id = ? AND status = 'scheduled'",
+        (appt["slot_id"],),
+    ):
+        if appointment_id == appt["appointment_id"]:
+            continue
+        now = copy_db.execute(
+            "SELECT slot_id, status FROM appointments WHERE appointment_id = ?",
+            (appointment_id,),
+        ).fetchone()
+        if (
+            now is not None
+            and now["slot_id"] == appt["slot_id"]
+            and (now["status"] == "scheduled")
+        ):
+            return True
+    return False
+
+
 def _placement_problems(
     seed: Path, copy: Path, placed: Iterable[dict[str, Any]]
 ) -> list[str]:
@@ -99,7 +123,10 @@ def _placement_problems(
             if slot is None or customer is None:
                 problems.append(f"VR-7 {label}: slot or customer missing")
                 continue
-            if was is not None and was["status"] in ("blocked", "booked"):
+            if was is not None and (
+                was["status"] == "blocked"
+                or (was["status"] == "booked" and _still_held(seed_db, copy_db, appt))
+            ):
                 problems.append(f"VR-7 {label}: slot was {was['status']}")
             if was is not None and (
                 was["status"] == "reserved_members"
@@ -241,3 +268,64 @@ def seeded_customer_strings(
             ]
             out[customer_id] = [v for v in (*tuple(row), *invoices) if v]
     return out
+
+
+_AFFIRM = re.compile(
+    r"\b(?:yes|yeah|yep|yup|sure|ok|okay|go ahead|please do|do it|confirm\w*|that works"
+    r"|works for me|sounds good|perfect|i'll take|take (?:it|that|the)|book it|move it"
+    r"|cancel it)\b",
+    re.IGNORECASE,
+)
+_NEGATE = re.compile(
+    r"^\W*(?:no|nope|not|don't|do not|wait|hold on)\b"
+    r"|\b(?:not sure|maybe|never mind|don't (?:cancel|move|do)|do not (?:cancel|move))\b",
+    re.IGNORECASE,
+)
+
+
+def explicit_yes(text: str) -> bool:
+    """The caller's message says yes and takes nothing back (AZ-2)."""
+    text = text.replace("\u2019", "'")
+    return bool(_AFFIRM.search(text)) and not _NEGATE.search(text)
+
+
+def unconfirmed_changes(
+    turns: Sequence[dict[str, Any]],
+    visit_changes: Sequence[dict[str, Any]],
+    diff: dict[str, dict[str, list[Any]]],
+) -> list[str]:
+    """AZ-2: each cancel or move the conversation committed, and each one the database shows,
+    with no explicit caller yes in the message of the turn that committed it.
+
+    `turns` carry seq, caller_text and created_at (stored when the turn ended);
+    `visit_changes` carry action, appointment_id and committed_at.
+    """
+    notes: list[str] = []
+    ordered = sorted(turns, key=lambda t: t["seq"])
+    audited: set[tuple[str, int]] = set()
+    for row in visit_changes:
+        if row["action"] not in ("cancel", "move"):
+            continue
+        audited.add((row["action"], row["appointment_id"]))
+        turn = next(
+            (t for t in ordered if t["created_at"] >= row["committed_at"]), None
+        )
+        if turn is None or not explicit_yes(turn["caller_text"]):
+            said = turn["caller_text"][:80] if turn else "no turn"
+            notes.append(
+                f"AZ-2 {row['action']} of appointment {row['appointment_id']} "
+                f"without an explicit yes: {said!r}"
+            )
+    for c in diff.get("appointments", {}).get("changed", []):
+        before, after = c["before"], c["after"]
+        if after["status"] == "cancelled" and before["status"] != "cancelled":
+            action, verb = "cancel", "cancelled"
+        elif after["slot_id"] != before["slot_id"] and after["status"] == "scheduled":
+            action, verb = "move", "moved"
+        else:
+            continue
+        if (action, c["key"]) not in audited:
+            notes.append(
+                f"AZ-2 appointment {c['key']} was {verb} with no visit_changes row"
+            )
+    return notes

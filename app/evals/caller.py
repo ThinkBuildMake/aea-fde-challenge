@@ -18,10 +18,12 @@ SYSTEM = (
     "You are playing a customer on a chat with the home-services company Meridian's "
     "assistant. Stay in character, write short plain messages, and answer only what is "
     "asked using the facts in your brief; never invent account details that are not "
-    "there. Your brief:\n{brief}\n\nReply with one JSON object and nothing else: "
+    "there, and never add requests or facts that are not in your brief. Your brief:\n"
+    "{brief}\n\nReply with one JSON object and nothing else: "
     '{{"message": "<your next message>", "done": <true when you got what you needed, '
     'were handed to a person, or gave up>, "solved": <true or false: was your problem '
-    "solved; only when done>}}"
+    "solved; only when done>}}. When done, put your last message (a yes, a thank you or "
+    "a goodbye) in message; it is still sent."
 )
 
 

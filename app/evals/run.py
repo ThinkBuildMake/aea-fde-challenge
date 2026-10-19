@@ -13,7 +13,7 @@ from app.evals.judge import OpenRouterJudge
 from app.evals.langfuse_report import langfuse_reporter
 from app.evals.records import RunResult, load_scenarios, load_weights
 from app.evals.runner import make_run_id, run_eval
-from app.evals.summary import load_human_grades
+from app.evals.summary import grades_for, load_human_grades
 from app.knowledge.embeddings import OpenRouterEmbedder
 from app.llm import OpenRouterProvider
 from app.settings import REPO_ROOT, load_settings_or_exit
@@ -123,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
             reporter=langfuse_reporter(settings),
             run_id=run_id,
             judge=judge,
-            human_grades=human_grades,
+            human_grades=grades_for(run_id, human_grades),
         )
     sys.stdout.write(
         format_summary(run, human_grades is not None) + f"\n\nRecord written to {out}\n"

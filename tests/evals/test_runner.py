@@ -5,7 +5,9 @@ from pathlib import Path
 import pytest
 
 from app.conversation import guards
+from app.evals.caller import CallerMove, ScriptedCaller
 from app.evals.records import RunEnvironment, RunResult, Scenario
+from app.safety.service import OpenRouterSafetyClassifier
 from app.settings import REPO_ROOT, Settings
 from tests.evals.helpers import (
     caller_for,
@@ -206,3 +208,93 @@ def test_judge_verdict_and_agreement_reach_the_record(live: Settings, tmp_path: 
     assert second["judge"]["notes"] == "RuntimeError"
     assert second["containedCorrect"] is False
     assert record["summary"]["judgeAgreement"] == {"agreed": 1, "of": 2}
+
+
+def test_final_caller_message_is_sent_when_done(live: Settings, tmp_path: Path):
+    # The caller's last move carries its yes and done=true: the yes must reach the agent.
+    scenarios = [s for s in eight_scenarios() if s.id == "SYN-BOOK-0"]
+    caller = ScriptedCaller(
+        {"SYN-BOOK-0": [CallerMove("Yes, book it.", done=True, solved=True)]}
+    )
+    run = play(live, tmp_path, scenarios, caller)
+    (r,) = run.scenarios
+    print(r.observed_outcome, [(t.role, t.text) for t in r.transcript])
+    assert [t.text for t in r.transcript if t.role == "caller"][-1] == "Yes, book it."
+    assert len(r.db_diff["appointments"]["added"]) == 1
+    assert r.observed_outcome == "contained" and r.contained_correct
+
+
+@pytest.mark.parametrize(
+    ("sid", "outcome"), [("SYN-BOOK-0", "contained"), ("SYN-FIG-0", "failed")]
+)
+def test_open_conversation_closes_like_production(
+    live: Settings, tmp_path: Path, sid: str, outcome: str
+):
+    # No solved answer: the idle close decides, as in production (contained only when the
+    # need was resolved and nobody was handed the conversation), never "unfinished".
+    scenarios = [s for s in eight_scenarios() if s.id == sid]
+    script: list[str | CallerMove] = [CallerMove(None, done=True, solved=None)]
+    if sid == "SYN-BOOK-0":
+        script = ["Yes, book it.", *script]
+    run = play(live, tmp_path, scenarios, ScriptedCaller({sid: script}))
+    (r,) = run.scenarios
+    print(sid, r.observed_outcome)
+    assert r.observed_outcome == outcome
+
+
+def test_unidentified_safety_stop_record_is_complete(
+    live: Settings, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(
+        OpenRouterSafetyClassifier,
+        "classify",
+        lambda self, messages, timeout_s: '{"verdict": "emergency", "reason": "gas"}',
+    )
+    scenario = next(s for s in eight_scenarios() if s.id == "SYN-FIG-0")
+    scenario = scenario.model_copy(update={"opening": "I smell gas in the kitchen"})
+    run = play(live, tmp_path, [scenario])
+    (r,) = run.scenarios
+    print(r.observed_outcome, r.handoff_kind, r.handoff_reason, r.matched_customer_id)
+    assert r.observed_outcome == "safety_stop"
+    assert r.matched_customer_id is None and r.handoff_kind == "safety_stop"
+    assert r.handoff_record_complete is True
+    assert run.summary.handoff_records_complete is not None
+    assert (
+        run.summary.handoff_records_complete.passed,
+        run.summary.handoff_records_complete.of,
+    ) == (1, 1)
+
+
+def test_unconfirmed_cancel_counts(
+    live: Settings, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # The app's own clear-yes rule is turned off so the eval's AZ-2 check is what catches
+    # a cancel the caller never said yes to.
+    from app.llm import FakeModelProvider
+    from tests.gate.test_change_a_visit import FREE_ASK, cancel, linda_lookup
+
+    monkeypatch.setattr(guards, "clear_yes", lambda text: True)
+    base = next(s for s in eight_scenarios() if s.id == "SYN-BOOK-0")
+    scenario = base.model_copy(
+        update={
+            "id": "SYN-CANCEL",
+            "driver": "appointment",
+            "opening": "When is my visit? Linda Foster, 4412 Oak Hollow Dr.",
+            "expected": base.expected.model_copy(update={"db_change": None}),
+        }
+    )
+    unsure = "Hmm, maybe, I am not sure"
+    model = FakeModelProvider(
+        results=[
+            *linda_lookup(),
+            *cancel(159, "Cancel my visit", FREE_ASK),
+            *cancel(159, unsure, "Your visit is cancelled."),
+        ]
+    )
+    caller = ScriptedCaller({"SYN-CANCEL": ["Cancel my visit", unsure]})
+    run = play(live, tmp_path, [scenario], caller, agent_model=lambda s: model)
+    (r,) = run.scenarios
+    print(r.unconfirmed_changes, r.unconfirmed_notes, r.db_diff.get("appointments"))
+    assert r.unconfirmed_changes == 1
+    assert r.contained_correct is False
+    assert run.summary.unconfirmed_changes == 1

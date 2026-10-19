@@ -94,6 +94,12 @@ class ScenarioResult(Model):
     worker: int | None = None
     copy_path: str | None = None
     error: str | None = None
+    matched_customer_id: str | None = None
+    # For a human read only, never a pass/fail input.
+    handoff_kind: str | None = None
+    handoff_reason: str | None = None
+    unconfirmed_changes: int = 0
+    unconfirmed_notes: list[str] = Field(default_factory=list)
 
 
 class RunEnvironment(Model):
@@ -163,6 +169,8 @@ class Summary(Model):
     errored: int
     errored_ids: list[str] = Field(default_factory=list)
     db_change_mismatches: int = 0
+    unconfirmed_changes: int = 0
+    handoff_records_complete: Count | None = None
 
 
 class RunResult(Model):
@@ -171,6 +179,9 @@ class RunResult(Model):
     environment: RunEnvironment
     scenarios: list[ScenarioResult]
     summary: Summary
+    finished_at: str | None = None
+    duration_s: float | None = None
+    workers: int | None = None
 
 
 def load_scenarios(folder: Path) -> list[Scenario]:
