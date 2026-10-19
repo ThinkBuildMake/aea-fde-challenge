@@ -171,6 +171,4 @@ def test_tracer_for_is_off_without_keys(tmp_settings: Settings):
 
 
 def test_gate_env_has_no_langfuse_keys():
-    assert not {"LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"} & set(
-        os.environ
-    )
+    assert not {"LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"} & set(os.environ)

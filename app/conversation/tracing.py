@@ -115,10 +115,12 @@ class RecordingTracer:
 
     def __init__(self) -> None:
         self.traces: list[TurnTrace] = []
+        self.ids: list[str] = []
 
     def send(self, trace: TurnTrace, on_sent: Callable[[str], None]) -> None:
         self.traces.append(trace)
-        on_sent(uuid.uuid4().hex)
+        self.ids.append(uuid.uuid4().hex)
+        on_sent(self.ids[-1])
 
     def flush(self, timeout_s: float) -> None:
         return None

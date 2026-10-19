@@ -7,6 +7,7 @@ import httpx2
 import openai
 from pydantic import BaseModel
 
+from app import usage
 from app.context import AppContext
 from app.logs import log_event
 from app.types import RedactResult, Verdict
@@ -100,6 +101,14 @@ class OpenRouterSafetyClassifier:
             },
             extra_body={"provider": {"data_collection": "deny"}},
         )
+        if resp.usage is not None:
+            usage.report(
+                usage.Usage(
+                    input_tokens=resp.usage.prompt_tokens,
+                    output_tokens=resp.usage.completion_tokens,
+                    cost_usd=(resp.usage.model_extra or {}).get("cost"),
+                )
+            )
         content = resp.choices[0].message.content
         if content is None:
             raise ValueError("empty content")
