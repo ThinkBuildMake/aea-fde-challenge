@@ -1,0 +1,11 @@
+{% macro render(value) -%}
+{%- if value is mapping -%}
+<dl>{% for key, item in value.items() %}<dt>{{ key }}</dt><dd data-field="{{ key }}">{{ render(item) }}</dd>{% endfor %}</dl>
+{%- elif value is iterable and value is not string -%}
+<ul>{% for item in value %}<li>{{ render(item) }}</li>{% endfor %}</ul>
+{%- elif value is none -%}
+<span class="null">none</span>
+{%- else -%}
+{{ value }}
+{%- endif -%}
+{%- endmacro %}{{ render(data) }}

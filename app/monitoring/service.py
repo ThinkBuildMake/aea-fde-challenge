@@ -1,0 +1,62 @@
+from datetime import UTC, datetime
+
+from app.context import AppContext
+from app.types import (
+    Guarantee,
+    Outcomes,
+    Overview,
+    OverviewSpend,
+    OverviewStatus,
+    OverviewSuccess,
+    OverviewSupporting,
+    OverviewVolume,
+)
+
+
+def now_iso() -> str:
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def get_overview(ctx: AppContext) -> Overview:
+    """Stub: nulls, zeros and empty lists."""
+    s = ctx.settings
+    return Overview(
+        as_of=now_iso(),
+        status=OverviewStatus(
+            public_url=s.PUBLIC_URL,
+            last_conversation_at=None,
+            errors_shown_24h=0,
+            handoffs_waiting=0,
+        ),
+        success=OverviewSuccess(
+            settled_pct=None,
+            settled_count=0,
+            total_count=0,
+            target_band_pct=[60, 75],
+            series=[],
+        ),
+        supporting=OverviewSupporting(
+            booking_completion_pct=None,
+            handoffs_on_handled_topics_pct=None,
+            top_handoff_reason=None,
+            flagged_wrong_pct=None,
+        ),
+        volume=OverviewVolume(
+            conversations_by_day=[],
+            outcomes=Outcomes(
+                contained=0, handoff=0, safety_stop=0, failed=0, active=0
+            ),
+        ),
+        recent=[],
+        guarantees=[
+            Guarantee(
+                key="PF-1",
+                name="Time to first reply",
+                now=None,
+                limit=6000,
+                status="no_data",
+            )
+        ],
+        latency_series_24h=[],
+        spend=OverviewSpend(total_usd=None, alert_usd=s.SPEND_ALERT_USD, alert=False),
+    )

@@ -4,3 +4,12 @@
 
 # Lazy-orchestrator run files
 .lazy/
+
+# Python and local run output
+.venv/
+.env
+.env.*
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+/var/
