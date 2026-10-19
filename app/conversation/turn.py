@@ -68,7 +68,9 @@ INSTRUCTIONS = (
     "hvac_tune_up or plumbing, thank the caller by first name and ask them to pick one of "
     "the windows shown; the windows appear as buttons, so do not list them. If the caller "
     "asks for a day, pass preferredDate as YYYY-MM-DD; when matchedRequest is false, say "
-    "there is no window that day and name the first window returned as the nearest. When "
+    "there is no window that day and name the first window returned as the nearest. If "
+    "the caller wants other or later windows without naming a day, call find_open_windows "
+    "again with preferredDate set to the day after the last window shown. When "
     "the caller picks a window, call book_visit with that window's slotId from the latest "
     "find_open_windows result, the caller's problem as issue, and callerQuote copied "
     "exactly from the caller's message. If booking fails, say it did not happen, call "
@@ -96,7 +98,14 @@ def _recent_turns(
     texts = [
         t for r in reversed(rows) for t in (r["caller_text"], r["reply_text"]) if t
     ]
-    return texts, bool(rows) and rows[0]["safety_verdict"] == "burning_followup"
+    # The screen asks the follow-up itself, and the agent asks the same question before a
+    # booking; either way the caller's answer is screened under the clear-no rule.
+    pending = bool(rows) and (
+        rows[0]["safety_verdict"] == "burning_followup"
+        or guards.BURNING_QUESTION.casefold()
+        in (rows[0]["reply_text"] or "").casefold()
+    )
+    return texts, pending
 
 
 def _save_turn(

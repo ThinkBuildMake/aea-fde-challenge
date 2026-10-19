@@ -21,6 +21,8 @@ def test_instructions_carry_the_booking_rules(started: Settings):
         "service area",
         "preferredDate",
         "matchedRequest is false",
+        "other or later windows",
+        "the day after the last window shown",
     ):
         assert rule in system, rule
     print(

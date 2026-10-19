@@ -190,3 +190,13 @@ def test_outside_the_service_area(live: Chat):
     called = live.tools()
     assert "identify_customer" not in called and "book_visit" not in called
     assert live.schedule("SELECT COUNT(*) FROM appointments")[0][0] == before
+
+
+@pytest.mark.parametrize("answer", ["Yes", "Not sure"])
+def test_unclear_answer_to_the_safety_question_stops(live: Chat, answer: str):
+    live.start()
+    live.say(CHIP)
+    reply = live.say(answer)
+    assert reply["status"] == "safety_stop"
+    assert reply["banner"] == "safety_stop"
+    assert reply["booking"] is None and reply["choices"] == []

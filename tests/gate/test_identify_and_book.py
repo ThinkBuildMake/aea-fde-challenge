@@ -20,6 +20,7 @@ from app.scheduling.store import zone_for_city
 from app.settings import Settings
 from tests.gate.bookings import orphans
 from tests.gate.harness import FakeClock, evaluate_pf2
+from tests.test_turn import assistant, result, tool_call
 
 CHIP = "My AC is blowing warm air"
 VISIT_TYPE = (
@@ -37,37 +38,17 @@ CONFIRMATION = (
 )
 
 
-def tool_call(call_id: str, tool: str, **args: Any) -> dict[str, Any]:
-    return {
-        "id": call_id,
-        "type": "function",
-        "function": {"name": tool, "arguments": json.dumps(args)},
-    }
-
-
-def assistant(content: str = "", calls: list[dict[str, Any]] | None = None):
-    message: dict[str, Any] = {"role": "assistant", "content": content}
-    if calls:
-        message["tool_calls"] = calls
-    return message
-
-
-def result(message: dict[str, Any]) -> ModelResult:
-    return ModelResult(
-        message, prompt_tokens=100, completion_tokens=20, cost_usd=0.0001
-    )
-
-
 def identify_calls(who: str) -> list[dict[str, Any]]:
     name, detail = who.split(", ")
     if detail.startswith("account "):
         args = {"name": name, "accountNumber": detail.removeprefix("account ")}
     else:
         args = {"name": name, "phone": detail}
-    return [
-        tool_call("id", "identify_customer", **args),
-        tool_call("w", "find_open_windows", serviceType="hvac_repair"),
-    ]
+    identify = tool_call("id", "identify_customer")
+    identify["function"]["arguments"] = json.dumps(
+        args
+    )  # tool_call's own `name` clashes
+    return [identify, tool_call("w", "find_open_windows", serviceType="hvac_repair")]
 
 
 def up_to_windows(who: str) -> list[ModelResult]:
@@ -508,3 +489,35 @@ def test_booking_turn_within_pf2(
     assert reply["booking"]["slotId"] == 115
     assert reply["turn"]["latencyMs"] == latency_ms
     assert verdict.passed is passed
+
+
+@pytest.mark.parametrize("answer", ["Yes", "Not sure"])
+@pytest.mark.parametrize(
+    "question",
+    [
+        guards.BURNING_FOLLOWUP_TEXT,
+        f"I'm sorry your AC is acting up. {guards.BURNING_QUESTION}",
+    ],
+    ids=["exact", "own_apology"],
+)
+def test_an_unclear_answer_to_the_agents_safety_question_stops(
+    kb_settings: Settings, answer: str, question: str
+):
+    before = snapshot(kb_settings)
+    model = FakeModelProvider(
+        results=[result(assistant(question)), *up_to_windows(OMAR)[1:]]
+    )
+    booker = Booker(kb_settings, model)
+    assert booker.say(CHIP)["text"] == question
+    reply = booker.say(answer)
+    verdicts = booker.turns("safety_verdict")
+    print(
+        f"{answer!r}: status={reply['status']} banner={reply['banner']} verdicts={verdicts}"
+    )
+    assert reply["status"] == "safety_stop"
+    assert reply["banner"] == "safety_stop"
+    assert reply["text"] == guards.emergency_text(False)
+    assert reply["choices"] == [] and reply["booking"] is None
+    assert verdicts == ["safe", "emergency"]
+    assert new_appointments(kb_settings, before) == []
+    assert snapshot(kb_settings) == before
