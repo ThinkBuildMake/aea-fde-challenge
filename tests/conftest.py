@@ -69,3 +69,19 @@ def kb_copy(tmp_path: Path) -> Path:
 @pytest.fixture
 def kb_settings(started: Settings, kb_copy: Path) -> Settings:
     return started.model_copy(update={"KB_DIR": kb_copy / "knowledge_base"})
+
+
+@pytest.fixture(autouse=True)
+def screen_says_safe(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
+    """Turn tests never reach the real danger screen; its own tests and S14's choose a verdict."""
+    name = request.module.__name__
+    if name.startswith(("tests.test_safety", "tests.test_interfaces")):
+        return
+    from app.types import Verdict
+
+    monkeypatch.setattr(
+        "app.safety.service.screen_safety",
+        lambda ctx, text, recent_turns, follow_up_pending: Verdict(
+            verdict="safe", reason="no_hazard"
+        ),
+    )
