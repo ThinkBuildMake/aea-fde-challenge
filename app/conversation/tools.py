@@ -11,6 +11,7 @@ from app.followups import service as followups
 from app.knowledge import service as knowledge
 from app.scheduling import service as scheduling
 from app.types import (
+    BookedVisit,
     Booking,
     Choice,
     HandoffRecord,
@@ -359,14 +360,12 @@ def _fee_cents(ctx: AppContext, code: str) -> int | None:
         return None
 
 
-def _stamp(ctx: AppContext, state: ToolState, booking: Booking) -> Booking:
-    """Put the diagnostic fee and the member waiver on the booking card."""
-    cents = _fee_cents(ctx, "FEE-DIAG")
-    stamped = booking.model_copy(
-        update={
-            "diagnostic_fee_cents": cents,
-            "diagnostic_fee_waived": state.customer_tier in MEMBER_TIERS,
-        }
+def _stamp(ctx: AppContext, state: ToolState, visit: BookedVisit) -> Booking:
+    """Build the booking card: the visit plus the diagnostic fee and member waiver."""
+    stamped = Booking(
+        **visit.model_dump(include=set(BookedVisit.model_fields)),
+        diagnostic_fee_cents=_fee_cents(ctx, "FEE-DIAG"),
+        diagnostic_fee_waived=state.customer_tier in MEMBER_TIERS,
     )
     state.commit(stamped)
     return stamped
@@ -394,10 +393,14 @@ def _add_late_fee(ctx: AppContext, out: dict[str, Any]) -> None:
 def _book_visit(
     ctx: AppContext, state: ToolState, args: dict[str, Any]
 ) -> dict[str, Any]:
-    booking = scheduling.book_visit(
-        ctx, _customer(state), int(args["slotId"]), str(args["issue"])
+    visit = scheduling.book_visit(
+        ctx,
+        _customer(state),
+        int(args["slotId"]),
+        str(args["issue"]),
+        state.conversation_id,
     )
-    return _booking_result(_stamp(ctx, state, booking))
+    return _booking_result(_stamp(ctx, state, visit))
 
 
 def _move_visit(
