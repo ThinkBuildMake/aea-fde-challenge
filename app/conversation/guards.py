@@ -32,6 +32,10 @@ FAILED_WRITE_INSTRUCTION = (
     "The change did not happen. Do not tell the caller it is booked, moved or cancelled. "
     "Offer other windows or a person."
 )
+SEARCH_UNAVAILABLE_INSTRUCTION = (
+    "The knowledge base is unavailable. Do not answer fees, policy, membership or "
+    "warranty questions from memory. Say it cannot be checked right now and offer a person."
+)
 
 WRITE_TOOLS = frozenset({"book_visit", "move_visit", "cancel_visit"})
 _TARGET_KEYS = {

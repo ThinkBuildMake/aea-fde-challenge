@@ -1,10 +1,15 @@
 import json
+import sqlite3
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
-from app.knowledge.service import UnknownFee
+from app.conversation.guards import SEARCH_UNAVAILABLE_INSTRUCTION
+from app.conversation.tools import ToolState, run_tool
+from app.knowledge.service import EmbeddingUnavailable, IndexUnavailable, UnknownFee
 from app.llm import FakeModelProvider
+from app.scheduling.service import SchedulingUnavailable
 from app.settings import Settings
 from app.types import (
     AppointmentView,
@@ -447,3 +452,79 @@ def test_name_only_identify_is_refused_without_a_try(
     assert ident.calls == []
     assert tool_results(started, cid)[0]["error"] == "missing_details"
     assert rows(started, "SELECT identify_attempts FROM conversations")[0][0] == 0
+
+
+def raise_with(exc: Exception):
+    def boom(*args: Any, **kwargs: Any) -> Any:
+        raise exc
+
+    return boom
+
+
+@pytest.mark.parametrize(
+    ("path", "exc", "name", "args", "unavailable"),
+    [
+        (
+            "app.knowledge.service.search_knowledge",
+            EmbeddingUnavailable("embeddings down"),
+            "search_knowledge",
+            {"query": "diagnostic fee"},
+            "embedding_unavailable",
+        ),
+        (
+            "app.knowledge.service.search_knowledge",
+            IndexUnavailable("no index"),
+            "search_knowledge",
+            {"query": "diagnostic fee"},
+            "embedding_unavailable",
+        ),
+        (
+            "app.scheduling.service.find_open_windows",
+            SchedulingUnavailable("scheduling database unavailable"),
+            "find_open_windows",
+            {"serviceType": "repair"},
+            "scheduling_unavailable",
+        ),
+        (
+            "app.scheduling.service.book_visit",
+            SchedulingUnavailable("scheduling database unavailable"),
+            "book_visit",
+            {"slotId": 3, "issue": "no cooling", "callerQuote": "yes book it"},
+            "scheduling_unavailable",
+        ),
+    ],
+)
+def test_unavailable_tool_failures_are_classified(
+    monkeypatch: pytest.MonkeyPatch,
+    path: str,
+    exc: Exception,
+    name: str,
+    args: dict[str, Any],
+    unavailable: str,
+):
+    monkeypatch.setattr(path, raise_with(exc))
+    ctx = SimpleNamespace(clock=SimpleNamespace(monotonic=lambda: 0.0))
+    state = ToolState(
+        sqlite3.connect(":memory:"),
+        "conv-1",
+        "yes book it",
+        "booking",
+        [],
+        "MHC-10002",
+        "none",
+        0,
+    )
+    state.earlier_slot_ids = {3}
+    call = {"function": {"name": name, "arguments": json.dumps(args)}}
+    out, entry = run_tool(ctx, state, call)  # type: ignore[arg-type]
+    assert state.unavailable == unavailable
+    assert entry["ok"] is False
+    if unavailable == "embedding_unavailable":
+        assert out == {
+            "ok": False,
+            "error": "embedding_unavailable",
+            "instruction": SEARCH_UNAVAILABLE_INSTRUCTION,
+        }
+        assert "from memory" in SEARCH_UNAVAILABLE_INSTRUCTION
+    else:
+        assert out["ok"] is False and "SchedulingUnavailable" in out["error"]
