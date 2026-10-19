@@ -135,3 +135,18 @@ def test_summary_counts():
     assert s.latency.write_turn_p95_ms == 900
     assert s.latency.median_booking_turns == 4.0
     assert s.judge_agreement is None
+
+
+def test_median_booking_turns_ignores_the_booking_escalation():
+    scenarios = [
+        scenario("B1", "booking", "happy"),
+        scenario("B2", "booking", "edge"),
+        scenario("B3", "booking", "escalation", "handoff"),
+    ]
+    results = [
+        result("B1", turns=4),
+        result("B2", turns=6),
+        result("B3", "handoff", turns=20),
+    ]
+    summary = compute_summary(scenarios, results, WEIGHTS, {})
+    assert summary.latency.median_booking_turns == 5.0

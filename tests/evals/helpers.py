@@ -108,3 +108,22 @@ def play(
         environment=environment(settings),
         **extra,
     )
+
+
+def write_small_index(path: Path) -> str:
+    """A one-passage index built with the fake embedder; returns its version."""
+    import numpy as np
+
+    from app.knowledge.embeddings import FakeEmbedder
+    from app.knowledge.index import LoadedIndex, write_index
+    from app.knowledge.passages import PassageRecord
+
+    embedder = FakeEmbedder()
+    passage = PassageRecord("p1", "pricing/fees.md", "Fees", "text", "The fee is $89.")
+    vectors = np.asarray(embedder.embed([passage.text]), dtype=np.float32)
+    version = "idx-test-0042"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_index(
+        path, LoadedIndex(version, embedder.model, embedder.dims, [passage], vectors)
+    )
+    return version

@@ -63,7 +63,9 @@ def test_run_is_an_experiment(live: Settings, tmp_path: Path):
             if len(items) >= 2:
                 break
         time.sleep(5)
-    print(f"experiments={len(experiments)} items={len(items)}")
+    print(
+        f"experiment name={experiments[0]['name'] if experiments else None} run id={run.run_id} items={len(items)}"
+    )
     assert len(experiments) == 1 and len(items) == 2
     outputs = [
         json.loads(i["output"]) if isinstance(i["output"], str) else i["output"]

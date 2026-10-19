@@ -26,7 +26,7 @@ def _output(result: ScenarioResult) -> dict[str, Any]:
         "invariantViolations": result.invariant_violations,
         "turns": result.turns,
         "costUsd": result.cost_usd,
-        "error": result.error,
+        "error": result.error.split(":")[0] if result.error else None,
     }
 
 

@@ -174,7 +174,9 @@ def invariant_violations(
 
 
 _FIGURE = re.compile(r"\$\s?(\d[\d,]*)(?:\.(\d{1,2}))?")
-_NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
+# Digits inside dates, ids, phone numbers and times do not count: no letter, digit or dash
+# touches the number, and it is not one side of a clock time.
+_NUMBER = re.compile(r"(?<![\w-])(?<!\d:)\d[\d,]*(?:\.\d+)?(?![\w-])(?!:\d)")
 
 
 def _numbers(text: str) -> set[str]:

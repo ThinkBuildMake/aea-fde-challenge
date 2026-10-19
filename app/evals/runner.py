@@ -283,6 +283,7 @@ def _play(
     )
     grade = grade_answer(scenario, transcript)
     counts = db_change_counts(diff, int(read["handoff"] is not None), read["waitlist"])
+    mismatches = _mismatches(scenario, counts)
     return ScenarioResult(
         scenario_id=scenario.id,
         observed_outcome=observed,
@@ -293,6 +294,7 @@ def _play(
             and not hits
             and figures == 0
             and not notes
+            and not mismatches
         ),
         facts_missing=grade.facts_missing,
         forbidden_hits=hits,
@@ -306,7 +308,7 @@ def _play(
         judge=grade.judge,
         handoff_record_complete=_handoff_complete(read["handoff"]),
         transcript=transcript,
-        db_change_mismatches=_mismatches(scenario, counts),
+        db_change_mismatches=mismatches,
         worker=worker.number,
         copy_path=str(live),
     )

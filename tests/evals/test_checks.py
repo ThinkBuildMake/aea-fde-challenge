@@ -150,6 +150,11 @@ def test_figure_check():
     assert count("Owed: $1,200.50", '{"balance": 1200.5}') == 0
     assert count("Owed: $1,200.50", '{"balanceCents": 120050}') == 0
     assert count("$10 and $20", "10") == 1
+    assert count("It is $19.", '{"date": "2026-10-19", "id": "INV-200019"}') == 1
+    assert (
+        count("It is $12.", '{"window": "12:00-16:00", "phone": "512-555-0112"}') == 1
+    )
+    assert count("It is $19.", '{"cents": 1900}') == 0
     assert count("No money here.") == 0
     earlier = [("", ['{"cents": 8900}']), ("It is $89.", [])]
     assert unsupported_figures(earlier) == 0

@@ -109,7 +109,12 @@ def compute_summary(
     )
     answered = [r for r in results if r.observed_outcome != "error"]
     booking_turns = [
-        r.turns for s, r in played if s.driver == "booking" and r in answered
+        r.turns
+        for s, r in played
+        if s.driver == "booking"
+        and s.kind in HANDLED_KINDS
+        and s.expected.outcome == "contained"
+        and r in answered
     ]
     return Summary(
         projected_containment_pct=round(projected / TOTAL_CALLS * 100, 1),

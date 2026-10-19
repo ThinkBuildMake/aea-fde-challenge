@@ -99,3 +99,17 @@ def test_format_summary_prints_the_ev3_numbers(live: Settings, tmp_path: Path):
         "Errored: 0",
     ):
         assert label in text
+
+
+def test_only_the_error_type_goes_to_langfuse():
+    from app.evals.langfuse_report import _output
+    from app.evals.records import ScenarioResult
+
+    out = _output(
+        ScenarioResult(
+            scenario_id="X",
+            observed_outcome="error",
+            error="RuntimeError: provider said secret-ish text",
+        )
+    )
+    assert out["error"] == "RuntimeError"

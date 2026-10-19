@@ -6,7 +6,13 @@ import pytest
 
 from app.evals.records import RunEnvironment, RunResult, Scenario
 from app.settings import REPO_ROOT, Settings
-from tests.evals.helpers import caller_for, eight_scenarios, play, sha
+from tests.evals.helpers import (
+    caller_for,
+    eight_scenarios,
+    play,
+    sha,
+    write_small_index,
+)
 
 
 def test_each_scenario_runs_on_a_freshly_seeded_copy(live: Settings, tmp_path: Path):
@@ -17,6 +23,11 @@ def test_each_scenario_runs_on_a_freshly_seeded_copy(live: Settings, tmp_path: P
     assert len(run.scenarios) == 8 and all(r.error is None for r in run.scenarios)
     booked = [r for r in run.scenarios if r.scenario_id.startswith("SYN-BOOK")]
     for r in booked:
+        # A copy that was not reseeded would refuse slot 56 the second time on a worker.
+        writes = [line.has_write for line in r.transcript if line.role == "agent"]
+        print(r.scenario_id, "worker", r.worker, "agent write turns", sum(writes))
+        assert any(writes), r.scenario_id
+        assert r.contained_correct, r.scenario_id
         diff = r.db_diff
         assert len(diff["appointments"]["added"]) == 1
         (slot,) = diff["appointment_slots"]["changed"]
@@ -46,6 +57,7 @@ def test_a_failing_scenario_is_reported_not_skipped(live: Settings, tmp_path: Pa
 
 def test_run_record_names_its_environment(live: Settings, tmp_path: Path):
     scenarios = eight_scenarios()[:2]
+    version = write_small_index(live.INDEX_PATH)
     play(live, tmp_path, scenarios)
     record = json.loads((tmp_path / "runs" / "run.json").read_text())
     env = record["environment"]
@@ -58,7 +70,8 @@ def test_run_record_names_its_environment(live: Settings, tmp_path: Path):
         "embeddingModel",
     ):
         assert env[key] and env["modelVersions"][env[key]].endswith("-20260101")
-    assert env["kbIndexVersion"] == "none"
+    assert env["kbIndexVersion"] == version
+    print("kbIndexVersion in the record:", env["kbIndexVersion"])
     assert env["dbSnapshotId"] == "sha256:" + sha(live.SEED_DB_PATH)
     head = subprocess.run(
         ["git", "rev-parse", "HEAD"],
@@ -114,6 +127,8 @@ def test_db_change_mismatch_is_recorded_not_fatal(live: Settings, tmp_path: Path
     assert r.db_change_mismatches == ["appointmentsAdded: expected 2, saw 1"]
     assert run.summary.db_change_mismatches == 1
     assert r.observed_outcome == "contained"
+    assert r.contained_correct is False
+    assert run.summary.projected_containment_pct == 0.0
 
 
 def test_unsupported_figure_is_counted(live: Settings, tmp_path: Path):
