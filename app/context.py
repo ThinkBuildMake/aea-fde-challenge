@@ -2,7 +2,7 @@ import sqlite3
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
@@ -10,6 +10,9 @@ from fastapi.templating import Jinja2Templates
 from app.db import connect_app_db
 from app.llm import ModelProvider
 from app.settings import Settings
+
+if TYPE_CHECKING:
+    from app.safety.service import SafetyClassifier
 
 
 class Clock(Protocol):
@@ -27,6 +30,7 @@ class AppContext:
     model: ModelProvider
     clock: Clock
     templates: Jinja2Templates
+    safety: "SafetyClassifier | None" = None
 
     def open_app_db(self) -> sqlite3.Connection:
         return connect_app_db(self.settings.APP_DB_PATH)
