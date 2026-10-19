@@ -7,8 +7,8 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.context import AppContext, get_ctx, get_db
-from app.conversation.turn import run_turn
 from app.conversation.service import close_idle_conversations
+from app.conversation.turn import run_turn
 from app.errors import AppError
 from app.negotiation import respond
 from app.types import (
