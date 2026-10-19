@@ -55,7 +55,9 @@ def add(
         )
 
 
-def row(conn: sqlite3.Connection, cid: str) -> tuple[str | None, str | None, str | None]:
+def row(
+    conn: sqlite3.Connection, cid: str
+) -> tuple[str | None, str | None, str | None]:
     found = conn.execute(
         "SELECT outcome, outcome_reason, ended_at FROM conversations WHERE id = ?",
         (cid,),
