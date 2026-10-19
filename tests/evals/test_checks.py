@@ -41,8 +41,11 @@ def run(copy: Path, *statements: str) -> None:
 def book(slot: int, customer: str) -> list[str]:
     return [
         f"UPDATE appointment_slots SET status = 'booked' WHERE slot_id = {slot}",
-        "INSERT INTO appointments (slot_id, customer_id, issue_description, "
-        f"created_at, status) VALUES ({slot}, '{customer}', 'x', '2026-10-16', 'scheduled')",
+        (
+            "INSERT INTO appointments (slot_id, customer_id, issue_description, "
+            f"created_at, status) VALUES ({slot}, '{customer}', 'x', '2026-10-16', "
+            "'scheduled')"
+        ),
     ]
 
 

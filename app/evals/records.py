@@ -85,6 +85,7 @@ class ScenarioResult(Model):
     transcript: list[TranscriptLine] = Field(default_factory=list)
     db_change_mismatches: list[str] = Field(default_factory=list)
     worker: int | None = None
+    copy_path: str | None = None
     error: str | None = None
 
 

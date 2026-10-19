@@ -92,7 +92,7 @@ def test_summary_counts():
     bad = scenario("X", "billing", "happy")
     leak = scenario("L", "billing", "edge", customer_id="MHC-10002")
     scenarios = [book, safe, esc, bad, leak]
-    agent = lambda text, ms, write=False: TranscriptLine(  # noqa: E731
+    agent = lambda text, ms, write=False: TranscriptLine(
         role="agent", text=text, latency_ms=ms, has_write=write
     )
     results = [
