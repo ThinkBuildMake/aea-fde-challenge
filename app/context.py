@@ -14,6 +14,7 @@ from app.llm import ModelProvider
 from app.settings import Settings
 
 if TYPE_CHECKING:
+    from app.monitoring.spend import KeyUsageCache
     from app.safety.service import SafetyClassifier
 
 
@@ -34,6 +35,7 @@ class AppContext:
     templates: Jinja2Templates
     embedder: Embedder
     index: IndexStore
+    spend: "KeyUsageCache"
     safety: "SafetyClassifier | None" = None
 
     def open_app_db(self) -> sqlite3.Connection:

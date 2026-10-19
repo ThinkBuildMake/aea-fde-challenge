@@ -72,7 +72,8 @@ def test_exported_file_has_no_card_number(client, started, tmp_path):
     _, public = draft(client, started, [CARDS[0]])
     out = tmp_path / "out"
     assert run(client, out) == 0
-    text = (out / f"CAND-{public[:8]}.json").read_text()
+    # The random hex ids can hold a long run of digits by chance; drop them first.
+    text = (out / f"CAND-{public[:8]}.json").read_text().replace(public, "")
     assert not re.search(r"\d{13,19}", text) and not CARD_RUN.search(text)
 
 
@@ -86,6 +87,8 @@ def test_five_card_messages_never_reach_a_draft(client, started, tmp_path):
         (out / f"CAND-{public[:8]}.json").read_text(),
     ]  # fmt: skip
     for text in texts:
+        # The random hex ids can hold a long run of digits by chance; drop them first.
+        text = text.replace(public, "").replace(_secret, "")
         assert not re.search(r"\d{13,19}", text) and not CARD_RUN.search(text)
 
 

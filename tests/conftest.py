@@ -85,3 +85,18 @@ def screen_says_safe(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyP
             verdict="safe", reason="no_hazard"
         ),
     )
+
+
+@pytest.fixture(autouse=True)
+def key_usage_offline(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
+    """The gate never reaches OpenRouter's key usage; only the opt-in live test does."""
+    if request.module.__name__.startswith(
+        ("tests.test_spend_live", "tests.test_overview_spend")
+    ):
+        return
+    from app.monitoring.spend import KeyUsageUnavailable, OpenRouterKeyUsage
+
+    def offline(self: OpenRouterKeyUsage) -> float:
+        raise KeyUsageUnavailable("offline in tests")
+
+    monkeypatch.setattr(OpenRouterKeyUsage, "read", offline)
