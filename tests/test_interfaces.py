@@ -31,8 +31,14 @@ FUNCTIONS = [
         scheduling.book_visit,
         ["ctx", "customer_id", "slot_id", "issue", "conversation_id"],
     ),
-    (scheduling.move_visit, ["ctx", "customer_id", "appointment_id", "new_slot_id"]),
-    (scheduling.cancel_visit, ["ctx", "customer_id", "appointment_id"]),
+    (
+        scheduling.move_visit,
+        ["ctx", "customer_id", "appointment_id", "new_slot_id", "conversation_id"],
+    ),
+    (
+        scheduling.cancel_visit,
+        ["ctx", "customer_id", "appointment_id", "conversation_id"],
+    ),
     (scheduling.get_billing, ["ctx", "customer_id"]),
     (scheduling.create_payment_link, ["ctx", "customer_id", "invoice_id"]),
     (scheduling.reset_scheduling, ["ctx"]),

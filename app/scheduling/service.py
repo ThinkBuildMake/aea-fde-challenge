@@ -3,7 +3,8 @@ import re
 import sqlite3
 import uuid
 from contextlib import closing
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo
 
 from app.context import AppContext
 from app.logs import log_event
@@ -194,6 +195,19 @@ def find_open_windows(
     return OpenWindows(windows=windows, matched_request=False, reason=None)
 
 
+LATE_FEE_HOURS = 24
+CHICAGO = ZoneInfo("America/Chicago")
+
+
+def _hours_before(ctx: AppContext, slot_date: str, window: str) -> float:
+    """Hours from the reference clock to the window start, both in America/Chicago."""
+    start = datetime.fromisoformat(f"{slot_date}T{window[:5]}").replace(tzinfo=CHICAGO)
+    now = datetime.fromisoformat(
+        f"{ctx.settings.REFERENCE_DATE}T{ctx.settings.REFERENCE_TIME}"
+    ).replace(tzinfo=CHICAGO)
+    return (start.astimezone(UTC) - now.astimezone(UTC)).total_seconds() / 3600
+
+
 def list_appointments(ctx: AppContext, customer_id: str) -> list[AppointmentView]:
     try:
         with closing(connect(ctx)) as conn:
@@ -208,9 +222,6 @@ def list_appointments(ctx: AppContext, customer_id: str) -> list[AppointmentView
             ).fetchall()
     except sqlite3.Error as e:
         raise SchedulingUnavailable("scheduling database unavailable") from e
-    now = datetime.fromisoformat(
-        f"{ctx.settings.REFERENCE_DATE}T{ctx.settings.REFERENCE_TIME}"
-    )
     return [
         AppointmentView(
             appointment_id=r["appointment_id"],
@@ -220,11 +231,8 @@ def list_appointments(ctx: AppContext, customer_id: str) -> list[AppointmentView
             service_type=r["service_type"],
             zone=r["zone"],
             issue=r["issue_description"] or "",
-            late_cancel_fee_applies=datetime.fromisoformat(
-                f"{r['slot_date']}T{r['window'][:5]}"
-            )
-            - now
-            < timedelta(hours=24),
+            late_cancel_fee_applies=_hours_before(ctx, r["slot_date"], r["window"])
+            < LATE_FEE_HOURS,
         )
         for r in rows
     ]
@@ -247,7 +255,15 @@ def book_visit(
     conversation_id: str,
 ) -> BookedVisit:
     visit = _claim_slot(ctx, customer_id, slot_id, issue)
-    _record_book(ctx, conversation_id, customer_id, visit)
+    _record_change(
+        ctx,
+        conversation_id,
+        "book",
+        customer_id,
+        visit.appointment_id,
+        visit.slot_id,
+        visit=visit,
+    )
     return visit
 
 
@@ -269,13 +285,10 @@ def _claim_slot(
         raise SchedulingUnavailable("scheduling database unavailable") from exc
 
 
-def _book_in_transaction(
-    ctx: AppContext,
-    conn: sqlite3.Connection,
-    customer_id: str,
-    slot_id: int,
-    issue: str,
-) -> BookedVisit:
+def _claim_in_transaction(
+    ctx: AppContext, conn: sqlite3.Connection, customer_id: str, slot_id: int
+) -> sqlite3.Row:
+    """Check the slot for this customer and mark it booked; returns the slot row."""
     slot = conn.execute(
         "SELECT s.slot_date, s.window, s.zone, s.service_type, s.status, "
         "t.name AS technician_name FROM appointment_slots s "
@@ -308,6 +321,17 @@ def _book_in_transaction(
     )
     if claimed.rowcount != 1:
         raise SlotUnavailable("slot is not available")
+    return slot
+
+
+def _book_in_transaction(
+    ctx: AppContext,
+    conn: sqlite3.Connection,
+    customer_id: str,
+    slot_id: int,
+    issue: str,
+) -> BookedVisit:
+    slot = _claim_in_transaction(ctx, conn, customer_id, slot_id)
     created = conn.execute(
         "INSERT INTO appointments (slot_id, customer_id, issue_description, "
         "created_at, status, is_warranty_visit) VALUES (?, ?, ?, ?, 'scheduled', 0)",
@@ -324,45 +348,168 @@ def _book_in_transaction(
     )
 
 
-def _record_book(
-    ctx: AppContext, conversation_id: str, customer_id: str, visit: BookedVisit
+def _record_change(
+    ctx: AppContext,
+    conversation_id: str,
+    action: str,
+    customer_id: str,
+    appointment_id: int,
+    slot_id: int,
+    previous_slot_id: int | None = None,
+    visit: BookedVisit | None = None,
+    late_fee: bool | None = None,
 ) -> None:
-    """The audit row; a failure here is logged and never undoes the booking."""
+    """The audit row; a failure here is logged and never undoes the change."""
     try:
         with closing(ctx.open_app_db()) as app_db:
             app_db.execute(
                 "INSERT INTO visit_changes (conversation_id, action, appointment_id, "
-                "slot_id, customer_id, confirmed_date, confirmed_window, "
-                "confirmed_technician) VALUES (?, 'book', ?, ?, ?, ?, ?, ?)",
+                "slot_id, previous_slot_id, customer_id, confirmed_date, "
+                "confirmed_window, confirmed_technician, late_fee_applied) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     conversation_id,
-                    visit.appointment_id,
-                    visit.slot_id,
+                    action,
+                    appointment_id,
+                    slot_id,
+                    previous_slot_id,
                     customer_id,
-                    visit.date,
-                    visit.window,
-                    visit.technician_name,
+                    visit.date if visit else None,
+                    visit.window if visit else None,
+                    visit.technician_name if visit else None,
+                    None if late_fee is None else int(late_fee),
                 ),
             )
-    except Exception as exc:  # noqa: BLE001 - never undo the booking
+    except Exception as exc:  # noqa: BLE001 - never undo the change
         log_event(
             "visit_change_audit_failed",
-            appointment_id=visit.appointment_id,
-            slot_id=visit.slot_id,
+            appointment_id=appointment_id,
+            slot_id=slot_id,
             error=type(exc).__name__,
         )
 
 
+def _own_appointment(
+    conn: sqlite3.Connection, customer_id: str, appointment_id: int
+) -> sqlite3.Row:
+    row = conn.execute(
+        "SELECT a.status, a.slot_id, s.slot_date, s.window FROM appointments a "
+        "JOIN appointment_slots s ON s.slot_id = a.slot_id "
+        "WHERE a.appointment_id = ? AND a.customer_id = ?",
+        (appointment_id, customer_id),
+    ).fetchone()
+    if row is None:
+        raise AppointmentNotFound("appointment not found")
+    return row
+
+
+def _free_slot(conn: sqlite3.Connection, slot_id: int) -> None:
+    freed = conn.execute(
+        "UPDATE appointment_slots SET status = 'open' "
+        "WHERE slot_id = ? AND status = 'booked'",
+        (slot_id,),
+    )
+    if freed.rowcount != 1:
+        raise SchedulingUnavailable("slot state is inconsistent")
+
+
+def _locked(ctx: AppContext, work):  # noqa: ANN001, ANN202
+    """Run work(conn) in one write-locked transaction."""
+    try:
+        with closing(connect(ctx)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                result = work(conn)
+                conn.commit()
+                return result
+            except BaseException:
+                conn.rollback()
+                raise
+    except sqlite3.Error as exc:
+        raise SchedulingUnavailable("scheduling database unavailable") from exc
+
+
 def move_visit(
-    ctx: AppContext, customer_id: str, appointment_id: int, new_slot_id: int
+    ctx: AppContext,
+    customer_id: str,
+    appointment_id: int,
+    new_slot_id: int,
+    conversation_id: str,
 ) -> MoveResult:
-    raise SchedulingUnavailable("not implemented")
+    def work(conn: sqlite3.Connection) -> tuple[MoveResult, int]:
+        old = _own_appointment(conn, customer_id, appointment_id)
+        if old["status"] != "scheduled":
+            raise NotEligible("not_scheduled")
+        slot = _claim_in_transaction(ctx, conn, customer_id, new_slot_id)
+        moved = conn.execute(
+            "UPDATE appointments SET slot_id = ? "
+            "WHERE appointment_id = ? AND status = 'scheduled'",
+            (new_slot_id, appointment_id),
+        )
+        if moved.rowcount != 1:
+            raise SlotUnavailable("appointment can no longer move")
+        _free_slot(conn, old["slot_id"])
+        visit = BookedVisit(
+            appointment_id=appointment_id,
+            slot_id=new_slot_id,
+            date=slot["slot_date"],
+            window=slot["window"],
+            technician_name=slot["technician_name"],
+            service_type=slot["service_type"],
+            zone=slot["zone"],
+        )
+        late = _hours_before(ctx, old["slot_date"], old["window"]) < LATE_FEE_HOURS
+        return MoveResult(booking=visit, late_fee_applies=late), old["slot_id"]
+
+    result, previous = _locked(ctx, work)
+    _record_change(
+        ctx,
+        conversation_id,
+        "move",
+        customer_id,
+        appointment_id,
+        new_slot_id,
+        previous_slot_id=previous,
+        visit=result.booking,
+        late_fee=result.late_fee_applies,
+    )
+    return result
 
 
 def cancel_visit(
-    ctx: AppContext, customer_id: str, appointment_id: int
+    ctx: AppContext, customer_id: str, appointment_id: int, conversation_id: str
 ) -> CancelResult:
-    raise SchedulingUnavailable("not implemented")
+    def work(conn: sqlite3.Connection) -> CancelResult:
+        row = _own_appointment(conn, customer_id, appointment_id)
+        if row["status"] != "scheduled":
+            raise AppointmentNotFound("appointment not found")
+        cancelled = conn.execute(
+            "UPDATE appointments SET status = 'cancelled' "
+            "WHERE appointment_id = ? AND status = 'scheduled'",
+            (appointment_id,),
+        )
+        if cancelled.rowcount != 1:
+            raise AppointmentNotFound("appointment not found")
+        _free_slot(conn, row["slot_id"])
+        hours = _hours_before(ctx, row["slot_date"], row["window"])
+        return CancelResult(
+            appointment_id=appointment_id,
+            freed_slot_id=row["slot_id"],
+            late_fee_applies=hours < LATE_FEE_HOURS,
+            hours_before=hours,
+        )
+
+    result = _locked(ctx, work)
+    _record_change(
+        ctx,
+        conversation_id,
+        "cancel",
+        customer_id,
+        appointment_id,
+        result.freed_slot_id,
+        late_fee=result.late_fee_applies,
+    )
+    return result
 
 
 def get_billing(ctx: AppContext, customer_id: str) -> Billing:

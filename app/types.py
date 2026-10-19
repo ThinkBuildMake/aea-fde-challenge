@@ -462,7 +462,7 @@ class OpenWindows(Model):
 
 
 class MoveResult(Model):
-    booking: Booking
+    booking: BookedVisit
     late_fee_applies: bool
 
 
