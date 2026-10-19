@@ -145,3 +145,37 @@ def test_no_sideways_scroll_at_390(page: Page, live_url: str, overview_stub):
     assert page.evaluate(
         "document.documentElement.scrollWidth <= document.documentElement.clientWidth"
     )
+
+
+def test_list_failure_says_could_not_load(page: Page, live_url: str, overview_stub):
+    json_route(page, HANDOFFS, {"error": {"code": "x"}}, status=500)
+    page.goto(live_url + "/business?tab=handoffs")
+    expect(page.locator("#rows .empty")).to_have_text(
+        "Could not load handoffs. Reload to try again."
+    )
+
+
+def test_followed_up_failure_shows_inline_error(
+    page: Page, live_url: str, overview_stub
+):
+    stub_list(page, handoff())
+    json_route(
+        page, re.compile(r".*/handoffs/7/followed-up$"), {"error": {}}, status=500
+    )
+    page.goto(live_url + "/business?tab=handoffs")
+    btn = page.locator(".handoff-row button")
+    btn.click()
+    error = page.locator(".handoff-row .send-error")
+    expect(error).to_have_text("Could not save. Try again.")
+    expect(error).to_have_attribute("role", "alert")
+    expect(btn).to_have_text("Mark followed up")
+    expect(btn).to_be_enabled()
+    expect(page.locator("[data-tile=handoffs-waiting] .tile-value")).to_have_text("1")
+
+
+def test_safety_stop_text_is_separated(page: Page, live_url: str, overview_stub):
+    stub_list(page, handoff(kind="safety_stop", reason="safety_stop"))
+    page.goto(live_url + "/business?tab=handoffs")
+    expect(page.locator(".handoff-row .summary")).to_have_text(
+        "Safety stop. Told: A supervisor calls within 1 business day about the double charge."
+    )

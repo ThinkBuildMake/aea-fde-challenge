@@ -38,6 +38,26 @@ window.Biz = (function () {
     });
   }
 
+  // One "Could not load" line where the rows would be.
+  function failRows(container, text) {
+    container.textContent = "";
+    container.appendChild(el("p", "empty", text));
+  }
+
+  // An inline line after `node` when a save fails; clearError removes it on the next success.
+  function saveError(node) {
+    var next = node.nextElementSibling;
+    if (next && next.classList.contains("send-error")) return;
+    var line = el("span", "send-error", "Could not save. Try again.");
+    line.setAttribute("role", "alert");
+    node.insertAdjacentElement("afterend", line);
+  }
+
+  function clearError(node) {
+    var next = node.nextElementSibling;
+    if (next && next.classList.contains("send-error")) next.remove();
+  }
+
   function adjustWaiting(delta) {
     var v = document.querySelector("[data-tile=handoffs-waiting] .tile-value");
     if (!v) return;
@@ -60,6 +80,9 @@ window.Biz = (function () {
     },
     el: el,
     setRows: setRows,
+    failRows: failRows,
+    saveError: saveError,
+    clearError: clearError,
     adjustWaiting: adjustWaiting,
     label: label,
   };

@@ -194,3 +194,15 @@ def test_dropped_texts_absent(page: Page, live_url: str, stub):
     text = page.inner_text("body").lower()
     for dropped in ("example data", "all numbers on this page"):
         assert dropped not in text
+
+
+def test_tabs_use_wireframe_colours(page: Page, live_url: str, stub):
+    open_tab(page, live_url)
+    style = (
+        "e => { const s = getComputedStyle(e); "
+        "return [s.borderTopColor, s.color, s.backgroundColor]; }"
+    )
+    inactive = page.locator("a.tab:not(.active)").first.evaluate(style)
+    active = page.locator("a.tab.active").evaluate(style)
+    assert inactive == ["rgb(154, 168, 181)", "rgb(20, 32, 43)", "rgb(255, 255, 255)"]
+    assert active == ["rgb(15, 94, 140)", "rgb(255, 255, 255)", "rgb(15, 94, 140)"]

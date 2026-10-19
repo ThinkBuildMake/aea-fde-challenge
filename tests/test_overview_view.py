@@ -177,3 +177,21 @@ def test_all_vr_guarantees_fold_into_one_row():
     assert len(rows) == 5
     assert rows[2]["name"] == "Booking mismatches (daily check)"
     assert rows[2]["now"] == "3" and rows[2]["status"] == "Over limit"
+
+
+def test_line_dots_match_line_points():
+    assert view.line_dots([None, None, 50], 40, 500, 10, 140, 100) == [(500.0, 75.0)]
+    assert view.line_dots([2.0], 30, 390, 0, 100, 8) == [(30.0, 75.0)]
+    values = [54, None, 61, 57]
+    dots = view.line_dots(values, 40, 500, 10, 140, 100)
+    assert len(dots) == 3
+    assert " ".join(f"{x:.1f},{y:.1f}" for x, y in dots) == view.line_points(
+        values, 40, 500, 10, 140, 100
+    )
+
+
+def test_view_has_dots_for_both_charts():
+    v = view.overview_view(make_overview())
+    assert len(v["settled"]["dots"]) == 7
+    assert v["settled"]["dots"][0] == (40.0, 69.8)
+    assert len(v["latency"]["dots"]) == 24

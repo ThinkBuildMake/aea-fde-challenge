@@ -1,3 +1,4 @@
+import json
 import re
 from datetime import UTC, datetime, timedelta
 
@@ -195,3 +196,92 @@ def test_no_sideways_scroll_at_390(page: Page, live_url: str, overview_stub):
     assert page.evaluate(
         "document.documentElement.scrollWidth <= document.documentElement.clientWidth"
     )
+
+
+def test_list_failure_says_could_not_load(page: Page, live_url: str, overview_stub):
+    json_route(page, LIST, {"error": {}}, status=500)
+    page.goto(live_url + "/business?tab=conversations")
+    expect(page.locator("#convo-list .empty")).to_have_text(
+        "Could not load conversations. Reload to try again."
+    )
+
+
+def test_flag_failure_shows_inline_error(page: Page, live_url: str, overview_stub):
+    stub(page)
+    json_route(page, re.compile(r".*/conversations/[^/]+/flag$"), {}, status=500)
+    open_tab(page, live_url)
+    btn = page.locator(".btn-flag")
+    btn.click()
+    page.fill("#note", "quoted the wrong window")
+    page.press("#note", "Enter")
+    expect(page.locator("#detail .send-error")).to_have_text(
+        "Could not save. Try again."
+    )
+    expect(btn).to_have_text("Flag as wrong")
+    expect(page.locator("#note")).to_be_enabled()
+
+
+def test_stale_detail_response_is_ignored(page: Page, live_url: str, overview_stub):
+    stub(page)
+    held: list = []
+    page.route(
+        re.compile(rf".*/conversations/{IDS[1]}$"), lambda route: held.append(route)
+    )
+    open_tab(page, live_url)
+    rows = page.locator(".convo-btn")
+    rows.nth(1).click()
+    rows.nth(2).click()
+    title = page.locator("#detail .detail-title")
+    expect(title).to_have_text("Safety concern (Safety stop)")
+    assert len(held) == 1
+    late = ConversationDetail(
+        summary=summary(1, 14, "handoff", "billing_dispute"),
+        turns=[],
+        handoff=None,
+        flags=[],
+        eval_candidate=None,
+    ).model_dump(by_alias=True, mode="json")
+    held[0].fulfill(status=200, content_type="application/json", body=json.dumps(late))
+    page.wait_for_timeout(300)
+    expect(title).to_have_text("Safety concern (Safety stop)")
+
+
+def test_ages_over_a_day_show_days(page: Page, live_url: str, overview_stub):
+    items = [summary(0, 49 * 60, "contained", "book_visit")]
+    json_route(
+        page,
+        LIST,
+        ConversationList(conversations=items).model_dump(by_alias=True, mode="json"),
+    )
+    page.goto(live_url + "/business?tab=conversations")
+    expect(page.locator(".convo-btn .when")).to_have_text("2 days")
+
+
+def test_hostile_text_renders_as_text(page: Page, live_url: str, overview_stub):
+    stub(page)
+    hostile = turn(1, 'a"/?#b', []).model_copy(
+        update={
+            "caller_text": '<img src=x onerror="window.__xss=1">',
+            "reply_text": "<script>window.__xss=1</script>",
+        }
+    )
+    detail = ConversationDetail(
+        summary=summary(0, 3, "contained", "book_visit"),
+        turns=[hostile],
+        handoff=None,
+        flags=[],
+        eval_candidate=None,
+    )
+    json_route(
+        page,
+        re.compile(rf".*/conversations/{IDS[0]}$"),
+        detail.model_dump(by_alias=True, mode="json"),
+    )
+    open_tab(page, live_url)
+    transcript = page.locator("#detail .transcript")
+    expect(transcript).to_contain_text('Caller: <img src=x onerror="window.__xss=1">')
+    expect(transcript).to_contain_text("Agent: <script>window.__xss=1</script>")
+    assert page.locator("#detail img, #detail script").count() == 0
+    assert page.evaluate("window.__xss") is None
+    href = page.locator("#detail a.trace-link").get_attribute("href")
+    assert href is not None and href.endswith("/trace/a%22%2F%3F%23b")

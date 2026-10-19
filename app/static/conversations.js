@@ -12,7 +12,10 @@
   }
   function whenOf(startedAt) {
     var m = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 60000));
-    return m < 60 ? m + " min" : Math.floor(m / 60) + " h";
+    if (m < 60) return m + " min";
+    if (m < 1440) return Math.floor(m / 60) + " h";
+    var d = Math.floor(m / 1440);
+    return d + (d === 1 ? " day" : " days");
   }
 
   function renderTurn(t) {
@@ -105,9 +108,11 @@
           .then(function () {
             flagged = true;
             paintFlag();
+            B.clearError(flagBtn);
           })
           .catch(function () {
             input.disabled = false;
+            B.saveError(flagBtn);
           });
       });
       detailEl.insertBefore(box, savedLine);
@@ -135,8 +140,11 @@
       B.postJSON("/conversations/" + encodeURIComponent(id) + "/eval-candidate")
         .then(function (b) {
           showSaved(b.candidate.scenarioId);
+          B.clearError(evalBtn);
         })
-        .catch(function () {})
+        .catch(function () {
+          B.saveError(evalBtn);
+        })
         .then(function () {
           evalBtn.disabled = !s.outcome || s.outcome === "active";
         });
@@ -147,15 +155,19 @@
     if (flagged) openBox();
   }
 
+  var latest = null;
+
   function select(btn, id) {
+    latest = id;
     Array.prototype.forEach.call(listEl.children, function (c) {
       c.classList.toggle("selected", c === btn);
     });
     B.getJSON("/conversations/" + encodeURIComponent(id))
-      .then(renderDetail)
+      .then(function (detail) {
+        if (id === latest) renderDetail(detail);
+      })
       .catch(function () {
-        detailEl.textContent = "";
-        detailEl.appendChild(B.el("p", "empty", "No data yet"));
+        if (id === latest) B.failRows(detailEl, "Could not load this conversation.");
       });
   }
 
@@ -179,6 +191,6 @@
       else detailEl.appendChild(B.el("p", "empty", "No data yet"));
     })
     .catch(function () {
-      B.setRows(listEl, []);
+      B.failRows(listEl, "Could not load conversations. Reload to try again.");
     });
 })();

@@ -37,6 +37,6 @@
       B.setRows(document.getElementById("rows"), (body.entries || []).map(row));
     })
     .catch(function () {
-      B.setRows(document.getElementById("rows"), []);
+      B.failRows(document.getElementById("rows"), "Could not load the waitlist. Reload to try again.");
     });
 })();

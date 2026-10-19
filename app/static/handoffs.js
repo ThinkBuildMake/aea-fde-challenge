@@ -20,6 +20,7 @@
     var text = h.kind === "safety_stop" && h.reason === "safety_stop" ? "" : B.label(h.reason);
     if (h.byError) text += ", after an error";
     if (h.toldCaller) text += (text ? ". " : "") + "Told: " + h.toldCaller;
+    if (summary.firstChild && text) text = ". " + text;
     summary.appendChild(document.createTextNode(text));
     r.appendChild(summary);
 
@@ -41,8 +42,11 @@
           done = !done;
           paint();
           B.adjustWaiting(done ? -1 : 1);
+          B.clearError(btn);
         })
-        .catch(function () {})
+        .catch(function () {
+          B.saveError(btn);
+        })
         .then(function () {
           btn.disabled = false;
         });
@@ -56,6 +60,6 @@
       B.setRows(document.getElementById("rows"), (body.handoffs || []).map(row));
     })
     .catch(function () {
-      B.setRows(document.getElementById("rows"), []);
+      B.failRows(document.getElementById("rows"), "Could not load handoffs. Reload to try again.");
     });
 })();
