@@ -148,3 +148,66 @@ def test_ob1_solved_answer_and_outcome_are_recorded(
     assert state(db, refused) == (None, None, None, None)
     assert solved(client, yes_id, "no").status_code == 409
     assert state(db, yes_id)[:2] == ("contained", "yes")
+
+
+def idle_row(
+    db: sqlite3.Connection, turns: int, resolved: bool, handoff: bool = False
+) -> str:
+    cid = str(uuid.uuid4())
+    two_hours_ago = "strftime('%Y-%m-%dT%H:%M:%fZ','now','-2 hours')"
+    db.execute(
+        "INSERT INTO conversations (id, last_activity_at, turn_count, resolved_at) "
+        f"VALUES (?, {two_hours_ago}, ?, {two_hours_ago if resolved else 'NULL'})",
+        (cid, turns),
+    )
+    if handoff:
+        db.execute(
+            "INSERT INTO handoffs (conversation_id, kind, reason, intent, told_caller) "
+            "VALUES (?, 'callback', 'r', 'i', 't')",
+            (cid,),
+        )
+    return cid
+
+
+def outcome_of(db: sqlite3.Connection, cid: str):
+    return db.execute(
+        "SELECT outcome, outcome_reason FROM conversations WHERE id = ?", (cid,)
+    ).fetchone()
+
+
+def test_start_closes_idle_resolved_as_contained(
+    client: TestClient, db: sqlite3.Connection
+):
+    cid = idle_row(db, turns=1, resolved=True)
+    assert client.post("/conversations").status_code == 201
+    assert outcome_of(db, cid) == ("contained", None)
+
+
+def test_start_closes_idle_unresolved_as_failed(
+    client: TestClient, db: sqlite3.Connection
+):
+    cid = idle_row(db, turns=1, resolved=False)
+    assert client.post("/conversations").status_code == 201
+    assert outcome_of(db, cid) == ("failed", "idle_unresolved")
+
+
+def test_start_closes_idle_without_message_as_no_message(
+    client: TestClient, db: sqlite3.Connection
+):
+    cid = idle_row(db, turns=0, resolved=False)
+    response = client.post("/conversations")
+    assert response.status_code == 201
+    assert outcome_of(db, cid) == ("failed", "no_message")
+    assert outcome_of(db, response.json()["conversationId"]) == (None, None)
+
+
+def test_failed_sweep_never_blocks_start(
+    client: TestClient, db: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
+):
+    def boom(*_args, **_kwargs):
+        raise sqlite3.OperationalError("locked")
+
+    monkeypatch.setattr("app.conversation.routes.close_idle_conversations", boom)
+    response = client.post("/conversations")
+    assert response.status_code == 201
+    assert outcome_of(db, response.json()["conversationId"]) == (None, None)

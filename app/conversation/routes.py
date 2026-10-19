@@ -1,10 +1,13 @@
+import logging
 import sqlite3
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.context import AppContext, get_ctx, get_db
+from app.conversation.service import close_idle_conversations
 from app.conversation.turn import run_turn
 from app.errors import AppError
 from app.negotiation import respond
@@ -16,6 +19,7 @@ from app.types import (
 )
 
 router = APIRouter()
+log = logging.getLogger("meridian.conversation")
 
 GREETING = (
     "Hi, I am the Meridian assistant. I can book a visit, check or change one, answer "
@@ -49,6 +53,10 @@ def start_conversation(
     ctx: AppContext = Depends(get_ctx),
     db: sqlite3.Connection = Depends(get_db),
 ) -> Response:
+    try:
+        close_idle_conversations(ctx, datetime.now(UTC))
+    except Exception:
+        log.warning("idle sweep skipped", exc_info=True)
     conversation_id = str(uuid.uuid4())
     db.execute("INSERT INTO conversations (id) VALUES (?)", (conversation_id,))
     body = StartConversationResponse(
