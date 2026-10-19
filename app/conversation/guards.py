@@ -104,6 +104,21 @@ def unzoned_town_instruction(towns: list[str]) -> str:
     )
 
 
+WARRANTY_INSTRUCTION = (
+    "Answer from what the caller has said, asking nothing first: for a part Meridian "
+    "repaired, the repair labor warranty from the repair date; otherwise the "
+    "manufacturer parts term for that brand and part and its registration condition, "
+    "then each Meridian labor warranty term and whether the system's age is inside it. "
+    "Never ask who installed or repaired it or about Comfort Club membership; state "
+    "those as conditions with the labor terms. Only if the brand or the system's age is missing, ask for just that in one "
+    "short question and state no terms."
+)
+HOLIDAY_INSTRUCTION = (
+    "For a holiday, name every date listed for it (each day of a range), whether the "
+    "office is closed and whether the emergency line is open."
+)
+
+
 def not_sure_first(text: str) -> str:
     """The reply led by the not-sure line, unless it already says it is not sure."""
     return text if "not sure" in text.casefold() else f"{NOT_SURE_LEAD} {text}"
