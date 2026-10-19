@@ -6,10 +6,8 @@ from fastapi.responses import HTMLResponse, Response
 from app.admin import require_admin
 from app.context import AppContext, get_ctx, get_db
 from app.errors import AppError
-from app.knowledge.service import index_status
-from app.monitoring.service import get_overview, now_iso
+from app.monitoring.service import get_health, get_overview, now_iso
 from app.negotiation import respond
-from app.scheduling.service import scheduling_status
 from app.types import (
     CandidateCreated,
     ConversationDetail,
@@ -20,8 +18,6 @@ from app.types import (
     FlagCreated,
     FlagInfo,
     FlagRequest,
-    Health,
-    HealthComponents,
 )
 
 router = APIRouter()
@@ -150,15 +146,7 @@ def create_eval_candidate(
 
 @router.api_route("/health", methods=["GET", "HEAD"])
 def health(request: Request, ctx: AppContext = Depends(get_ctx)) -> Response:
-    body = Health(
-        status="degraded",
-        components=HealthComponents(
-            scheduling_db="ok" if scheduling_status(ctx) == "ok" else "error",
-            app_db="ok",
-            index="loaded" if index_status(ctx).loaded else "missing",
-        ),
-    )
-    return respond(request, body)
+    return respond(request, get_health(ctx))
 
 
 @router.get("/admin/eval-candidates", dependencies=[Depends(require_admin)])

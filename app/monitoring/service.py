@@ -1,8 +1,14 @@
+import sqlite3
 from datetime import UTC, datetime
+from typing import Literal
 
 from app.context import AppContext
+from app.knowledge.service import index_status
+from app.scheduling.service import scheduling_status
 from app.types import (
     Guarantee,
+    Health,
+    HealthComponents,
     Outcomes,
     Overview,
     OverviewSpend,
@@ -15,6 +21,33 @@ from app.types import (
 
 def now_iso() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def app_db_status(ctx: AppContext) -> Literal["ok", "error"]:
+    try:
+        db = ctx.open_app_db()
+        try:
+            db.execute("SELECT 1 FROM conversations LIMIT 1")
+        finally:
+            db.close()
+    except sqlite3.Error:
+        return "error"
+    return "ok"
+
+
+def get_health(ctx: AppContext) -> Health:
+    """ok only when the scheduling DB, the app DB and the index are all healthy; reads only."""
+    components = HealthComponents(
+        scheduling_db="ok" if scheduling_status(ctx) == "ok" else "error",
+        app_db=app_db_status(ctx),
+        index="loaded" if index_status(ctx).loaded else "missing",
+    )
+    healthy = (components.scheduling_db, components.app_db, components.index) == (
+        "ok",
+        "ok",
+        "loaded",
+    )
+    return Health(status="ok" if healthy else "degraded", components=components)
 
 
 def get_overview(ctx: AppContext) -> Overview:
