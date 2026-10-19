@@ -214,3 +214,29 @@ def test_draft_name_clash_is_409(client: TestClient, db):
     assert response.status_code == 409
     assert response.json()["error"] == "candidate_name_taken"
     assert count(db, "eval_candidates") == 1
+
+
+def biz_data(client: TestClient) -> dict:
+    page = client.get("/business?tab=conversations", headers=ADMIN)
+    assert page.status_code == 200
+    found = re.search(
+        r'<script type="application/json" id="biz-data">(.*?)</script>',
+        page.text,
+        re.DOTALL,
+    )
+    assert found
+    return json.loads(found.group(1))
+
+
+def test_business_page_links_traces_to_the_langfuse_project(
+    client: TestClient, started: Settings
+):
+    from app.conversation.tracing import RecordingTracer
+
+    base = started.LANGFUSE_BASE_URL.rstrip("/")
+    client.app.state.ctx.tracer = None
+    assert biz_data(client)["traceBase"] == f"{base}/trace"
+    client.app.state.ctx.tracer = RecordingTracer(project_id="proj-1")
+    trace_base = biz_data(client)["traceBase"]
+    print(f"\ntraceBase={trace_base}")
+    assert trace_base == f"{base}/project/proj-1/traces"

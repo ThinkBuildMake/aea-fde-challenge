@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from app.conversation.tracing import fetch_project_id, trace_link_base
 from app.knowledge.embeddings import OpenRouterEmbedder
 from app.llm import FakeModelProvider
 from app.main import create_app
@@ -119,6 +120,11 @@ def test_turn_lands_in_langfuse(live: Settings):
     ).fetchone()
     conn.close()
     assert trace_id and len(trace_id) == 32
+    assert live.LANGFUSE_PUBLIC_KEY and live.LANGFUSE_SECRET_KEY
+    auth = (
+        live.LANGFUSE_PUBLIC_KEY.get_secret_value(),
+        live.LANGFUSE_SECRET_KEY.get_secret_value(),
+    )
 
     found = observations(live, since, 5, traceId=trace_id)
     in_session = observations(live, since, 5, sessionId=public_id)
@@ -147,3 +153,11 @@ def test_turn_lands_in_langfuse(live: Settings):
         if o["name"] in ("safety_screen", "model_call", "search_knowledge"):
             assert o["usageDetails"].get("input", 0) > 0
             assert o["costDetails"]["total"] > 0
+
+    project_id = fetch_project_id(live.LANGFUSE_BASE_URL, auth[0], auth[1], 20)
+    assert project_id
+    assert app.state.ctx.tracer.project_id == project_id
+    link = f"{trace_link_base(live.LANGFUSE_BASE_URL, app.state.ctx.tracer)}/{trace_id}"
+    page = httpx2.get(link, timeout=30)
+    print(f"\nOpen trace link: {link} -> {page.status_code}")
+    assert page.status_code == 200

@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal, Protocol
 
+import httpx2
 from langfuse import LangfuseOtelSpanAttributes as Attr
 from langfuse import __version__ as langfuse_version
 from langfuse._client.attributes import (
@@ -116,9 +117,10 @@ class Tracer(Protocol):
 class RecordingTracer:
     """The in-memory test double: keeps every trace and confirms it at once."""
 
-    def __init__(self) -> None:
+    def __init__(self, project_id: str | None = None) -> None:
         self.traces: list[TurnTrace] = []
         self.ids: list[str] = []
+        self.project_id = project_id
 
     def send(self, trace: TurnTrace, on_sent: Callable[[str], None]) -> None:
         self.traces.append(trace)
@@ -157,6 +159,34 @@ def _attributes(o: Observation, session_id: str) -> dict[str, Any]:
     return {**attrs, Attr.TRACE_SESSION_ID: session_id}
 
 
+def fetch_project_id(
+    base_url: str, public_key: str, secret_key: str, timeout_s: float
+) -> str | None:
+    """The id of the Langfuse project the keys belong to; None (and one warning) on any failure."""
+    try:
+        response = httpx2.get(
+            base_url.rstrip("/") + "/api/public/projects",
+            auth=(public_key, secret_key),
+            timeout=timeout_s,
+        )
+        response.raise_for_status()
+        return str(response.json()["data"][0]["id"])
+    except Exception as exc:  # noqa: BLE001 - a missing project id only degrades the link
+        log_event(
+            "trace_project_lookup_failed",
+            level="warning",
+            error_type=type(exc).__name__,
+        )
+        return None
+
+
+def trace_link_base(base_url: str, tracer: Any) -> str:
+    """Where "Open trace" links point: the project's traces page, or Langfuse's redirect route."""
+    base = base_url.rstrip("/")
+    project_id = getattr(tracer, "project_id", None)
+    return f"{base}/project/{project_id}/traces" if project_id else f"{base}/trace"
+
+
 class LangfuseTracer:
     """Exports each trace as OpenTelemetry spans to Langfuse on one background worker."""
 
@@ -167,7 +197,15 @@ class LangfuseTracer:
         secret_key: str,
         timeout_s: float = 5.0,
         exporter: SpanExporter | None = None,
+        project_id: str | None = None,
     ) -> None:
+        self.project_id = project_id
+        # The project id is looked up only for a tracer that talks to Langfuse itself.
+        self._lookup = (
+            None
+            if exporter is not None
+            else (base_url, public_key, secret_key, timeout_s)
+        )
         auth = base64.b64encode(f"{public_key}:{secret_key}".encode()).decode()
         self._exporter = exporter or OTLPSpanExporter(
             endpoint=base_url.rstrip("/") + "/api/public/otel/v1/traces",
@@ -235,6 +273,8 @@ class LangfuseTracer:
         if outcome is not SpanExportResult.SUCCESS:
             log_event("trace_send_failed", level="warning", error_type="export_failed")
             return
+        if self._lookup is not None and self.project_id is None:
+            self.project_id = fetch_project_id(*self._lookup)
         try:
             on_sent(trace_id)
         except Exception as exc:  # noqa: BLE001 - a lost trace id never breaks a turn

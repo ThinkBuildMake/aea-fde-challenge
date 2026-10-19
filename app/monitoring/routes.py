@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from app.admin import require_admin
 from app.context import AppContext, get_ctx
+from app.conversation.tracing import trace_link_base
 from app.errors import AppError
 from app.monitoring import conversations
 from app.monitoring.service import get_health, get_overview
@@ -36,7 +37,9 @@ def business_page(
     context: dict[str, Any] = {"tabs": TABS, "tab": tab}
     context["view"] = overview_view(get_overview(ctx))
     if tab != "overview":
-        context["data"] = page_data(ctx.settings.LANGFUSE_BASE_URL)
+        context["data"] = page_data(
+            trace_link_base(ctx.settings.LANGFUSE_BASE_URL, ctx.tracer)
+        )
     return ctx.templates.TemplateResponse(request, "business.html", context)
 
 
