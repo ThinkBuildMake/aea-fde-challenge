@@ -33,6 +33,14 @@ def test_spaced_card_is_removed() -> None:
         "4111,1111,1111,1111",
         "4111_1111_1111_1111",
         "4111\u22121111\u22121111\u22121111",
+        "4111\u00a01111\u00a01111\u00a01111",
+        "\uff14\uff11\uff11\uff11 \uff11\uff11\uff11\uff11 \uff11\uff11\uff11\uff11 \uff11\uff11\uff11\uff11",
+        "\u0664\u0661\u0661\u0661\u0661\u0661\u0661\u0661\u0661\u0661\u0661\u0661\u0661\u0661\u0661\u0661",
+        "4111 1111 1111 1111 12/28 123",
+        "4111 - 1111 - 1111 - 1111 exp 12/28",
+        "4111, 1111, 1111, 1111",
+        "4111-1111 1111-1111",
+        "378282246310005",
     ],
 )
 def test_other_formats_removed_and_stable(text: str) -> None:
@@ -58,6 +66,13 @@ def test_phone_number_stays() -> None:
         "Book me for 2026/10/21 please",
         "INV-204411 and account MHC-10002",
         "Prices: $89, $245, $144",
+        "Account MHC-10002, 512-555-0102",
+        "512-555-0102, 4412 Oak Hollow Dr",
+        "MHC-10002 512-555-0102",
+        "Daniel Reyes 512-555-0104 4412 Oak Hollow",
+        "512-555-0102 / 512-555-0199",
+        "$1,200 and $3,400, 512-555-0102",
+        "Omar Patel, MHC-10002, 512-555-0102, 901 Brookside Ct",
     ],
 )
 def test_ordinary_numbers_stay(text: str) -> None:

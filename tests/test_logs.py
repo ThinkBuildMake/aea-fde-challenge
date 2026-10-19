@@ -44,3 +44,22 @@ def test_log_event_keeps_ordinary_numbers(capsys: pytest.CaptureFixture[str]) ->
         "$1,200",
         "2026/10/21",
     )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Account MHC-10002, 512-555-0102",
+        "512-555-0102, 4412 Oak Hollow Dr",
+        "MHC-10002 512-555-0102",
+        "Daniel Reyes 512-555-0104 4412 Oak Hollow",
+        "512-555-0102 / 512-555-0199",
+        "$1,200 and $3,400, 512-555-0102",
+        "Omar Patel, MHC-10002, 512-555-0102, 901 Brookside Ct",
+    ],
+)
+def test_log_event_keeps_identity_details(
+    capsys: pytest.CaptureFixture[str], text: str
+) -> None:
+    log_event("x", said=text)
+    assert json.loads(capsys.readouterr().out)["said"] == text
