@@ -249,15 +249,33 @@ def test_waitlist_oldest_first(client: TestClient, db: sqlite3.Connection):
     response = client.get("/waitlist")
     entries = response.json()["entries"]
     assert response.status_code == 200
+    print(
+        [
+            (
+                e["id"],
+                e["caller"]["name"],
+                e["caller"]["phone"],
+                e["serviceType"],
+                e["zone"],
+                e["held"],
+                e["waitingSeconds"],
+            )
+            for e in entries
+        ]
+    )
     assert [e["id"] for e in entries] == [older.id, newer.id]
-    first = entries[0]
-    assert first["caller"]["name"] == "Omar Patel"
-    assert first["caller"]["phone"] == "512-555-0102"
-    assert {"serviceType", "zone", "held", "waitingSeconds"} <= set(first)
+    for e in entries:
+        assert e["caller"]["name"] == "Omar Patel"
+        assert e["caller"]["phone"] == "512-555-0102"
+        assert e["caller"]["city"] == "Kyle"
+        assert {"serviceType", "zone", "held", "waitingSeconds"} <= set(e)
     assert abs(entries[0]["waitingSeconds"] - 120) <= 2
     assert abs(entries[1]["waitingSeconds"] - 60) <= 2
     assert older.conversation_public_id in response.text
-    assert "conversation_id" not in response.text
+    private_id = db.execute(
+        "SELECT conversation_id FROM waitlist_entries WHERE id = ?", (older.id,)
+    ).fetchone()[0]
+    assert private_id not in response.text
 
 
 def test_waitlist_survives_seed_reset(
@@ -266,5 +284,6 @@ def test_waitlist_survives_seed_reset(
     join(client, db, 115, "AC not cooling")
     shutil.copy(seed_path, started.SCHEDULING_DB_PATH)
     entries = client.get("/waitlist").json()["entries"]
+    print(len(entries), entries[0]["held"], entries[0]["caller"])
     assert len(entries) == 1
     assert entries[0]["held"] == {"date": "2026-10-21", "window": "08:00-12:00"}

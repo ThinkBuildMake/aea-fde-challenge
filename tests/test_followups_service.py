@@ -291,6 +291,13 @@ def test_joining_writes_one_row_and_nothing_else(
         "SELECT held_date, held_window, zone, service_type, caller_name, caller_phone "
         "FROM waitlist_entries"
     ).fetchall()
+    print(
+        [tuple(row) for row in rows],
+        "created:",
+        result.created,
+        "COUNT:",
+        len(rows),
+    )
     assert result.created is True
     assert [tuple(row) for row in rows] == [
         (
@@ -310,6 +317,7 @@ def test_asking_twice_writes_one_row(ctx: AppContext, conn: sqlite3.Connection):
     first = join_waitlist(ctx, entry)
     second = join_waitlist(ctx, entry)
     count = conn.execute("SELECT COUNT(*) FROM waitlist_entries").fetchone()[0]
+    print("created:", (first.created, second.created), "COUNT:", count)
     assert (first.created, second.created) == (True, False)
     assert second.entry.id == first.entry.id
     assert count == 1

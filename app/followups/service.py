@@ -288,9 +288,17 @@ def _waitlist_views(
         f"ON c.id = w.conversation_id WHERE {where} ORDER BY w.created_at, w.id",
         params,
     ).fetchall()
+    cities: dict[str, str] = {}
+    if rows:
+        try:
+            with closing(scheduling_store.connect(ctx)) as scheduling:
+                cities = dict(
+                    scheduling.execute("SELECT customer_id, city FROM customers")
+                )
+        except (scheduling_store.SchedulingUnavailable, sqlite3.Error):
+            pass
     views = []
     for row in rows:
-        found = _customer(ctx, row[2])
         views.append(
             WaitlistView(
                 id=row[0],
@@ -299,7 +307,7 @@ def _waitlist_views(
                     customer_id=row[2],
                     name=row[3],
                     phone=row[4],
-                    city="" if found is None else found[2],
+                    city=cities.get(row[2], ""),
                 ),
                 service_type=row[5],
                 zone=row[6],
