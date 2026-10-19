@@ -264,7 +264,9 @@ def run_turn(
                 failure = "malformed_reply"
                 break
             stored.append(result.message)
-            last_said = str(result.message.get("content") or "").strip()
+            said = str(result.message.get("content") or "").strip()
+            if said:
+                last_said = said
             if not calls:
                 break
             for call in calls:
@@ -378,7 +380,7 @@ def run_turn(
                 state.resolved = False
             elif (
                 state.resolved
-                and not state.handed_off
+                and not any(c["name"] == "escalate" for c in tools_called)
                 and not db.execute(
                     "SELECT 1 FROM handoffs WHERE conversation_id = ?",
                     (conversation_id,),

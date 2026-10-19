@@ -175,31 +175,83 @@ def figure_sources(messages: list[dict[str, Any]]) -> set[Decimal]:
 
 
 def unsupported_figures(text: str, messages: list[dict[str, Any]]) -> list[str]:
-    """Dollar figures in the reply that no tool result in the conversation gives."""
+    """Dollar figures in the reply that no tool result in the conversation gives ($1.2k is $1,200)."""
     sources = figure_sources(messages)
-    return [
-        figure
-        for figure in re.findall(r"\$\s?\d[\d,]*(?:\.\d+)?", text)
-        if Decimal(figure[1:].replace(",", "").strip()) not in sources
-    ]
+    unsupported = []
+    for found in re.finditer(r"\$\s?(\d[\d,]*(?:\.\d+)?)\s?([kK]\b)?", text):
+        amount = Decimal(found.group(1).replace(",", ""))
+        if (amount * 1000 if found.group(2) else amount) not in sources:
+            unsupported.append(found.group().strip())
+    return unsupported
 
 
-_MONEY_PROMISE = re.compile(
-    r"\b(?:we'll|we will|i'll|i will|we can|i can|i'm going to|we're going to|we are going to)"
-    r"(?![\w'])\s+(?:\w+\s+){0,3}(?:refund|waive|credit|reimburse)",
-    re.IGNORECASE,
+_MONEY = r"(?:refund|waive|credit(?!\s*cards?)|reimburse)"
+_MONEY_PROMISES = [
+    # we'll refund / I can waive / we are going to credit
+    re.compile(
+        r"\b(?:we'll|we will|i'll|i will|we can|i can|i'm going to|we're going to|we are going to)"
+        rf"(?![\w'])\s+(?:[\w']+\s+){{0,3}}{_MONEY}",
+        re.IGNORECASE,
+    ),
+    # a refund will be issued / a credit is going to be applied
+    re.compile(
+        r"\b(?:refund|credit|reimbursement|waiver)s?\s+(?:will|is going to)\b",
+        re.IGNORECASE,
+    ),
+    # you'll be refunded / the fee will be waived
+    re.compile(rf"\b(?:will|'ll)\s+be\s+(?:[\w']+\s+){{0,2}}{_MONEY}", re.IGNORECASE),
+    # I've gone ahead and refunded / we have waived
+    re.compile(
+        rf"\b(?:i've|i have|we've|we have)\s+(?:[\w']+\s+){{0,3}}{_MONEY}",
+        re.IGNORECASE,
+    ),
+]
+_NEGATION = re.compile(r"\b(?:not|never|no)\b|n't", re.IGNORECASE)
+_TOWARD_REPAIR = re.compile(
+    r"\bcredit[^.!?]*\btowards?\s+(?:the|your)\s+repair", re.IGNORECASE
 )
 _CONTACT = r"(?:call(?:\s+you)?\s+back|call you|callback|reach out|contact you|get back to you)"
-_TIME = r"(?:today|tonight|this (?:morning|afternoon|evening)|in (?:two|2) days|within 48 hours)"
-_CALLBACK_PROMISE = re.compile(
-    rf"{_CONTACT}[^.!?]*\b{_TIME}|\b{_TIME}[^.!?]*{_CONTACT}", re.IGNORECASE
+_COUNT = r"(?:\d+|one|two|three|four|five|six|seven|ten|twenty-four|forty-eight)"
+_TIME = (
+    r"(?:today|tonight|this (?:morning|afternoon|evening)"
+    rf"|(?:in|within) {_COUNT} (?:business |working )?(?:days?|hours?))"
 )
+_CALLBACK_PROMISE = re.compile(
+    rf"{_CONTACT}[^.!?]*\b({_TIME})|\b({_TIME})[^.!?]*{_CONTACT}", re.IGNORECASE
+)
+# The knowledge base's own callback window (policies/escalation_and_safety.md).
+_POLICY_WINDOW = re.compile(r"\b(?:in|within) (?:1|one) business day\b", re.IGNORECASE)
+_OFFER = re.compile(
+    r"^(?:would|do|does|shall|should|can|could|may|is|are|want)\b", re.IGNORECASE
+)
+
+
+def _sentence_promises(sentence: str) -> bool:
+    if sentence.endswith("?") and _OFFER.match(sentence):
+        return False
+    for rule in _MONEY_PROMISES:
+        for found in rule.finditer(sentence):
+            before = sentence[: found.start()]
+            if _NEGATION.search(found.group()) or re.search(
+                r"\bno\s+$", before, re.IGNORECASE
+            ):
+                continue
+            if "credit" in found.group().lower() and _TOWARD_REPAIR.search(sentence):
+                continue
+            return True
+    return any(
+        not _POLICY_WINDOW.fullmatch(found.group(1) or found.group(2))
+        for found in _CALLBACK_PROMISE.finditer(sentence)
+    )
 
 
 def makes_promise(text: str) -> bool:
-    """True for a promised refund, waiver or credit, or a callback by a named time."""
+    """True for a promised refund, waiver or credit, or a callback by a time the policy does not state."""
     text = text.replace("\u2019", "'")
-    return bool(_MONEY_PROMISE.search(text) or _CALLBACK_PROMISE.search(text))
+    return any(
+        _sentence_promises(sentence.strip())
+        for sentence in re.split(r"(?<=[.!?])\s+", text)
+    )
 
 
 def earlier_offered(

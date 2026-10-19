@@ -65,6 +65,9 @@ def tool(content: object) -> dict:
         ("$120.50", [tool({"balanceCents": 12050})], []),
         ("$79", [tool({"t": "$89"})], ["$79"]),
         ("$4,200", [], ["$4,200"]),
+        ("$1.2k", [tool({"t": "1.2"})], ["$1.2k"]),
+        ("$1.2k", [tool({"t": "1200"})], []),
+        ("$5K", [tool({"t": "5"})], ["$5K"]),
         ("$89", [{"role": "assistant", "content": "$89"}], ["$89"]),
     ],
 )
@@ -87,6 +90,26 @@ def test_unsupported_figures(text: str, sources: list, unsupported: list[str]):
         ("The diagnostic fee is waived for members", False),
         ("A supervisor will call you back within 1 business day", False),
         ("The team will call you if one opens.", False),
+        (
+            (
+                "The diagnostic visit is $89, and we'll credit it toward the repair "
+                "if you approve it during the same visit."
+            ),
+            False,
+        ),
+        ("We'll credit it toward the repair if you approve it", False),
+        ("Unfortunately we will not refund the diagnostic fee.", False),
+        ("We will never waive that fee.", False),
+        ("A refund will be issued to your card today.", True),
+        ("You'll be refunded in full.", True),
+        ("I've gone ahead and refunded the $89.", True),
+        ("Someone will call you back within 2 days.", True),
+        ("We will call you back in 2 business days.", True),
+        ("Would you like a callback today?", False),
+        ("We'll refund you today, okay?", True),
+        ("I'll call you back within 1 business day.", False),
+        ("No refund will be issued for that visit.", False),
+        ("I can take a credit card over the phone.", False),
     ],
 )
 def test_promises(text: str, promise: bool):

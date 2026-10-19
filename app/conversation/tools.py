@@ -158,7 +158,6 @@ class ToolState:
         self.customer_tier = customer_tier
         self.identify_attempts = identify_attempts
         self.resolved: bool | None = None
-        self.handed_off = False
         self.retrieved: list[dict[str, Any]] = []
         self.windows: list[Window] = []
         self.offered_slot_ids: list[int] = []
@@ -506,7 +505,6 @@ def _escalate(
         summary_source="agent",
     )
     followups.create_handoff(state.db, record)
-    state.handed_off = True
     return {"ok": True}
 
 

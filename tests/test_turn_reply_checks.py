@@ -158,6 +158,13 @@ def test_a_confirmation_that_differs_from_the_row_is_replaced(
     cid, reply = booking_conversation(started, "booked Tuesday with Ray")
     error = error_of(started, cid, 2)
     show("AC1", reply, error)
+    card = reply["booking"]
+    print(
+        "booking card: "
+        + ", ".join(
+            f"{k}={card[k]}" for k in ("slotId", "date", "window", "technicianName")
+        )
+    )
     assert reply["text"] == guards.confirmation_text(BOOKING)
     assert (
         reply["text"]
@@ -265,6 +272,7 @@ def test_no_tap_after_a_handoff(started: Settings, stubs: Stubs, when: str):
         intent="other",
         toldCaller="A person will call.",
     )
+    stubs.handoff_rows = True
     if when == "same_turn":
         both = [esc, tool_call("r", "report_status", intent="other", resolved=True)]
         script = [
@@ -273,7 +281,6 @@ def test_no_tap_after_a_handoff(started: Settings, stubs: Stubs, when: str):
         ]
         _, cid, reply = one_turn(started, script)
     else:
-        stubs.handoff_rows = True
         client = client_for(
             started,
             FakeModelProvider(
@@ -324,3 +331,39 @@ def test_a_later_unresolved_report_clears_resolved_at(started: Settings, stubs: 
     assert rows(started, sql, cid)[0][0]
     say(client, cid, "two")
     assert rows(started, sql, cid)[0][0] is None
+
+
+def test_no_tap_after_a_failed_escalate(
+    started: Settings, stubs: Stubs, monkeypatch: pytest.MonkeyPatch
+):
+    def broken(tx, record):
+        raise RuntimeError("down")
+
+    monkeypatch.setattr("app.followups.service.create_handoff", broken)
+    esc = tool_call(
+        "e",
+        "escalate",
+        kind="handoff",
+        reason="asked",
+        intent="other",
+        toldCaller="A person will call.",
+    )
+    both = [esc, tool_call("r", "report_status", intent="other", resolved=True)]
+    _, _, reply = one_turn(
+        started, [result(assistant(calls=both)), result(assistant("Noted."))]
+    )
+    assert "ask_solved" not in reply["actions"]
+
+
+def test_an_answer_before_an_empty_final_round_is_kept(started: Settings, stubs: Stubs):
+    status = tool_call("r", "report_status", intent="policy_question", resolved=True)
+    script = [
+        search_call(),
+        result(assistant("The diagnostic visit is $89.", calls=[status])),
+        result(assistant("")),
+    ]
+    _, cid, reply = one_turn(started, script)
+    show("last text", reply, error_of(started, cid, 1))
+    assert reply["text"] == "The diagnostic visit is $89."
+    assert reply["banner"] == "none" and "ask_solved" in reply["actions"]
+    assert error_of(started, cid, 1) is None
