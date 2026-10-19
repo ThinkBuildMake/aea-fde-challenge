@@ -120,10 +120,11 @@ svg{display:block;max-width:100%}
 .detail-title{font-size:15px;font-weight:600;margin:0}
 .meta{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
 .transcript{background:#F7F9FB;border-radius:8px;padding:10px 12px;font-size:14px;line-height:1.5;overflow-wrap:anywhere}
-.turn-tools{font-size:12px;color:var(--muted)}
+.convo-tools,.turn-trace{font-size:12px;color:var(--muted)}
 .trace-link{color:var(--accent);margin-left:2px}
 .btn-row{display:flex;flex-wrap:wrap;gap:8px}
 .flag-box{display:flex;flex-direction:column;gap:6px}
 .flag-box label{font-size:13px}
 .flag-box input{min-height:44px;padding:0 12px;border-radius:8px;border:1px solid #9AA8B5;font-size:14px;font-family:inherit;min-width:0}
+.flag-note-needed{font-size:13px;color:#8C1D18;margin:0}
 .eval-saved{font-size:13px;color:#14532D;margin:0}

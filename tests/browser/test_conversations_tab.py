@@ -118,6 +118,11 @@ def test_list_and_detail(page: Page, live_url: str, overview_stub):
         "Book a visit",
         "Contained",
     ]
+    ids = rows.evaluate_all("bs => bs.map(b => b.dataset.publicId)")
+    print(
+        "rows:", [rows.nth(i).inner_text().split("\n") for i in range(3)], "| ids:", ids
+    )
+    assert ids == IDS
     expect(rows.nth(1).locator(".when")).to_have_text("14 min")
     expect(rows.nth(2).locator(".outcome")).to_have_text("Safety stop")
     rows.nth(1).click()
@@ -129,9 +134,10 @@ def test_list_and_detail(page: Page, live_url: str, overview_stub):
         expect(meta).to_contain_text(part)
     expect(detail.locator(".transcript")).to_contain_text("Caller: My AC is blowing")
     expect(detail.locator(".transcript")).to_contain_text("Agent: Is there any")
-    expect(detail.locator(".turn-tools").first).to_contain_text(
-        "Tools called: identify customer, find open windows"
-    )
+    tools = detail.locator(".convo-tools")
+    expect(tools).to_have_count(1)
+    expect(tools).to_have_text("Tools called: identify_customer, find_open_windows")
+    assert detail.locator(".transcript + .convo-tools").count() == 1
 
 
 def test_flag_with_note(page: Page, live_url: str, overview_stub):
@@ -144,12 +150,17 @@ def test_flag_with_note(page: Page, live_url: str, overview_stub):
     expect(page.locator("label[for=note]")).to_have_text(
         "What was wrong? (note saved with the flag)"
     )
-    page.fill("#note", "   ")
-    page.press("#note", "Enter")
+    ask = page.locator("#detail .flag-note-needed")
+    for blank in ("", "   "):
+        page.fill("#note", blank)
+        page.press("#note", "Enter")
+        expect(ask).to_have_text("A note saying what was wrong is required.")
     assert calls == []
+    expect(btn).to_have_text("Flag as wrong")
     page.fill("#note", "quoted the wrong window")
     page.press("#note", "Enter")
     expect(btn).to_have_text("Flagged as wrong (undo)")
+    expect(ask).to_have_count(0)
     assert calls[0]["method"] == "POST"
     assert calls[0]["body"] == {"note": "quoted the wrong window"}
     btn.click()
@@ -162,7 +173,8 @@ def test_turn_into_test_scenario(page: Page, live_url: str, overview_stub):
     open_tab(page, live_url)
     page.get_by_role("button", name="Turn into a test scenario").click()
     expect(page.locator(".eval-saved")).to_have_text(
-        "Saved as a candidate test scenario: CAND-ab12cd34. Review it, then add it to the eval set."
+        "Saved as a candidate test scenario: eval/candidates/CAND-ab12cd34.json."
+        " Review it, then add it to the eval set."
     )
     assert calls[0]["url"].endswith("/eval-candidate")
 
@@ -181,12 +193,50 @@ def test_open_trace_link(page: Page, live_url: str, overview_stub, started):
     stub(page)
     open_tab(page, live_url)
     turns = page.locator(".turn")
-    link = turns.nth(0).locator(".turn-tools a.trace-link")
+    link = turns.nth(0).locator(".turn-trace a.trace-link")
     expect(link).to_have_text("Open trace")
     base = started.LANGFUSE_BASE_URL.rstrip("/")
     expect(link).to_have_attribute("href", f"{base}/trace/tr-1")
     expect(turns.nth(1).locator("a.trace-link")).to_have_count(0)
-    assert turns.nth(0).locator(".turn-tools").inner_text().startswith("Tools called:")
+    for i in range(turns.count()):
+        assert "Tools called:" not in turns.nth(i).inner_text()
+
+
+def test_detail_shows_one_tools_line(page: Page, live_url: str, overview_stub):
+    stub(page)
+    # The deployed "$79" conversation's shape: one turn, two tools, a sub-cent cost.
+    fee = turn(1, "tr-79", ["search_knowledge", "report_status"]).model_copy(
+        update={
+            "caller_text": "Is the diagnostic fee $79?",
+            "reply_text": "The diagnostic fee is $89.",
+            "latency_ms": 3325,
+            "cost_usd": 0.002031,
+        }
+    )
+    s = summary(0, 3, "contained", "policy_question").model_copy(
+        update={"turn_count": 1, "cost_usd": 0.002031}
+    )
+    detail = ConversationDetail(
+        summary=s, turns=[fee], handoff=None, flags=[], eval_candidate=None
+    )
+    json_route(
+        page,
+        re.compile(rf".*/conversations/{IDS[0]}$"),
+        detail.model_dump(by_alias=True, mode="json"),
+    )
+    open_tab(page, live_url)
+    box = page.locator("#detail")
+    expect(box.locator(".transcript")).to_contain_text(
+        "Caller: Is the diagnostic fee $79?"
+    )
+    meta = box.locator(".meta")
+    tools = box.locator(".convo-tools")
+    print("meta:", meta.inner_text(), "| tools:", tools.inner_text())
+    for part in ("1 turn ", "first reply 3.3 s", "cost $0.0020"):
+        expect(meta).to_contain_text(part)
+    expect(tools).to_have_count(1)
+    expect(tools).to_have_text("Tools called: search_knowledge, report_status")
+    assert box.locator(".transcript + .convo-tools").count() == 1
 
 
 def test_no_sideways_scroll_at_390(page: Page, live_url: str, overview_stub):
