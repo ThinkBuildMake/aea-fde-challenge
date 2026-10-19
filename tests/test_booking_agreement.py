@@ -33,7 +33,7 @@ def open_slot(settings: Settings, zone: str = "central", where: str = "") -> int
     return sched(
         settings,
         "SELECT slot_id FROM appointment_slots WHERE status = 'open' AND zone = ? "
-        "AND service_type <> 'estimate' AND slot_date >= '2026-10-16' "
+        "AND service_type <> 'estimate' AND slot_date > '2026-10-16' "
         f"{where} ORDER BY slot_id LIMIT 1",
         zone,
     )[0][0]

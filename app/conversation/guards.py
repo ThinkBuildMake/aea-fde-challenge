@@ -57,6 +57,12 @@ FAILED_WRITE_INSTRUCTION = (
     "The change did not happen. Do not tell the caller it is booked, moved or cancelled. "
     "Offer other windows or a person."
 )
+CANCEL_CONFIRM_INSTRUCTION = (
+    "Nothing is cancelled yet. Tell the caller the visit's date and window, say there is "
+    "no fee when lateFeeApplies is false or state the late-cancellation fee from "
+    "lateFeeCents when it is true, and ask them to confirm. Call cancel_visit again only "
+    "if their next message is a clear yes."
+)
 SEARCH_UNAVAILABLE_INSTRUCTION = (
     "The knowledge base is unavailable. Do not answer fees, policy, membership or "
     "warranty questions from memory. Say it cannot be checked right now and offer a person."
@@ -320,6 +326,16 @@ def earlier_offered(
         slots.update(offered.get("slotIds", []))
         appointments.update(offered.get("appointmentIds", []))
     return slots, appointments
+
+
+def last_cancel_asks(db: sqlite3.Connection, conversation_id: str) -> set[int]:
+    """Appointments whose cancel terms the previous message turn put to the caller."""
+    row = db.execute(
+        "SELECT offered FROM turns WHERE conversation_id = ? AND kind = 'message' "
+        "ORDER BY seq DESC LIMIT 1",
+        (conversation_id,),
+    ).fetchone()
+    return set(json.loads(row[0]).get("cancelAppointmentIds", [])) if row else set()
 
 
 def _is_id(value: Any) -> bool:

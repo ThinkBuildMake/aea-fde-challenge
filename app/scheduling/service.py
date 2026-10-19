@@ -443,6 +443,8 @@ def move_visit(
         old = _own_appointment(conn, customer_id, appointment_id)
         if old["status"] != "scheduled":
             raise NotEligible("not_scheduled")
+        if _hours_before(ctx, old["slot_date"], old["window"]) <= 0:
+            raise NotEligible("already_started")
         slot = _claim_in_transaction(ctx, conn, customer_id, new_slot_id)
         moved = conn.execute(
             "UPDATE appointments SET slot_id = ? "
@@ -486,6 +488,8 @@ def cancel_visit(
         row = _own_appointment(conn, customer_id, appointment_id)
         if row["status"] != "scheduled":
             raise AppointmentNotFound("appointment not found")
+        if _hours_before(ctx, row["slot_date"], row["window"]) <= 0:
+            raise NotEligible("already_started")
         cancelled = conn.execute(
             "UPDATE appointments SET status = 'cancelled' "
             "WHERE appointment_id = ? AND status = 'scheduled'",

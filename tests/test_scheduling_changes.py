@@ -138,3 +138,30 @@ def test_cancelling_twice_is_not_found(ctx, cid):
     cancel_visit(ctx, "MHC-10001", 159, cid)
     with pytest.raises(AppointmentNotFound):
         cancel_visit(ctx, "MHC-10001", 159, cid)
+
+
+@pytest.mark.parametrize(
+    ("customer", "appointment_id", "slot_id"),
+    [("MHC-17357", 3, 4), ("MHC-57204", 1, 2)],
+    ids=["started_at_8", "starts_at_reference_time"],
+)
+def test_started_visit_cannot_move_or_cancel(
+    ctx, db, cid, customer, appointment_id, slot_id
+):
+    before = dump(db, "appointment_slots", "appointments")
+    for change in (
+        lambda: move_visit(ctx, customer, appointment_id, 56, cid),
+        lambda: cancel_visit(ctx, customer, appointment_id, cid),
+    ):
+        with pytest.raises(NotEligible) as caught:
+            change()
+        assert caught.value.reason == "already_started"
+    assert dump(db, "appointment_slots", "appointments") == before
+    assert appointment(db, appointment_id) == (slot_id, "scheduled")
+    assert audit_rows(ctx) == []
+
+
+def test_visit_starting_after_now_can_cancel(ctx, db, cid):
+    result = cancel_visit(ctx, "MHC-98908", 4, cid)
+    assert result.late_fee_applies is True and result.hours_before == 1.0
+    assert appointment(db, 4) == (6, "cancelled") and slot_status(db, 6) == "open"
