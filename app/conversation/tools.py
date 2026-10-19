@@ -157,7 +157,7 @@ class ToolState:
         self.customer_id = customer_id
         self.customer_tier = customer_tier
         self.identify_attempts = identify_attempts
-        self.resolved = False
+        self.resolved: bool | None = None
         self.retrieved: list[dict[str, Any]] = []
         self.windows: list[Window] = []
         self.offered_slot_ids: list[int] = []
@@ -295,8 +295,7 @@ def _report_status(
     state.intent = intent
     if intent not in state.intents_seen:
         state.intents_seen.append(intent)
-    if args.get("resolved") is True:
-        state.resolved = True
+    state.resolved = args.get("resolved") is True
     return {"ok": True}
 
 
