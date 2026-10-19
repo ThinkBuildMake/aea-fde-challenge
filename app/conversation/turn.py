@@ -721,6 +721,12 @@ def run_turn(
                 ).fetchone()
             ):
                 actions = [*actions, "ask_solved"]
+    # A yes can confirm a cancel only after the model's own reply put the terms.
+    state.keep_cancel_asks(
+        final_text
+        if status == "active" and final_text == last_said and not turn["error"]
+        else None
+    )
     if status == "active" and earlier + 1 >= ctx.settings.TURN_CAP:
         final_text = f"{final_text} {guards.TURN_CAP_TEXT}".strip()
     turn["reply_text"] = final_text

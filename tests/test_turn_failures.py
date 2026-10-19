@@ -216,7 +216,7 @@ def test_a_committed_cancel_survives_a_failed_turn(
     )
     conn.commit()
     conn.close()
-    reply = say(client, cid, "cancel it")
+    reply = say(client, cid, "Yes, cancel it")
     assert calls.cancels == [7]
     assert reply["text"] == guards.CANCELLED_TEXT and reply["banner"] == "none"
     turn = turn_row(started, cid, 2)

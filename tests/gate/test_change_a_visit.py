@@ -484,27 +484,121 @@ def test_started_visit_is_never_changed(kb_settings: Settings):
         "SELECT name, phone FROM customers WHERE customer_id = 'MHC-17357'",
     )[0]
     before = snapshot(kb_settings)
+    refused = "That visit has already started, so I cannot cancel it. Would you like a person?"
     booker = Booker(
         kb_settings,
         FakeModelProvider(
             results=[
                 *turn(identify_and_lookup(name, phone=phone), "Your visit is today."),
-                *cancel(3, CANCEL, "Do you want me to cancel it?"),
-                *cancel(3, YES, "That did not go through. Would you like a person?"),
+                *cancel(3, CANCEL, refused),
+                *cancel(3, YES, refused),
             ]
         ),
     )
     booker.say(f"{name}, {phone}")
-    booker.say(CANCEL)
-    reply = booker.say(YES)
-    out = tool_outputs(booker)[0]
-    print(
-        f"confirmed cancel of started appointment 3: error={out['error']!r} "
-        f"actions={reply['actions']} appointment 3={appointment(kb_settings, 3)}"
-    )
-    assert out["error"] == "NotEligible: already_started"
-    assert reply["actions"] == ["request_callback"]
+    for text in (CANCEL, YES):
+        reply = booker.say(text)
+        out = tool_outputs(booker)[0]
+        offered = json.loads(booker.turns("offered")[-1])
+        print(
+            f"{text!r} on started appointment 3: error={out['error']!r} "
+            f"actions={reply['actions']} offered={offered} "
+            f"appointment 3={appointment(kb_settings, 3)}"
+        )
+        assert out["error"] == "NotEligible: already_started"
+        assert "lateFeeCents" not in out
+        assert reply["actions"] == ["request_callback"]
+        assert "cancelAppointmentIds" not in offered
     assert appointment(kb_settings, 3) == (4, "scheduled")
     assert snapshot(kb_settings) == before
     assert changes(kb_settings) == []
     no_orphans(kb_settings)
+
+
+class Failing(FakeModelProvider):
+    """A recorded model whose script may hold an exception: that call fails."""
+
+    def complete(self, messages, *, tools=None, timeout_s):
+        made = super().complete(messages, tools=tools, timeout_s=timeout_s)
+        if isinstance(made.message.get("content"), Exception):
+            raise made.message["content"]
+        return made
+
+
+def provider_fails() -> ModelResult:
+    return result(assistant(RuntimeError("provider down")))  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "shown",
+    ["fallback", "withheld", "fee_not_stated"],
+)
+def test_yes_to_another_question_never_cancels(kb_settings: Settings, shown: str):
+    """The caller's yes counts only after a reply of the model's own that stated the terms."""
+    appt = next_appointment(kb_settings)
+    ask_reply = {
+        "fallback": provider_fails(),
+        "withheld": result(
+            assistant("I can waive the $49 if you cancel now. Shall I?")
+        ),
+        "fee_not_stated": result(assistant("Do you want me to cancel it?")),
+    }[shown]
+    model = Failing(
+        results=[
+            *grace_up_to_ask(),
+            cancel(appt, CANCEL, LATE_ASK)[0],
+            ask_reply,
+            *cancel(appt, "Yes", "Do you want me to cancel it?"),
+        ]
+    )
+    booker = Booker(kb_settings, model)
+    booker.say(GRACE_BOOK)
+    booker.say(GRACE_SATURDAY)
+    new_conversation(booker)
+    booker.say(GRACE)
+    before = snapshot(kb_settings)
+    asked = booker.say(CANCEL)
+    offered = json.loads(booker.turns("offered")[-1])
+    reply = booker.say("Yes")
+    outs = tool_outputs(booker)
+    print(
+        f"{shown}: caller saw {asked['text']!r} offered={offered} | after 'Yes': "
+        f"cancelled={outs[0].get('cancelled')} appointment={appointment(kb_settings, appt)} "
+        f"visit_changes={changes(kb_settings)}"
+    )
+    assert asked["text"] != LATE_ASK
+    assert "cancelAppointmentIds" not in offered
+    assert outs[0]["cancelled"] is False and outs[0]["needsConfirmation"] is True
+    assert appointment(kb_settings, appt) == (35, "scheduled")
+    assert snapshot(kb_settings) == before
+    assert [c[0] for c in changes(kb_settings)] == ["book"]
+    assert reply["booking"] is None
+
+
+def test_waiver_question_never_cancels(kb_settings: Settings):
+    appt = next_appointment(kb_settings)
+    model = FakeModelProvider(
+        results=[
+            *grace_up_to_ask(),
+            *cancel(appt, CANCEL, LATE_ASK),
+            *cancel(appt, WAIVE_ASK, HONEST),
+        ]
+    )
+    booker = Booker(kb_settings, model)
+    booker.say(GRACE_BOOK)
+    booker.say(GRACE_SATURDAY)
+    new_conversation(booker)
+    booker.say(GRACE)
+    booker.say(CANCEL)
+    reply = booker.say(WAIVE_ASK)
+    out = tool_outputs(booker)[0]
+    print(
+        f"{WAIVE_ASK!r}: cancelled={out['cancelled']} lateFeeCents={out.get('lateFeeCents')} "
+        f"reply={reply['text']!r} appointment={appointment(kb_settings, appt)} "
+        f"visit_changes={changes(kb_settings)}"
+    )
+    assert out["cancelled"] is False and out["needsConfirmation"] is True
+    assert out["lateFeeCents"] == 4900
+    assert appointment(kb_settings, appt) == (35, "scheduled")
+    assert slot(kb_settings, 35) == "booked"
+    assert [c[0] for c in changes(kb_settings)] == ["book"]

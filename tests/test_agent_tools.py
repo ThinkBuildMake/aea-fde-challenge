@@ -91,13 +91,18 @@ def booking() -> Booking:
 
 
 def run(
-    started: Settings, *steps: list[dict[str, Any]], texts: list[str] | None = None
+    started: Settings,
+    *steps: list[dict[str, Any]],
+    texts: list[str] | None = None,
+    answers: list[str] | None = None,
 ):
     """One turn per step: the model makes the step's calls, then answers."""
     results = []
     for i, calls in enumerate(steps):
         results.append(result(assistant(calls=calls)))
-        results.append(result(assistant(f"answer {i}")))
+        results.append(
+            result(assistant((answers or [])[i] if answers else f"answer {i}"))
+        )
     client = client_for(started, FakeModelProvider(results=results))
     cid = new_conversation(client)
     replies = [
@@ -361,6 +366,7 @@ def test_late_cancel_carries_the_fee(
         cancel_call("Cancel my visit"),
         cancel_call("Yes, cancel it"),
         texts=["hi", "Cancel my visit", "Yes, cancel it"],
+        answers=["hi", "It carries the $49 late fee. Cancel it?", "Cancelled."],
     )
     out = tool_results(started, cid)[-1]
     assert out["ok"] is True and out["appointmentId"] == 7
@@ -702,3 +708,20 @@ def test_cancel_with_a_text_id_never_commits(
         texts=["hi", "Cancel my visit", "Yes"],
     )
     assert cancel.calls == []
+
+
+def test_late_cancel_without_a_price_book_never_commits(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    cancel, _ = cancel_stubs(monkeypatch, late=True)
+    monkeypatch.setattr("app.knowledge.service.get_fee", raise_unknown_fee)
+    cid, _ = run(
+        started,
+        identify_and_offer(monkeypatch, "MHC-10002"),
+        cancel_call("Cancel my visit"),
+        cancel_call("Yes, cancel it"),
+        texts=["hi", "Cancel my visit", "Yes, cancel it"],
+    )
+    out = tool_results(started, cid)[-1]
+    assert cancel.calls == []
+    assert out["needsConfirmation"] is True and out["lateFeeUnavailable"] is True

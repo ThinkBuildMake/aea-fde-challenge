@@ -206,6 +206,7 @@ class ToolState:
         self.cancelled = False
         self.handoff: HandoffRecord | None = None
         self.cancel_asked: list[int] = []
+        self.cancel_fee_cents: dict[int, int] = {}
         self.cancel_confirmable: set[int] = set()
 
     def offer(
@@ -228,6 +229,19 @@ class ToolState:
         if self.cancel_asked:
             offered["cancelAppointmentIds"] = self.cancel_asked
         return json.dumps(offered)
+
+    def keep_cancel_asks(self, shown: str | None) -> None:
+        """Keep this turn's cancel asks only if the caller saw the model's own reply
+        (`shown`) and it states each late fee; otherwise a later yes cannot commit."""
+        self.cancel_asked = [
+            i
+            for i in self.cancel_asked
+            if shown is not None
+            and (
+                i not in self.cancel_fee_cents
+                or guards.states_amount(shown, self.cancel_fee_cents[i])
+            )
+        ]
 
     def commit(self, booking: Booking | None = None) -> None:
         """Record a committed write; a booking puts its card on the reply."""
@@ -487,9 +501,9 @@ def _ask_cancel(
 ) -> dict[str, Any]:
     """Put the cancel terms to the caller; nothing changes until their next message says yes."""
     view = scheduling.get_appointment(ctx, _customer(state), appointment_id)
+    if scheduling.has_started(ctx, view.date, view.window):
+        raise scheduling.NotEligible("already_started")
     state.offer(appointment_ids=[appointment_id])
-    if appointment_id not in state.cancel_asked:
-        state.cancel_asked.append(appointment_id)
     out: dict[str, Any] = {
         "ok": True,
         "cancelled": False,
@@ -500,6 +514,11 @@ def _ask_cancel(
     }
     if view.late_cancel_fee_applies:
         _add_late_fee(ctx, out)
+        if out["lateFeeCents"] is None:
+            return out  # an unknown fee can never be confirmed
+        state.cancel_fee_cents[appointment_id] = out["lateFeeCents"]
+    if appointment_id not in state.cancel_asked:
+        state.cancel_asked.append(appointment_id)
     return out
 
 
@@ -603,10 +622,11 @@ HANDLERS: dict[str, Handler] = {
 
 
 def _is_cancel_ask(state: ToolState, name: str, args: dict[str, Any]) -> bool:
-    """A cancel_visit not yet put to the caller only reads, so the write guard skips it."""
-    return (
-        name == "cancel_visit"
-        and args.get("appointmentId") not in state.cancel_confirmable
+    """A cancel_visit only reads unless the previous turn put its terms to the caller and
+    this message is a clear yes; a read skips the write guard."""
+    return name == "cancel_visit" and (
+        args.get("appointmentId") not in state.cancel_confirmable
+        or not guards.clear_yes(state.caller_text)
     )
 
 

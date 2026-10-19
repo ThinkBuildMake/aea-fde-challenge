@@ -140,3 +140,36 @@ def test_unsupported_figures(text: str, sources: list, unsupported: list[str]):
 )
 def test_promises(text: str, promise: bool):
     assert guards.makes_promise(text) is promise
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Yes",
+        "Yes, cancel it",
+        "yes please",
+        "Sure, go ahead.",
+        "OK, cancel it",
+        "Confirm",
+    ],
+)
+def test_a_clear_yes_confirms(text: str):
+    assert guards.clear_yes(text) is True
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Can you waive the $49?",
+        "Maybe I'll cancel, I'm not sure",
+        "Cancel my visit",
+        "Yes, but can you waive the fee",
+        "No, keep it",
+        "Yes? What does it cost?",
+        "Wait",
+        "Yes I would like you to cancel it but only if you can make sure there is no charge",
+        "",
+    ],
+)
+def test_anything_else_is_not_a_yes(text: str):
+    assert guards.clear_yes(text) is False

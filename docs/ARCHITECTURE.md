@@ -440,7 +440,7 @@ One caller message and the reply, or one tap on "did this solve it".
 | safety_verdict | TEXT | yes | | `safe`, `burning_followup`, `emergency`, or `unscreened` when the screen failed |
 | tools_called | TEXT (JSON array) | no | `[]` | `[{name, ok, ms, error}]` for the business view and OB-1 |
 | retrieved | TEXT (JSON array) | no | `[]` | `[{passageId, sourceFile, score}]` for every search this turn; the passage text itself is in `model_messages` (VR-9) |
-| offered | TEXT (JSON object) | no | `{}` | `{slotIds: [...], appointmentIds: [...]}` the model was given this turn; write tools check a target against earlier turns' `offered` |
+| offered | TEXT (JSON object) | no | `{}` | `{slotIds: [...], appointmentIds: [...]}` the model was given this turn, plus an optional `cancelAppointmentIds: [...]` (S35) naming the appointments whose cancel terms this turn's own model reply put to the caller; write tools check a target against earlier turns' `offered`, and `cancel_visit` commits only for an id in the previous message turn's `cancelAppointmentIds` when the caller's message is a clear yes |
 | has_write | INTEGER | no | 0 | 1 when a book, move or cancel committed this turn (PF-2) |
 | latency_ms | INTEGER | no | | request received to reply returned |
 | error | TEXT | yes | | `provider_timeout`, `provider_error`, `replay_rejected`, `scheduling_unavailable`, `embedding_unavailable`, `screen_unavailable`, `figure_check_failed`, and so on (more may be added) |
