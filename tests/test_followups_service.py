@@ -224,6 +224,18 @@ def test_callback_after_a_withheld_reply_creates_a_not_sure_handoff(
     assert conn.execute("SELECT outcome FROM conversations").fetchone()[0] == "handoff"
 
 
+def test_ended_conversation_gets_no_late_handoff(
+    conn: sqlite3.Connection, ctx: AppContext
+):
+    add_turn(conn, 1, 0, "promise_withheld")
+    conn.execute(
+        "UPDATE conversations SET outcome = 'contained', ended_at = '2026-10-16T12:00:00.000Z'"
+    )
+    with pytest.raises(NoHandoff):
+        set_callback_window(ctx, "c1", "evening")
+    assert count(conn) == 0
+
+
 def test_callback_after_knowledge_unavailable_is_by_error(
     conn: sqlite3.Connection, ctx: AppContext
 ):

@@ -230,12 +230,14 @@ def _handoff_after_fallback(
     conn: sqlite3.Connection, ctx: AppContext, conversation_id: str
 ) -> None:
     last = conn.execute(
-        "SELECT t.fallback_used, t.error, t.reply_text, c.customer_id, c.intent "
+        "SELECT t.fallback_used, t.error, t.reply_text, c.customer_id, c.intent, "
+        "c.outcome "
         "FROM conversations c JOIN turns t ON t.conversation_id = c.id "
         "WHERE c.id = ? ORDER BY t.seq DESC LIMIT 1",
         (conversation_id,),
     ).fetchone()
-    if last is None:
+    if last is None or last[5] is not None:
+        # Nothing to hand over, or the conversation already ended another way.
         raise NoHandoff(conversation_id)
     if last[0]:
         reason, by_error = (
