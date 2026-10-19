@@ -107,7 +107,8 @@ def test_route_answers_an_html_fragment_for_htmx(
     assert response.status_code == case[4]
     assert response.headers["content-type"].startswith("text/html")
     assert "<html" not in response.text.lower()
-    for key in call(client, case, ids, {}).json():
+    for name, field in case[5].model_fields.items():
+        key = field.alias or name
         assert f'data-field="{key}"' in response.text
 
 
