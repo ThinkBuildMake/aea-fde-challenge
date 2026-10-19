@@ -3,6 +3,8 @@
 import json
 import re
 import sqlite3
+from datetime import date
+from decimal import Decimal
 from typing import Any
 
 from app.types import Booking
@@ -17,6 +19,10 @@ BURNING_FOLLOWUP_TEXT = "Sorry to hear that. Is there any burning smell, smoke, 
 FALLBACK_TEXT = (
     "Sorry, I am having trouble right now and did not want to guess. "
     "A person can help you with this. Would you like a call back?"
+)
+NOT_SURE_TEXT = (
+    "I'm not sure about that, and I did not want to guess. "
+    "Would you like me to pass you to a person?"
 )
 CANCELLED_TEXT = "Your visit has been cancelled."
 WAITLIST_TEXT = (
@@ -56,6 +62,142 @@ def committed_text(
     if waitlisted:
         parts.append(WAITLIST_TEXT)
     return " ".join(parts) or None
+
+
+_WEEKDAYS = [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+]
+_MONTHS = [
+    "jan",
+    "feb",
+    "mar",
+    "apr",
+    "may",
+    "jun",
+    "jul",
+    "aug",
+    "sep",
+    "oct",
+    "nov",
+    "dec",
+]
+_MONTH = r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?"
+_MONTH_DAY = re.compile(rf"\b{_MONTH}\s+(\d{{1,2}})(?!\d|:)", re.I)
+_DAY_MONTH = re.compile(rf"\b(\d{{1,2}})(?:st|nd|rd|th)?\s+(?:of\s+)?{_MONTH}", re.I)
+_ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
+_SLASH_DATE = re.compile(r"(?<![\d/])(\d{1,2})/(\d{1,2})(?![\d/])")
+_CLOCK = re.compile(
+    r"\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\b\.?|\b(\d{1,2}):(\d{2})\b", re.I
+)
+_WITH_NAME = re.compile(r"\bwith ((?:[A-Z][a-z]+)(?: [A-Z][a-z]+)*)")
+
+
+def confirmation_mismatch(text: str, booking: Booking) -> bool:
+    """True when the reply names a day, date, time or technician other than the booked row's."""
+    day = date.fromisoformat(booking.date)
+    lowered = text.lower()
+    for name in _WEEKDAYS:
+        if re.search(rf"\b{name}\b", lowered) and name != _WEEKDAYS[day.weekday()]:
+            return True
+    month_days = [(m[0], int(m[1])) for m in _MONTH_DAY.findall(text)]
+    month_days += [(m[1], int(m[0])) for m in _DAY_MONTH.findall(text)]
+    if any(
+        (_MONTHS.index(mon.lower()) + 1, d) != (day.month, day.day)
+        for mon, d in month_days
+    ):
+        return True
+    if any(
+        (int(y), int(m), int(d)) != (day.year, day.month, day.day)
+        for y, m, d in _ISO_DATE.findall(text)
+    ):
+        return True
+    if any(
+        (int(m), int(d)) != (day.month, day.day) for m, d in _SLASH_DATE.findall(text)
+    ):
+        return True
+    allowed = {int(h) for h in re.findall(r"\d+", booking.window.split("-")[0])} | {
+        int(h) for h in re.findall(r"\d+", booking.window.split("-")[-1])
+    }
+    for hour, _, half, hour24, _ in _CLOCK.findall(text):
+        if half:
+            h = int(hour) % 12 + (12 if half.lower() == "p" else 0)
+        else:
+            h = int(hour24)
+        if h not in allowed:
+            return True
+    if re.search(r"\bnoon\b", lowered) and 12 not in allowed:
+        return True
+    name_words = set(booking.technician_name.split())
+    return any(
+        not set(found.split()) <= name_words for found in _WITH_NAME.findall(text)
+    )
+
+
+_NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+
+def _numbers(value: Any, out: set[Decimal]) -> None:
+    if isinstance(value, str):
+        for found in _NUMBER.findall(value):
+            out.add(Decimal(found.replace(",", "").rstrip(".")))
+            out.update(Decimal(part) for part in re.findall(r"\d+(?:\.\d+)?", found))
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            if key.lower().endswith("cents") and isinstance(item, int | float):
+                out.add(Decimal(str(item)) / 100)
+            else:
+                _numbers(item, out)
+    elif isinstance(value, list):
+        for item in value:
+            _numbers(item, out)
+
+
+def figure_sources(messages: list[dict[str, Any]]) -> set[Decimal]:
+    """Every number in this conversation's tool results; cents fields count as dollars."""
+    out: set[Decimal] = set()
+    for message in messages:
+        if message.get("role") != "tool":
+            continue
+        content = message.get("content")
+        try:
+            _numbers(json.loads(content), out)
+        except (TypeError, ValueError):
+            _numbers(content, out)
+    return out
+
+
+def unsupported_figures(text: str, messages: list[dict[str, Any]]) -> list[str]:
+    """Dollar figures in the reply that no tool result in the conversation gives."""
+    sources = figure_sources(messages)
+    return [
+        figure
+        for figure in re.findall(r"\$\s?\d[\d,]*(?:\.\d+)?", text)
+        if Decimal(figure[1:].replace(",", "").strip()) not in sources
+    ]
+
+
+_MONEY_PROMISE = re.compile(
+    r"\b(?:we'll|we will|i'll|i will|we can|i can|i'm going to|we're going to|we are going to)"
+    r"(?![\w'])\s+(?:\w+\s+){0,3}(?:refund|waive|credit|reimburse)",
+    re.I,
+)
+_CONTACT = r"(?:call(?:\s+you)?\s+back|call you|callback|reach out|contact you|get back to you)"
+_TIME = r"(?:today|tonight|this (?:morning|afternoon|evening)|in (?:two|2) days|within 48 hours)"
+_CALLBACK_PROMISE = re.compile(
+    rf"{_CONTACT}[^.!?]*\b{_TIME}|\b{_TIME}[^.!?]*{_CONTACT}", re.I
+)
+
+
+def makes_promise(text: str) -> bool:
+    """True for a promised refund, waiver or credit, or a callback by a named time."""
+    text = text.replace("\u2019", "'")
+    return bool(_MONEY_PROMISE.search(text) or _CALLBACK_PROMISE.search(text))
 
 
 def earlier_offered(
