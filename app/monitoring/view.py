@@ -243,7 +243,7 @@ def overview_view(o: Overview) -> dict[str, Any]:
         "supporting": {
             "booking": pct(o.supporting.booking_completion_pct),
             "handoffs": pct(o.supporting.handoffs_on_handled_topics_pct),
-            "reason": o.supporting.top_handoff_reason,
+            "reason": (o.supporting.top_handoff_reason or "").replace("_", " ") or None,
             "flagged": pct(o.supporting.flagged_wrong_pct),
         },
         "recent": [

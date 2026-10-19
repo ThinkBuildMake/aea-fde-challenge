@@ -1,3 +1,5 @@
+import pytest
+
 from app.monitoring import view
 from app.types import (
     DayCount,
@@ -195,3 +197,21 @@ def test_view_has_dots_for_both_charts():
     assert len(v["settled"]["dots"]) == 7
     assert v["settled"]["dots"][0] == (40.0, 69.8)
     assert len(v["latency"]["dots"]) == 24
+
+
+@pytest.mark.parametrize(
+    ("code", "words"),
+    [
+        ("no_plumber_in_zone", "no plumber in zone"),
+        ("no matching document", "no matching document"),
+        (None, None),
+    ],
+)
+def test_top_reason_reads_as_words(code, words):
+    o = make_overview()
+    o = o.model_copy(
+        update={
+            "supporting": o.supporting.model_copy(update={"top_handoff_reason": code})
+        }
+    )
+    assert view.overview_view(o)["supporting"]["reason"] == words
