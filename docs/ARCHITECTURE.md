@@ -115,6 +115,8 @@ Wireframe states and the contract that draws each:
 | Handoffs tab with "mark followed up" | `listHandoffs`, `markHandoffFollowedUp` |
 | Waitlist tab | `listWaitlist` |
 | Conversations tab: transcript, tools called, cost, flag with note, turn into test scenario | `listConversations`, `getConversation`, `flagConversation`, `createEvalCandidate` |
+| (Addition to the wireframe) "Open trace" link per turn in the conversation detail | `TurnView.traceId` (added 2026-10-18, approved by the builder) |
+| (Additions to the wireframe, approved by the builder on 2026-10-19 for the 2026-10-21 deadline) a "Conversations by day and outcome" block on the Overview (FR-5.3); the zone on each waitlist row (FR-5.7); "after an error" beside the reason on failure-driven handoff rows (OB-3); a safety-stop mark on safety-stop handoff rows (FR-5.8); a spend banner when the CO-1 alert is on; "Diagnostic fee waived for members" on a member's booking card (FR-1.10); the turn-cap text | `Overview.volume`; `WaitlistView.zone`; `HandoffView.byError` and `kind`; `Overview.spend.alert`; `Booking.diagnosticFeeWaived`; Conversation → Must hold → Fixed texts |
 
 ## Existing system
 
@@ -687,6 +689,7 @@ TurnView {
   seq, kind, callerText, replyText
   toolsCalled [{ name, ok, ms }], retrieved [{ sourceFile, score }]
   safetyVerdict | null, latencyMs, error | null, fallbackUsed, costUsd
+  traceId | null               the turn's Langfuse trace, so the conversation detail can link to it (added 2026-10-18, approved by the builder, for the 2026-10-21 deadline)
 }
 
 ConversationDetail {
@@ -829,7 +832,7 @@ Tracing is fire-and-forget: a Langfuse error, timeout or outage never delays or 
 - **One turn at a time per conversation.** A second message while one is in flight is refused with `turn_in_progress`.
 - **Deadline.** A turn ends with a reply within the DE-1 limit of its start, covering retries and tool rounds. A fallback reply sets `fallback_used` and `error`, offers a person, and shows no stack trace or provider text.
 - **Outcome.** An outcome is set exactly once. `contained` is never set while a handoff exists. `handoff` is set in the same transaction that creates the handoff.
-- **Fixed texts.** The emergency message, the burning-smell question, the fallback, the turn-cap text, the supervisor-callback wording and the solved-tap texts are fixed wording taken from the wireframe, not model output.
+- **Fixed texts.** The emergency message, the burning-smell question, the fallback, the turn-cap text, the supervisor-callback wording and the solved-tap texts are fixed wording taken from the wireframe, not model output. The wireframe has no turn-cap text, so it is fixed here: "This conversation has reached its limit. Please start a new conversation, or ask for a call back." (approved by the builder on 2026-10-19).
 - Every turn stores `latency_ms`, `tools_called`, `retrieved`, cost and any error (OB-1).
 - **Traces carry only scrubbed text.** Spans are built from text left after card-shaped strings were removed, plus ids, tool names, outcome, cost and latency; a masking step drops any run of 13 to 19 digits before a span leaves the app (CP-1). Raw model messages and reasoning notes are not sent. The secret conversation id is never a span attribute.
 
@@ -1295,7 +1298,7 @@ Twice-safe     yes — each run has its own id and output
 On failure     a scenario that errors is reported as failed, not skipped, and the run continues; the summary lists the errored ones
 ```
 
-Each worker starts its own private app instance on its own copy of the scheduling database, reseeded before every scenario, and plays a scenario over the same routes a caller uses. The caller is played by a model given the scenario's brief. After each scenario the runner reads the worker's files directly to compute the database difference, the invariant queries (VR-6, VR-7, VR-8) and the figure check against the logged retrieved text (VR-9). Cost of the caller model is counted in the run. Each scenario run may also be reported to Langfuse as an experiment item; the RunResult file stays the source of truth (DE-3).
+Each worker starts its own private app instance on its own copy of the scheduling database, reseeded before every scenario, and plays a scenario over the same routes a caller uses. The caller is played by a model given the scenario's brief. After each scenario the runner reads the worker's files directly to compute the database difference, the invariant queries (VR-6, VR-7, VR-8) and the figure check against the logged retrieved text (VR-9). Cost of the caller model is counted in the run. Each run is also reported to Langfuse as an experiment, one item per scenario (approved by the builder on 2026-10-19, so the eval sits beside the live traces); a Langfuse failure never fails the run, and the RunResult file stays the source of truth (DE-3).
 
 ```
 {rebuildIndex}, {resetScheduling}   as in Knowledge and Scheduling
