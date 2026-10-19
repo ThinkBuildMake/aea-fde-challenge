@@ -45,3 +45,10 @@ def test_deploy_script_refuses_a_dirty_working_tree(tmp_path):
     )
     assert result.returncode == 1
     assert "dirty" in result.stderr
+
+
+def test_dockerfile_ships_the_manifest_and_the_extracted_texts():
+    text = (REPO / "Dockerfile").read_text()
+    dataset = "data/meridian_dataset"
+    assert f"COPY {dataset}/kb_manifest.json {dataset}/kb_manifest.json" in text
+    assert f"COPY {dataset}/kb_extracted/ {dataset}/kb_extracted/" in text
