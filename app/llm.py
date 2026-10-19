@@ -2,12 +2,14 @@
 
 import copy
 import json
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
 import httpx2
+import openai
 from openai import OpenAI, omit
 
 from app.settings import Settings
@@ -99,7 +101,11 @@ class FakeModelProvider:
         sleep: Callable[[float], None] = time.sleep,
         fail_with: Exception | None = None,
         results: list[ModelResult] | None = None,
+        hang: threading.Event | None = None,
+        reject_replay: bool = False,
     ) -> None:
+        self.hang = hang
+        self.reject_replay = reject_replay
         self.results = list(results) if results else None
         self.replies = list(replies) if replies else [PLACEHOLDER_REPLY]
         self.delay_s = delay_s
@@ -115,6 +121,11 @@ class FakeModelProvider:
         timeout_s: float,
     ) -> ModelResult:
         self.received.append(copy.deepcopy(messages))
+        if self.hang is not None:
+            self.hang.wait()
+            raise TimeoutError("released")
+        if self.reject_replay and sum(m["role"] == "user" for m in messages) > 1:
+            raise status_error(400)
         if self.delay_s:
             self.sleep(self.delay_s)
         if self.fail_with is not None:
@@ -123,3 +134,14 @@ class FakeModelProvider:
             return self.results.pop(0) if len(self.results) > 1 else self.results[0]
         text = self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
         return ModelResult(message={"role": "assistant", "content": text})
+
+
+def status_error(code: int) -> openai.APIStatusError:
+    """The error the OpenAI client raises for an HTTP status, for tests."""
+    response = httpx2.Response(
+        code, request=httpx2.Request("POST", f"{OPENROUTER_BASE_URL}/chat/completions")
+    )
+    cls = {400: openai.BadRequestError, 429: openai.RateLimitError}.get(
+        code, openai.APIStatusError
+    )
+    return cls(f"status {code}", response=response, body=None)

@@ -14,6 +14,14 @@ EMERGENCY_TEXT = (
 ACCOUNT_FLAGGED = "Your account has been flagged for a safety follow-up."
 CONVERSATION_FLAGGED = "This conversation has been flagged for a safety follow-up."
 BURNING_FOLLOWUP_TEXT = "Sorry to hear that. Is there any burning smell, smoke, sparks or a tripped breaker?"
+FALLBACK_TEXT = (
+    "Sorry, I am having trouble right now and did not want to guess. "
+    "A person can help you with this. Would you like a call back?"
+)
+CANCELLED_TEXT = "Your visit has been cancelled."
+WAITLIST_TEXT = (
+    "On the waitlist for an earlier window. The team will call you if one opens."
+)
 FAILED_WRITE_INSTRUCTION = (
     "The change did not happen. Do not tell the caller it is booked, moved or cancelled. "
     "Offer other windows or a person."
@@ -36,6 +44,18 @@ def confirmation_text(booking: Booking) -> str:
         f"You are booked for {booking.date}, {booking.window}, "
         f"with {booking.technician_name}."
     )
+
+
+def committed_text(
+    booking: Booking | None, cancelled: bool, waitlisted: bool
+) -> str | None:
+    """What a turn that failed after a write still tells the caller, or None when nothing committed."""
+    parts = [confirmation_text(booking)] if booking else []
+    if cancelled:
+        parts.append(CANCELLED_TEXT)
+    if waitlisted:
+        parts.append(WAITLIST_TEXT)
+    return " ".join(parts) or None
 
 
 def earlier_offered(
