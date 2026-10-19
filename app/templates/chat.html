@@ -8,10 +8,33 @@
         <div class="chat-title">Meridian Home Comfort</div>
         <div class="muted small">Virtual assistant. Repairs, visits, fees, membership, warranty, billing.</div>
       </div>
+      <button id="new-conversation" class="btn btn-outline" type="button">New conversation</button>
     </header>
-    <div class="chat-body">
-      <div class="bubble bot">{{ greeting }}</div>
+    <div id="messages" class="chat-body" aria-live="polite">
+      <div class="msg-row bot"><div class="bubble bot">{{ greeting }}</div></div>
+    </div>
+    <div id="solved-bar" class="bar solved-bar" hidden>
+      <span>Did this solve it?</span>
+      <button id="solved-yes" class="btn btn-fill" type="button">Yes, that solved it</button>
+      <button id="solved-no" class="btn btn-outline" type="button">No</button>
+    </div>
+    <div id="chips" class="bar chips">
+      <button type="button" class="chip" data-text="My AC is blowing warm air">My AC is blowing warm air</button>
+      <button type="button" class="chip" data-text="What does the maintenance plan cover?">What does the maintenance plan cover?</button>
+      <button type="button" class="chip" data-text="I was charged twice">I was charged twice</button>
+      <button type="button" class="chip" data-text="I smell gas">I smell gas</button>
+    </div>
+    <form id="composer" class="composer">
+      <label for="msg" class="visually-hidden">Type your message</label>
+      <input id="msg" name="text" placeholder="Type your message" autocomplete="off">
+      <button class="btn btn-fill" type="submit">Send</button>
+    </form>
+    <div id="ended" class="bar ended" hidden>
+      <span id="ended-text"></span>
+      <button id="start-new" class="btn btn-fill" type="button">Start a new conversation</button>
     </div>
   </section>
+  <p class="page-note">No login. Card numbers are never requested; payment is by a link.</p>
 </main>
+<script src="/static/chat.js" defer></script>
 {% endblock %}
