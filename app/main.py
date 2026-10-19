@@ -8,6 +8,7 @@ from fastapi.templating import Jinja2Templates
 
 from app import errors
 from app.context import AppContext, Clock, SystemClock
+from app.conversation import tracing
 from app.conversation.routes import router as conversation_router
 from app.followups.routes import router as followups_router
 from app.knowledge.embeddings import Embedder, OpenRouterEmbedder
@@ -29,6 +30,7 @@ def create_app(
     clock: Clock | None = None,
     embedder: Embedder | None = None,
     key_usage: KeyUsageReader | None = None,
+    tracer: tracing.Tracer | None = None,
 ) -> FastAPI:
     embedder = embedder or OpenRouterEmbedder(settings)
     clock = clock or SystemClock()
@@ -36,6 +38,8 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
+        if app.state.ctx.tracer is not None:
+            app.state.ctx.tracer.flush(5)
         close = getattr(app.state.ctx.safety, "close", None)
         if close is not None:
             close()
@@ -55,6 +59,7 @@ def create_app(
         embedder=embedder,
         index=IndexStore(settings.INDEX_PATH, embedder.model),
         spend=KeyUsageCache(key_usage or OpenRouterKeyUsage(settings), clock),
+        tracer=tracer if tracer is not None else tracing.tracer_for(settings),
     )
     app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
     errors.install(app)

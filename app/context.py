@@ -14,6 +14,7 @@ from app.llm import ModelProvider
 from app.settings import Settings
 
 if TYPE_CHECKING:
+    from app.conversation.tracing import Tracer
     from app.monitoring.spend import KeyUsageCache
     from app.safety.service import SafetyClassifier
 
@@ -37,6 +38,7 @@ class AppContext:
     index: IndexStore
     spend: "KeyUsageCache"
     safety: "SafetyClassifier | None" = None
+    tracer: "Tracer | None" = None
 
     def open_app_db(self) -> sqlite3.Connection:
         return connect_app_db(self.settings.APP_DB_PATH)

@@ -5,6 +5,7 @@ import re
 import httpx2
 import pytest
 
+from app import usage
 from app.main import create_app
 from app.safety.service import (
     CARD_PLACEHOLDER,
@@ -150,3 +151,23 @@ def test_vr2_followup_rules(
     reason = {"safe": "no_hazard", "emergency": "gas"}.get(model_says, "burning_smell")
     ctx = _ctx(tmp_settings, FakeClassifier(model_says, reason))
     assert screen_safety(ctx, text, [], pending).verdict == expected
+
+
+def test_screen_reports_its_tokens_and_cost(tmp_settings: Settings) -> None:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        response = _completion(json.dumps({"verdict": "safe", "reason": "no_hazard"}))
+        body = json.loads(response.content)
+        body["usage"] = {
+            "prompt_tokens": 120,
+            "completion_tokens": 8,
+            "total_tokens": 128,
+            "cost": 0,
+            "is_byok": True,
+            "cost_details": {"upstream_inference_cost": 0.00002},
+        }
+        return httpx2.Response(200, json=body)
+
+    ctx = _ctx(tmp_settings, _failing(handler))
+    with usage.collect() as seen:
+        screen_safety(ctx, "hello there", [], False)
+    assert seen == [usage.Usage(input_tokens=120, output_tokens=8, cost_usd=0.00002)]

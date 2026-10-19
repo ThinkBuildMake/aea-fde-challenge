@@ -1,9 +1,15 @@
 import json
 
+import httpx2
 import pytest
 
+from app import usage
 from app.context import AppContext
-from app.knowledge.embeddings import EmbeddingUnavailable, FakeEmbedder
+from app.knowledge.embeddings import (
+    EmbeddingUnavailable,
+    FakeEmbedder,
+    OpenRouterEmbedder,
+)
 from app.knowledge.service import (
     IndexUnavailable,
     index_status,
@@ -107,3 +113,29 @@ def test_k_bounds(kb_settings: Settings):
     assert search_knowledge(ctx, "diagnostic", 0) == []
     total = index_status(ctx).passages
     assert len(search_knowledge(ctx, "diagnostic", total + 10)) == total
+
+
+def test_query_embedding_reports_its_tokens_and_cost(kb_settings: Settings):
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
+            200,
+            json={
+                "object": "list",
+                "model": "m",
+                "data": [{"object": "embedding", "index": 0, "embedding": [0.1, 0.2]}],
+                "usage": {
+                    "prompt_tokens": 5,
+                    "total_tokens": 5,
+                    "cost": 0,
+                    "is_byok": True,
+                    "cost_details": {"upstream_inference_cost": 0.0000001},
+                },
+            },
+        )
+
+    embedder = OpenRouterEmbedder(
+        kb_settings, http_client=httpx2.Client(transport=httpx2.MockTransport(handler))
+    )
+    with usage.collect() as seen:
+        assert embedder.embed(["diagnostic fee"]) == [[0.1, 0.2]]
+    assert seen == [usage.Usage(input_tokens=5, output_tokens=None, cost_usd=0.0000001)]

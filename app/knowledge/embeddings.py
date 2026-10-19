@@ -5,6 +5,10 @@ import re
 import threading
 from typing import Protocol
 
+import httpx2
+
+from app import usage
+from app.llm import reported_cost
 from app.settings import Settings
 
 
@@ -19,9 +23,12 @@ class Embedder(Protocol):
 
 
 class OpenRouterEmbedder:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self, settings: Settings, http_client: httpx2.Client | None = None
+    ) -> None:
         self.model = settings.EMBEDDING_MODEL
         self._settings = settings
+        self._http_client = http_client
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         from openai import OpenAI
@@ -32,6 +39,7 @@ class OpenRouterEmbedder:
                 api_key=self._settings.OPENROUTER_API_KEY.get_secret_value(),
                 timeout=30,
                 max_retries=0,
+                http_client=self._http_client,
             ) as client:
                 reply = client.embeddings.create(model=self.model, input=texts)
             vectors = [
@@ -41,6 +49,14 @@ class OpenRouterEmbedder:
             raise EmbeddingUnavailable(type(error).__name__) from None
         if len(vectors) != len(texts):
             raise EmbeddingUnavailable("wrong number of vectors")
+        used = getattr(reply, "usage", None)
+        if used is not None:
+            usage.report(
+                usage.Usage(
+                    input_tokens=used.prompt_tokens,
+                    cost_usd=reported_cost(used.model_dump()),
+                )
+            )
         return vectors
 
 

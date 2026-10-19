@@ -4,12 +4,14 @@ import json
 import sqlite3
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from typing import Any
 
 import openai
 
+from app import usage
 from app.context import AppContext
-from app.conversation import guards, tools
+from app.conversation import guards, tools, tracing
 from app.errors import AppError
 from app.followups import service as followups
 from app.logs import log_event
@@ -172,6 +174,131 @@ def _end_failed(db: sqlite3.Connection, conversation_id: str) -> Callable[[str],
     return end
 
 
+def _observed(
+    name: str,
+    kind: Any,
+    start: datetime,
+    model: str | None,
+    used: list[usage.Usage],
+    **fields: Any,
+) -> tracing.Observation:
+    """One timed step of the turn, with the tokens and cost its provider calls reported."""
+    spent = usage.total(used)
+    return tracing.Observation(
+        name,
+        kind,
+        start,
+        datetime.now(UTC),
+        model=model if used else None,
+        input_tokens=spent.input_tokens,
+        output_tokens=spent.output_tokens,
+        cost_usd=spent.cost_usd,
+        **fields,
+    )
+
+
+def _screened(
+    ctx: AppContext,
+    text: str,
+    recent: list[str],
+    follow_up_pending: bool,
+    seen: list[tracing.Observation],
+) -> Verdict:
+    """Run the safety screen and record it for the trace."""
+    start = datetime.now(UTC)
+    fields: dict[str, Any] = {}
+    with usage.collect() as used:
+        try:
+            verdict = safety.screen_safety(ctx, text, recent, follow_up_pending)
+            fields["metadata"] = {"verdict": verdict.verdict, "reason": verdict.reason}
+            return verdict
+        except Exception:
+            fields = {"level": "ERROR", "status": "screen_unavailable"}
+            raise
+        finally:
+            seen.append(
+                _observed(
+                    "safety_screen",
+                    "generation",
+                    start,
+                    ctx.settings.SAFETY_MODEL,
+                    used or [usage.Usage()],
+                    **fields,
+                )
+            )
+
+
+def _send_trace(
+    ctx: AppContext,
+    db: sqlite3.Connection,
+    conversation_id: str,
+    seq: int | None,
+    start: datetime,
+    turn: dict[str, Any],
+    observations: list[tracing.Observation],
+    metadata: dict[str, Any],
+) -> None:
+    """Hand the turn's scrubbed trace to the tracer; a confirmed send stores its id on the turn."""
+    if ctx.tracer is None:
+        return
+    try:
+        if not any(o.name == "safety_screen" for o in observations):
+            now = datetime.now(UTC)
+            observations.append(
+                tracing.Observation(
+                    "safety_screen",
+                    "generation",
+                    now,
+                    now,
+                    model=ctx.settings.SAFETY_MODEL,
+                    level="WARNING",
+                    status="not_finished",
+                )
+            )
+        public_id = db.execute(
+            "SELECT public_id FROM conversations WHERE id = ?", (conversation_id,)
+        ).fetchone()[0]
+        trace = tracing.TurnTrace(
+            session_id=public_id,
+            name="turn",
+            start=start,
+            end=datetime.now(UTC),
+            input=turn["caller_text"],
+            output=turn["reply_text"],
+            metadata={
+                "seq": seq,
+                "error": turn["error"],
+                "fallback_used": turn["fallback_used"],
+                "safety_verdict": turn["safety_verdict"],
+                "prompt_tokens": turn["prompt_tokens"],
+                "completion_tokens": turn["completion_tokens"],
+                "cost_source": turn["cost_source"],
+                "latency_ms": turn["latency_ms"],
+                "tools": [c["name"] for c in turn["tools_called"]],
+                **metadata,
+            },
+            observations=sorted(observations, key=lambda o: o.start),
+        )
+    except Exception as exc:  # noqa: BLE001 - tracing never breaks a turn
+        log_event("trace_send_failed", level="warning", error_type=type(exc).__name__)
+        return
+
+    def on_sent(trace_id: str) -> None:
+        if seq is None:
+            return
+        conn = ctx.open_app_db()
+        try:
+            conn.execute(
+                "UPDATE turns SET trace_id = ? WHERE conversation_id = ? AND seq = ? "
+                "AND kind = 'message'",
+                (trace_id, conversation_id, seq),
+            )
+        finally:
+            conn.close()
+
+    tracing.send_turn_trace(ctx.tracer, trace, conversation_id, on_sent)
+
+
 def run_turn(
     ctx: AppContext,
     db: sqlite3.Connection,
@@ -180,6 +307,8 @@ def run_turn(
     simulate_outage: bool = False,
 ) -> Reply:
     started = ctx.clock.monotonic()
+    trace_start = datetime.now(UTC)
+    observations: list[tracing.Observation] = []
 
     def left() -> float:
         return ctx.settings.TURN_DEADLINE - (ctx.clock.monotonic() - started)
@@ -212,7 +341,7 @@ def run_turn(
     screen = ThreadPoolExecutor(max_workers=1)
     model_pool = ThreadPoolExecutor(max_workers=1)
     screening = screen.submit(
-        safety.screen_safety, ctx, redacted, recent, follow_up_pending
+        _screened, ctx, redacted, recent, follow_up_pending, observations
     )
     try:
         for _ in range(0 if failure else MAX_TOOL_ROUNDS):
@@ -220,6 +349,7 @@ def run_turn(
             if remaining <= FALLBACK_RESERVE_S:
                 failure = "provider_timeout"
                 break
+            call_start = datetime.now(UTC)
             try:
                 result = model_pool.submit(
                     ctx.model.complete,
@@ -229,6 +359,12 @@ def run_turn(
                 ).result(timeout=remaining - FALLBACK_RESERVE_S)
             except Exception as exc:  # noqa: BLE001 - any provider failure falls back
                 failure = _failure_code(exc, bool(history))
+                observations.append(
+                    _observed(
+                        "model_call", "generation", call_start, None, [],
+                        level="ERROR", status=failure,
+                    )
+                )  # fmt: skip
                 log_event(
                     "model_call_failed", error=failure, error_type=type(exc).__name__
                 )
@@ -253,14 +389,38 @@ def run_turn(
             if result.completion_tokens is not None:
                 completion_tokens = (completion_tokens or 0) + result.completion_tokens
             if result.cost_usd is not None:
-                cost += result.cost_usd
+                call_cost = result.cost_usd
             else:
                 all_reported = False
                 price = ctx.settings.MODEL_PRICES.get(ctx.settings.AGENT_MODEL, {})
-                cost += (
+                call_cost = (
                     (result.prompt_tokens or 0) * price.get("input", 0.0)
                     + (result.completion_tokens or 0) * price.get("output", 0.0)
                 ) / 1e6
+            cost += call_cost
+            observations.append(
+                _observed(
+                    "model_call",
+                    "generation",
+                    call_start,
+                    ctx.settings.AGENT_MODEL,
+                    [
+                        usage.Usage(
+                            result.prompt_tokens, result.completion_tokens, call_cost
+                        )
+                    ],
+                    metadata={
+                        "tools_requested": [
+                            str((c.get("function") or {}).get("name", ""))
+                            for c in result.message.get("tool_calls") or []
+                            if isinstance(c, dict)
+                        ],
+                        "cost_source": "reported"
+                        if result.cost_usd is not None
+                        else "estimated",
+                    },
+                )
+            )
             if verdict.verdict != "safe":
                 break
             calls = result.message.get("tool_calls") or []
@@ -274,7 +434,21 @@ def run_turn(
             if not calls:
                 break
             for call in calls:
-                output, entry = tools.run_tool(ctx, state, call)
+                tool_start = datetime.now(UTC)
+                with usage.collect() as used:
+                    output, entry = tools.run_tool(ctx, state, call)
+                observations.append(
+                    _observed(
+                        entry["name"],
+                        "tool",
+                        tool_start,
+                        ctx.settings.EMBEDDING_MODEL,
+                        used,
+                        level="DEFAULT" if entry["ok"] else "ERROR",
+                        status=entry["error"],
+                        metadata={"ok": entry["ok"]},
+                    )
+                )
                 tools_called.append(entry)
                 stored.append(
                     {
@@ -398,11 +572,22 @@ def run_turn(
                 actions = [*actions, "ask_solved"]
     turn["reply_text"] = final_text
     turn["latency_ms"] = round((ctx.clock.monotonic() - started) * 1000)
+    saved: int | None = None
     try:
-        seq = _save_turn(ctx, db, conversation_id, state, turn, cost, end)
+        seq = saved = _save_turn(ctx, db, conversation_id, state, turn, cost, end)
     except sqlite3.Error as exc:
         log_event("turn_save_failed", table="turns", error_type=type(exc).__name__)
         seq = earlier + 1
+    _send_trace(
+        ctx,
+        db,
+        conversation_id,
+        saved,
+        trace_start,
+        turn,
+        observations,
+        {"status": status, "banner": banner, "cost_usd": cost, "intent": state.intent},
+    )
 
     return Reply(
         conversation_id=conversation_id,
