@@ -1,0 +1,44 @@
+{
+  "question": "Is the diagnostic fee $79?",
+  "note": "Hand-written in OpenRouter's raw assistant-message shape for the S29 gate case.",
+  "messages": [
+    {
+      "message": {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "id": "call_search_1",
+            "type": "function",
+            "function": {
+              "name": "search_knowledge",
+              "arguments": "{\"query\": \"diagnostic fee\"}"
+            }
+          },
+          {
+            "id": "call_status_1",
+            "type": "function",
+            "function": {
+              "name": "report_status",
+              "arguments": "{\"intent\": \"policy_question\", \"resolved\": true}"
+            }
+          }
+        ],
+        "reasoning_details": [{"type": "reasoning.encrypted", "data": "recorded"}]
+      },
+      "prompt_tokens": 1450,
+      "completion_tokens": 42,
+      "cost": 0.00031
+    },
+    {
+      "message": {
+        "role": "assistant",
+        "content": "The diagnostic fee is $89, and it is credited toward the repair if you go ahead.",
+        "reasoning_details": [{"type": "reasoning.encrypted", "data": "recorded"}]
+      },
+      "prompt_tokens": 2310,
+      "completion_tokens": 25,
+      "cost": 0.00042
+    }
+  ]
+}

@@ -73,17 +73,19 @@ def kb_settings(started: Settings, kb_copy: Path) -> Settings:
 
 @pytest.fixture(autouse=True)
 def screen_says_safe(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
-    """Turn tests never reach the real danger screen; its own tests and S14's choose a verdict."""
+    """The real danger screen runs everywhere; only its network call answers safe.
+    Its own tests and S14's choose a verdict; the S29 live test uses the real one."""
     name = request.module.__name__
-    if name.startswith(("tests.test_safety", "tests.test_interfaces")):
+    if name.startswith(
+        ("tests.test_safety", "tests.test_interfaces", "tests.test_policy_answers_live")
+    ):
         return
-    from app.types import Verdict
+    from app.safety.service import OpenRouterSafetyClassifier
 
     monkeypatch.setattr(
-        "app.safety.service.screen_safety",
-        lambda ctx, text, recent_turns, follow_up_pending: Verdict(
-            verdict="safe", reason="no_hazard"
-        ),
+        OpenRouterSafetyClassifier,
+        "classify",
+        lambda self, messages, timeout_s: '{"verdict": "safe", "reason": "no_hazard"}',
     )
 
 
