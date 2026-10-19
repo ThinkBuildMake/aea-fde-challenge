@@ -4,6 +4,7 @@ from typing import Literal
 
 from app.context import AppContext
 from app.conversation.service import end_with_handoff
+from app.logs import log_event
 from app.scheduling import store as scheduling_store
 from app.scheduling.store import zone_for_city
 from app.types import (
@@ -27,38 +28,16 @@ class HandoffNotFound(Exception):
     """No handoff has this id."""
 
 
-def placeholder_handoff(
-    conversation_public_id: str = "stub", window: CallbackWindow | None = None
-) -> HandoffView:
-    return HandoffView(
-        id=0,
-        conversation_public_id=conversation_public_id,
-        kind="handoff",
-        reason="stub",
-        by_error=False,
-        caller=HandoffCaller(
-            customer_id=None,
-            name=None,
-            phone=None,
-            city=None,
-            zone=None,
-            stated_by_caller=False,
-        ),
-        intent="unknown",
-        told_caller="stub",
-        summary="stub: stub",
-        summary_source="system",
-        preferred_window=window,
-        status="open",
-        created_at="1970-01-01T00:00:00.000Z",
-        followed_up_at=None,
-    )
-
-
 SUPERVISOR_REASONS = frozenset(
     {"billing_dispute", "refund_demand", "complaint", "manager_request"}
 )
-FALLBACK_REASONS = frozenset({"provider_failure", "scheduling_unavailable"})
+# The last turn's error -> (reason, by_error) of the handoff a picked window records
+# when the reply offered a call back without escalating.
+CALLBACK_REASONS: dict[str | None, tuple[str, bool]] = {
+    "unsupported_figure": ("not_sure", False),
+    "promise_withheld": ("not_sure", False),
+    "embedding_unavailable": ("knowledge_unavailable", True),
+}
 
 _COLUMNS = (
     "h.id, c.public_id, h.kind, h.reason, h.by_error, h.customer_id, h.caller_name, "
@@ -76,6 +55,15 @@ def _customer(ctx: AppContext, customer_id: str) -> tuple[str, str, str] | None:
     return None if row is None else (row[0], row[1], row[2])
 
 
+def _handoff_customer(ctx: AppContext, customer_id: str) -> tuple[str, str, str] | None:
+    """A scheduling outage must not block a handoff: the caller's details stay empty."""
+    try:
+        return _customer(ctx, customer_id)
+    except (scheduling_store.SchedulingUnavailable, sqlite3.Error):
+        log_event("handoff_customer_unavailable")
+        return None
+
+
 def _views(
     tx: sqlite3.Connection, where: str, params: tuple, ctx: AppContext | None
 ) -> list[HandoffView]:
@@ -89,7 +77,7 @@ def _views(
         customer_id: str | None = row[5]
         city: str | None = None
         if ctx is not None and customer_id is not None:
-            found = _customer(ctx, customer_id)
+            found = _handoff_customer(ctx, customer_id)
             city = None if found is None else found[2]
         views.append(
             HandoffView(
@@ -177,7 +165,7 @@ def create_handoff(
     if record.customer_id is not None:
         stated = False
         name = phone = None
-        if ctx is not None and (found := _customer(ctx, record.customer_id)):
+        if ctx is not None and (found := _handoff_customer(ctx, record.customer_id)):
             name, phone = found[0], found[1]
     kind = "supervisor_callback" if record.reason in SUPERVISOR_REASONS else record.kind
     tx.execute(
@@ -230,7 +218,8 @@ def set_callback_window(
                 raise NoHandoff(conversation_id)
             conn.execute("COMMIT")
         except BaseException:
-            conn.execute("ROLLBACK")
+            if conn.in_transaction:
+                conn.execute("ROLLBACK")
             raise
         return view
     finally:
@@ -246,20 +235,28 @@ def _handoff_after_fallback(
         "WHERE c.id = ? ORDER BY t.seq DESC LIMIT 1",
         (conversation_id,),
     ).fetchone()
-    if last is None or not last[0]:
+    if last is None:
         raise NoHandoff(conversation_id)
-    reason = (
-        "scheduling_unavailable"
-        if last[1] == "scheduling_unavailable"
-        else "provider_failure"
-    )
+    if last[0]:
+        reason, by_error = (
+            (
+                "scheduling_unavailable"
+                if last[1] == "scheduling_unavailable"
+                else "provider_failure"
+            ),
+            True,
+        )
+    elif last[1] in CALLBACK_REASONS:
+        reason, by_error = CALLBACK_REASONS[last[1]]
+    else:
+        raise NoHandoff(conversation_id)
     create_handoff(
         conn,
         HandoffRecord(
             conversation_id=conversation_id,
             kind="handoff",
             reason=reason,
-            by_error=True,
+            by_error=by_error,
             customer_id=last[3],
             intent=last[4],
             told_caller=last[2],

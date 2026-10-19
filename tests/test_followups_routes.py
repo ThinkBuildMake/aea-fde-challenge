@@ -79,6 +79,17 @@ def test_bad_window_is_refused(client: TestClient, db: sqlite3.Connection):
     assert window(db, cid) == (None,)
 
 
+@pytest.mark.parametrize("body", [{}, {"window": None}])
+def test_missing_window_is_invalid_window(
+    client: TestClient, db: sqlite3.Connection, body: dict
+):
+    cid = new_conversation(client, db)
+    seed_handoff(db, cid)
+    response = client.post(f"/conversations/{cid}/callback-window", json=body)
+    assert response.status_code == 422
+    assert response.json()["error"] == "invalid_window"
+
+
 def test_no_handoff_no_window(client: TestClient, db: sqlite3.Connection):
     cid = new_conversation(client, db)
     add_turn(db, cid, 1, 1, "provider_timeout")
