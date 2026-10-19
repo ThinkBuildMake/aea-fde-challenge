@@ -39,3 +39,23 @@ def test_no_sideways_scroll_at_390(page: Page, live_url: str):
         "[document.documentElement.scrollWidth, document.body.scrollWidth]"
     )
     assert max(widths) <= 390
+
+
+def test_button_paddings_match_wireframe(page: Page, live_url: str):
+    page.goto(live_url + "/")
+    for name, pad in (("New conversation", "14px"), ("Send", "18px")):
+        button = page.get_by_role("button", name=name, exact=True)
+        expect(button).to_have_css("padding-left", pad)
+        expect(button).to_have_css("padding-right", pad)
+
+
+def test_banner_slot_hidden_at_start(page: Page, live_url: str):
+    page.goto(live_url + "/")
+    banner = page.locator("#chat-banner")
+    expect(banner).to_have_count(1)
+    expect(banner).to_be_hidden()
+    order = page.evaluate(
+        "[...document.querySelector('.chat-card').children].map((e) => e.id || e.className)"
+    )
+    assert order.index("chat-head") + 1 == order.index("chat-banner")
+    assert order.index("chat-banner") + 1 == order.index("messages")

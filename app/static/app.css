@@ -27,6 +27,23 @@ body{margin:0;font-family:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',san
 .btn{min-height:44px;padding:0 16px;border-radius:8px;font-family:inherit;font-size:14px;font-weight:500;cursor:pointer}
 .btn-fill{background:var(--accent);color:#fff;border:none}
 .btn-outline{background:#fff;color:var(--accent);border:1px solid var(--accent)}
+.chat-head .btn{padding:0 14px}
+.composer .btn{padding:0 18px}
+.chat-banner{padding:12px 16px;font-size:14px;font-weight:500;border-bottom:1px solid var(--line)}
+.chat-banner.warn{background:#FFF4E0;color:#7A4B00}
+.chat-banner.stop{background:#FDE8E7;color:#8C1D18}
+.choices{display:flex;flex-direction:column;gap:8px;margin-left:8px}
+.choices-label{font-size:12px;color:var(--muted)}
+.choice{min-height:44px;text-align:left;padding:8px 14px;border-radius:8px;border:1px solid var(--accent);background:#fff;color:var(--accent);font-family:inherit;font-size:14px;cursor:pointer;overflow-wrap:anywhere}
+.booking-card{margin-left:8px;border:1px solid #1B7F4B;border-radius:12px;padding:12px 14px;background:#F0F8F3;font-size:14px;line-height:1.5}
+.booking-title{font-weight:600;color:#14532D}
+.waitlist-line{margin-top:6px;font-weight:500;color:var(--accent)}
+.callback-picker{margin-left:8px;border:1px solid var(--border);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.callback-title{font-size:14px;font-weight:600}
+.callback-options{display:flex;flex-wrap:wrap;gap:8px}
+.callback-options .btn{padding:0 14px;font-weight:400}
+.callback-note{font-size:12px;color:var(--muted)}
+.send-error{font-size:13px;color:#8C1D18}
 .visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .page-note{font-size:12px;color:var(--muted);line-height:1.5;margin:0}
 .biz-shell{max-width:1240px;margin:0 auto;padding:20px 16px;display:flex;flex-direction:column;gap:16px}
