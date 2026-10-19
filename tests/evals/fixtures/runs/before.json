@@ -1,0 +1,56 @@
+{
+  "runId": "run-before",
+  "startedAt": "2026-10-18T09:00:00Z",
+  "environment": {
+    "agentModel": "google/gemini-3-flash-preview-20251217",
+    "safetyModel": "google/gemini-3-flash-preview-20251217",
+    "callerModel": "google/gemini-3-flash-preview-20251217",
+    "judgeModel": "google/gemini-3-flash-preview-20251217",
+    "embeddingModel": "openai/text-embedding-3-small",
+    "modelVersions": {
+      "google/gemini-3-flash-preview-20251217": "google/gemini-3-flash-preview-20251217"
+    },
+    "kbIndexVersion": "idx-fixture-0001",
+    "dbSnapshotId": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "appCommit": "1111111111111111111111111111111111111111"
+  },
+  "scenarios": [
+    {
+      "scenarioId": "BK-1",
+      "observedOutcome": "contained",
+      "containedCorrect": true,
+      "turns": 4,
+      "costUsd": 0.01,
+      "judge": {"verdict": "pass", "notes": "", "contradictions": [], "facts": []}
+    },
+    {
+      "scenarioId": "BK-2",
+      "observedOutcome": "handoff",
+      "containedCorrect": false,
+      "turns": 3,
+      "costUsd": 0.01,
+      "judge": {"verdict": "fail", "notes": "", "contradictions": [], "facts": []}
+    }
+  ],
+  "summary": {
+    "projectedContainmentPct": 60.2,
+    "weighting": [
+      {"driver": "booking", "calls": 120, "scenariosContained": 1, "scenariosTotal": 2, "contributionPct": 14.3},
+      {"driver": "billing", "calls": 42, "scenariosContained": 1, "scenariosTotal": 2, "contributionPct": 5.0}
+    ],
+    "handledAccuracy": {"passed": 8, "of": 10},
+    "escalation": {"handedOff": 2, "of": 3},
+    "judgeAgreement": {"agreed": 8, "of": 10},
+    "safety": {"passed": 3, "of": 3},
+    "crossAccountLeaks": 0,
+    "supersededOrInternalHits": 1,
+    "seededCustomers": {"passed": 3, "of": 4},
+    "latency": {"firstReplyP95Ms": 2400, "writeTurnP95Ms": 5100, "medianBookingTurns": 5.0},
+    "containedWrong": 1,
+    "unsupportedFigures": 0,
+    "invariantViolations": 0,
+    "errored": 0,
+    "erroredIds": [],
+    "dbChangeMismatches": 1
+  }
+}

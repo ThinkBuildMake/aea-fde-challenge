@@ -7,7 +7,7 @@ import pytest
 from pydantic import SecretStr
 
 from app.evals.langfuse_report import langfuse_reporter, report_to_langfuse
-from app.evals.run import format_summary
+from app.evals.run import format_summary, main
 from app.settings import Settings
 from tests.evals.helpers import eight_scenarios, play
 
@@ -90,6 +90,7 @@ def test_format_summary_prints_the_ev3_numbers(live: Settings, tmp_path: Path):
     for label in (
         "Projected containment",
         "Handled accuracy",
+        "Judge agreement: not computed (no human grades)",
         "Escalation handed off",
         "Safety",
         "Cross-account leaks",
@@ -113,3 +114,72 @@ def test_only_the_error_type_goes_to_langfuse():
         )
     )
     assert out["error"] == "RuntimeError"
+
+
+def test_judge_verdict_word_goes_to_langfuse_not_its_notes():
+    from app.evals.langfuse_report import _output
+    from app.evals.records import FactCheck, Judge, ScenarioResult
+
+    out = _output(
+        ScenarioResult(
+            scenario_id="X",
+            observed_outcome="contained",
+            judge=Judge(
+                verdict="fail",
+                contradictions=["The assistant said Linda's fee is $79."],
+                facts=[FactCheck(fact="the diagnostic fee is $89", present=False)],
+            ),
+        )
+    )
+    assert out["judgeVerdict"] == "fail"
+    sent = json.dumps(out)
+    for text in ("Linda", "$79", "$89", "diagnostic"):
+        assert text not in sent
+
+
+def test_format_summary_prints_judge_agreement(live: Settings, tmp_path: Path):
+    from tests.evals.test_judge import FakeJudgeClient
+
+    judge = FakeJudgeClient(
+        '{"facts": [{"index": 1, "present": true}], "contradictions": []}'
+    )
+    scenarios = [s for s in eight_scenarios() if s.id == "SYN-BOOK-0"]
+    run = play(
+        live, tmp_path, scenarios, judge=judge, human_grades={"SYN-BOOK-0": "pass"}
+    )
+    assert "Judge agreement: 1 of 1" in format_summary(run)
+
+
+def test_bad_grades_file_stops_the_eval_before_any_model_call(
+    live: Settings, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+):
+    bad = tmp_path / "human_grades.json"
+    bad.write_text('{"runId": "r", "grades": {"BK-1": "maybe"}}')
+    monkeypatch.setattr("app.evals.run.load_settings_or_exit", lambda: live)
+
+    def no_model(*_a, **_k):
+        raise AssertionError("no model may be called")
+
+    monkeypatch.setattr("app.evals.run.run_eval", no_model)
+
+    code = main(["--grades", str(bad)])
+
+    err = capsys.readouterr().err
+    print(code, err)
+    assert code == 1
+    assert err == f"Invalid human grades file: {bad}\n"
+
+
+def test_grades_file_without_this_runs_scenarios_says_so(
+    live: Settings, tmp_path: Path
+):
+    scenarios = [s for s in eight_scenarios() if s.id == "SYN-BOOK-0"]
+    run = play(live, tmp_path, scenarios, human_grades={"BK-1": "pass"})
+
+    text = format_summary(run, grades_loaded=True)
+
+    assert run.summary.judge_agreement is None
+    assert (
+        "Judge agreement: not computed (grades file has no scenarios from this run)"
+        in text
+    )

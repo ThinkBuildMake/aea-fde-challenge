@@ -1,0 +1,15 @@
+{
+  "runId": "run-fixture",
+  "grades": {
+    "booking-0": "pass",
+    "booking-1": "pass",
+    "warranty-0": "pass",
+    "warranty-1": "fail",
+    "billing-0": "fail",
+    "billing-1": "pass",
+    "membership-0": "pass",
+    "membership-1": "fail",
+    "appointment-0": "pass",
+    "appointment-1": "pass"
+  }
+}

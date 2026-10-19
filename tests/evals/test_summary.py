@@ -1,10 +1,19 @@
+import json
+from pathlib import Path
+
+import pytest
+
 from app.evals.records import (
+    Agreement,
     Expected,
+    Judge,
     Scenario,
     ScenarioResult,
     TranscriptLine,
 )
-from app.evals.summary import compute_summary
+from app.evals.summary import compute_summary, load_human_grades
+
+GRADES_FILE = Path(__file__).parent / "fixtures" / "human_grades.json"
 
 WEIGHTS = {
     "booking": 120,
@@ -135,6 +144,80 @@ def test_summary_counts():
     assert s.latency.write_turn_p95_ms == 900
     assert s.latency.median_booking_turns == 4.0
     assert s.judge_agreement is None
+
+
+# The judge's verdicts on the fixture run: equal to the grades file except on
+# warranty-1 (builder fail, judge pass) and appointment-1 (builder pass, judge fail).
+JUDGE_VERDICTS = {
+    "booking-0": "pass",
+    "booking-1": "pass",
+    "warranty-0": "pass",
+    "warranty-1": "pass",
+    "billing-0": "fail",
+    "billing-1": "pass",
+    "membership-0": "pass",
+    "membership-1": "fail",
+    "appointment-0": "pass",
+    "appointment-1": "fail",
+}
+
+
+def judged(verdicts=JUDGE_VERDICTS):
+    scenarios, results = fixture()
+    for r in results:
+        r.judge = Judge(verdict=verdicts.get(r.scenario_id, "pass"))
+    return scenarios, results
+
+
+def test_judge_agreement_against_the_grades_file():
+    scenarios, results = judged()
+    grades = load_human_grades(GRADES_FILE)
+
+    summary = compute_summary(scenarios, results, WEIGHTS, {}, human_grades=grades)
+
+    dumped = summary.model_dump(by_alias=True)["judgeAgreement"]
+    print("judgeAgreement:", dumped)
+    assert summary.judge_agreement == Agreement(agreed=8, of=10)
+    assert dumped == {"agreed": 8, "of": 10}
+
+
+def test_agreement_counts_handled_drivers_only():
+    scenarios, results = judged()
+    grades = load_human_grades(GRADES_FILE)
+    assert grades is not None
+    extra = {**grades, "esc-0": "pass", "not-in-run": "pass"}
+
+    summary = compute_summary(scenarios, results, WEIGHTS, {}, human_grades=extra)
+
+    assert summary.judge_agreement == Agreement(agreed=8, of=10)
+
+
+@pytest.mark.parametrize("verdict", ["not_graded", "error"])
+def test_ungraded_verdict_is_a_disagreement(verdict):
+    scenarios, results = judged({**JUDGE_VERDICTS, "booking-0": verdict})
+    grades = load_human_grades(GRADES_FILE)
+
+    summary = compute_summary(scenarios, results, WEIGHTS, {}, human_grades=grades)
+
+    assert summary.judge_agreement == Agreement(agreed=7, of=10)
+
+
+def test_no_grades_file_means_null(tmp_path):
+    missing = tmp_path / "human_grades.json"
+    assert load_human_grades(missing) is None
+    scenarios, results = judged()
+    summary = compute_summary(scenarios, results, WEIGHTS, {}, human_grades=None)
+    assert summary.judge_agreement is None
+    assert summary.model_dump(by_alias=True)["judgeAgreement"] is None
+
+    bad = tmp_path / "bad_grades.json"
+    bad.write_text(json.dumps({"runId": "r", "grades": {"booking-0": "maybe"}}))
+    with pytest.raises(ValueError, match="bad_grades.json"):
+        load_human_grades(bad)
+    broken = tmp_path / "broken_grades.json"
+    broken.write_text("{not json")
+    with pytest.raises(ValueError, match="broken_grades.json"):
+        load_human_grades(broken)
 
 
 def test_median_booking_turns_ignores_the_booking_escalation():

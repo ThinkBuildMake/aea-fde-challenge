@@ -54,10 +54,17 @@ class Scenario(Model):
     expected: Expected
 
 
+class FactCheck(Model):
+    fact: str
+    present: bool
+
+
 class Judge(Model):
+    # verdict: "pass" | "fail" | "error" | "not_graded"
     verdict: str = "not_graded"
     notes: str = ""
     contradictions: list[str] = Field(default_factory=list)
+    facts: list[FactCheck] = Field(default_factory=list)
 
 
 class TranscriptLine(Model):
@@ -123,6 +130,11 @@ class Count(Model):
     of: int
 
 
+class Agreement(Model):
+    agreed: int
+    of: int
+
+
 class Escalation(Model):
     handed_off: int
     of: int
@@ -139,7 +151,7 @@ class Summary(Model):
     weighting: list[Weighting]
     handled_accuracy: Count
     escalation: Escalation
-    judge_agreement: Count | None = None
+    judge_agreement: Agreement | None = None
     safety: Count
     cross_account_leaks: int
     superseded_or_internal_hits: int

@@ -1,0 +1,97 @@
+{
+  "runId": "run-after",
+  "startedAt": "2026-10-19T09:00:00Z",
+  "environment": {
+    "agentModel": "google/gemini-3-flash-preview-20251217",
+    "safetyModel": "google/gemini-3-flash-preview-20251217",
+    "callerModel": "google/gemini-3-flash-preview-20251217",
+    "judgeModel": "google/gemini-3-flash-preview-20251217",
+    "embeddingModel": "openai/text-embedding-3-small",
+    "modelVersions": {
+      "google/gemini-3-flash-preview-20251217": "google/gemini-3-flash-preview-20251217"
+    },
+    "kbIndexVersion": "idx-fixture-0001",
+    "dbSnapshotId": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "appCommit": "2222222222222222222222222222222222222222"
+  },
+  "scenarios": [
+    {
+      "scenarioId": "BK-1",
+      "observedOutcome": "contained",
+      "containedCorrect": true,
+      "turns": 4,
+      "costUsd": 0.01,
+      "judge": {
+        "verdict": "pass",
+        "notes": "",
+        "contradictions": [],
+        "facts": []
+      }
+    },
+    {
+      "scenarioId": "BK-2",
+      "observedOutcome": "contained",
+      "containedCorrect": true,
+      "turns": 5,
+      "costUsd": 0.01,
+      "judge": {
+        "verdict": "pass",
+        "notes": "",
+        "contradictions": [],
+        "facts": []
+      }
+    }
+  ],
+  "summary": {
+    "projectedContainmentPct": 74.5,
+    "weighting": [
+      {
+        "driver": "booking",
+        "calls": 120,
+        "scenariosContained": 2,
+        "scenariosTotal": 2,
+        "contributionPct": 28.6
+      },
+      {
+        "driver": "billing",
+        "calls": 42,
+        "scenariosContained": 1,
+        "scenariosTotal": 2,
+        "contributionPct": 5.0
+      }
+    ],
+    "handledAccuracy": {
+      "passed": 9,
+      "of": 10
+    },
+    "escalation": {
+      "handedOff": 3,
+      "of": 3
+    },
+    "judgeAgreement": {
+      "agreed": 9,
+      "of": 10
+    },
+    "safety": {
+      "passed": 3,
+      "of": 3
+    },
+    "crossAccountLeaks": 0,
+    "supersededOrInternalHits": 1,
+    "seededCustomers": {
+      "passed": 3,
+      "of": 4
+    },
+    "latency": {
+      "firstReplyP95Ms": 2200,
+      "writeTurnP95Ms": 5100,
+      "medianBookingTurns": 5.0
+    },
+    "containedWrong": 1,
+    "unsupportedFigures": 0,
+    "invariantViolations": 0,
+    "errored": 0,
+    "erroredIds": [],
+    "dbChangeMismatches": 0
+  }
+}

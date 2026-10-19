@@ -1,15 +1,19 @@
-"""The eval command: python -m app.evals.run [--scenarios DIR] [--weights FILE] [--workers N]."""
+"""The eval command: python -m app.evals.run [--scenarios DIR] [--weights FILE] [--workers N]
+[--grades FILE]."""
 
 import argparse
 import sys
 import tempfile
+from contextlib import closing
 from pathlib import Path
 
 from app.evals.caller import OpenRouterCaller
 from app.evals.environment import describe_environment
+from app.evals.judge import OpenRouterJudge
 from app.evals.langfuse_report import langfuse_reporter
 from app.evals.records import RunResult, load_scenarios, load_weights
 from app.evals.runner import make_run_id, run_eval
+from app.evals.summary import load_human_grades
 from app.knowledge.embeddings import OpenRouterEmbedder
 from app.llm import OpenRouterProvider
 from app.settings import REPO_ROOT, load_settings_or_exit
@@ -19,7 +23,9 @@ def _fraction(passed: int, of: int) -> str:
     return f"{passed} of {of}"
 
 
-def format_summary(run: RunResult) -> str:
+def format_summary(run: RunResult, grades_loaded: bool = False) -> str:
+    """`grades_loaded`: a human grades file was read, so a null judgeAgreement means it
+    graded none of this run's handled-driver scenarios."""
     s = run.summary
     env = run.environment
     latency = s.latency
@@ -40,6 +46,14 @@ def format_summary(run: RunResult) -> str:
     ]
     lines += [
         f"Handled accuracy: {_fraction(s.handled_accuracy.passed, s.handled_accuracy.of)}",
+        "Judge agreement: "
+        + (
+            _fraction(s.judge_agreement.agreed, s.judge_agreement.of)
+            if s.judge_agreement
+            else "not computed (grades file has no scenarios from this run)"
+            if grades_loaded
+            else "not computed (no human grades)"
+        ),
         f"Escalation handed off: {_fraction(s.escalation.handed_off, s.escalation.of)}",
         f"Safety: {_fraction(s.safety.passed, s.safety.of)}",
         f"Cross-account leaks: {s.cross_account_leaks}",
@@ -71,9 +85,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument(
+        "--grades", type=Path, default=REPO_ROOT / "eval" / "human_grades.json"
+    )
     args = parser.parse_args(argv)
 
     settings = load_settings_or_exit()
+    try:
+        human_grades = load_human_grades(args.grades)
+    except ValueError as error:
+        sys.stderr.write(f"{error}\n")
+        return 1
     scenarios = load_scenarios(args.scenarios)
     if not scenarios:
         sys.stderr.write(f"No scenario files in {args.scenarios}\n")
@@ -81,7 +103,10 @@ def main(argv: list[str] | None = None) -> int:
     run_id = make_run_id()
     out = args.out or REPO_ROOT / "eval" / "runs" / f"{run_id}.json"
     provider = OpenRouterProvider(settings)
-    with tempfile.TemporaryDirectory(prefix="meridian-eval-") as work:
+    with (
+        closing(OpenRouterJudge(settings)) as judge,
+        tempfile.TemporaryDirectory(prefix="meridian-eval-") as work,
+    ):
         run = run_eval(
             scenarios,
             load_weights(args.weights),
@@ -97,8 +122,12 @@ def main(argv: list[str] | None = None) -> int:
             embedder=OpenRouterEmbedder(settings),
             reporter=langfuse_reporter(settings),
             run_id=run_id,
+            judge=judge,
+            human_grades=human_grades,
         )
-    sys.stdout.write(format_summary(run) + f"\n\nRecord written to {out}\n")
+    sys.stdout.write(
+        format_summary(run, human_grades is not None) + f"\n\nRecord written to {out}\n"
+    )
     return 0
 
 
