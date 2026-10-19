@@ -11,6 +11,7 @@ dependencies = [
     "python-multipart==0.0.32",
     "openai==3.35.1",
     "numpy==2.5.3",
+    "langfuse==4.16.0",
 ]
 
 [dependency-groups]

@@ -1,0 +1,19 @@
+{
+  "id": "SYN-FIG",
+  "title": "Omar asks the diagnostic fee",
+  "basedOn": "authored",
+  "driver": "membership",
+  "kind": "happy",
+  "customerId": "MHC-10002",
+  "invoiceId": null,
+  "opening": "How much is your diagnostic fee?",
+  "callerBrief": "Omar Patel, not a member. Only wants to know the diagnostic fee.",
+  "maxTurns": 3,
+  "expected": {
+    "outcome": "contained",
+    "facts": ["the diagnostic fee"],
+    "forbidden": [],
+    "dbChange": null,
+    "handoffReason": null
+  }
+}

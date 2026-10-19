@@ -1,0 +1,28 @@
+{
+  "id": "SYN-BOOK",
+  "title": "Linda books the first open repair window",
+  "basedOn": "authored",
+  "driver": "booking",
+  "kind": "happy",
+  "customerId": "MHC-10001",
+  "invoiceId": null,
+  "opening": "Hi, this is Linda Foster, 512-555-0101. My AC stopped cooling and I need a repair visit.",
+  "callerBrief": "Linda Foster, phone 512-555-0101, Round Rock. Wants the earliest repair visit and says yes to the first window offered.",
+  "maxTurns": 4,
+  "expected": {
+    "outcome": "contained",
+    "facts": ["a repair visit is booked"],
+    "forbidden": [],
+    "dbChange": {
+      "appointmentsAdded": 1,
+      "appointmentsCancelled": 0,
+      "appointmentsMoved": 0,
+      "slotsBooked": 1,
+      "slotsFreed": 0,
+      "waitlistRows": 0,
+      "handoffRows": 0,
+      "detail": "one scheduled repair visit for MHC-10001"
+    },
+    "handoffReason": null
+  }
+}
