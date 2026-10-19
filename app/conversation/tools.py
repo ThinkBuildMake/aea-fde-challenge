@@ -163,7 +163,6 @@ class ToolState:
         self.booking: Booking | None = None
         self.has_write = False
         self.waitlisted = False
-        self.handed_off = False
 
     def offer(
         self, slot_ids: Iterable[int] = (), appointment_ids: Iterable[int] = ()
@@ -448,7 +447,6 @@ def _escalate(
         summary_source="agent",
     )
     followups.create_handoff(state.db, record)
-    state.handed_off = True
     return {"ok": True}
 
 
