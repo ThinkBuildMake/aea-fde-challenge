@@ -164,6 +164,30 @@ def test_classifier_never_sees_card_digits(tmp_settings: Settings) -> None:
         ("Nah", True, "burning_followup", "safe"),
         ("Nothing like that", True, "burning_followup", "safe"),
         ("No, no smoke or sparks.", True, "burning_followup", "safe"),
+        # A clear no followed only by a restatement of the problem is still a clear no.
+        ("No, nothing like that. Just warm air.", True, "burning_followup", "safe"),
+        ("No. The AC is just blowing warm air.", True, "burning_followup", "safe"),
+        ("Nope, it just won't cool the house", True, "burning_followup", "safe"),
+        ("No, the furnace just won't start", True, "burning_followup", "safe"),
+        # Anything risky, hedged or contrasted after the no stays an emergency.
+        (
+            "No, just warm air but it smells a bit",
+            True,
+            "burning_followup",
+            "emergency",
+        ),
+        (
+            "No, just warm air. I think I smell gas",
+            True,
+            "burning_followup",
+            "emergency",
+        ),
+        ("No, not sure though", True, "burning_followup", "emergency"),
+        ("No, maybe a little smoke", True, "burning_followup", "emergency"),
+        ("No, it is buzzing and hot", True, "burning_followup", "emergency"),
+        ("No, the outlet sparked earlier", True, "burning_followup", "emergency"),
+        ("No, I can't tell", True, "burning_followup", "emergency"),
+        ("Just warm air, no", True, "burning_followup", "emergency"),
     ],
 )
 def test_vr2_followup_rules(

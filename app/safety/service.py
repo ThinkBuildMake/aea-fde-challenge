@@ -137,12 +137,26 @@ _CLEAR_PART = re.compile(rf"(?:{_NEG}|{_NO_HAZARDS})(?: {_POLITE})?")
 _POLITE_PART = re.compile(_POLITE)
 
 
+# After the negative, a caller may restate their problem ("Just warm air."). Such a
+# part is fine only if it names no hazard and holds no doubt, contrast or change.
+_RISKY = re.compile(
+    r"smok|spark|burn|smell|odou?r|fume|gas|fire|flame|breaker|trip|shock|melt|"
+    r"buzz|sizzl|crackl|wir(?:e|ing)|carbon|alarm|hot|overheat|scorch|"
+    r"\b(?:but|though|although|except|however|actually|wait|still|now|worse|stronger|"
+    r"maybe|might|perhaps|sure|unsure|think|guess|tell|know|idea|clue|certain|"
+    r"kind of|sort of|little|bit|yes|yeah|yep|earlier)\b|\?"
+)
+
+
 def _is_clear_no(text: str) -> bool:
     t = text.casefold().replace("\u2019", "'")
     parts = [" ".join(p.split()) for p in re.split(r"[,.;!]+", t)]
     parts = [p for p in parts if p]
-    return any(_CLEAR_PART.fullmatch(p) for p in parts) and all(
-        _CLEAR_PART.fullmatch(p) or _POLITE_PART.fullmatch(p) for p in parts
+    if not parts or not _CLEAR_PART.fullmatch(parts[0]):
+        return False
+    return all(
+        _CLEAR_PART.fullmatch(p) or _POLITE_PART.fullmatch(p) or not _RISKY.search(p)
+        for p in parts[1:]
     )
 
 
