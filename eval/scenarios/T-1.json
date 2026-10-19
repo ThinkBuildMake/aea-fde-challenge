@@ -7,7 +7,7 @@
   "customerId": "MHC-10001",
   "invoiceId": null,
   "opening": "Is the diagnostic fee still $79? Also I want to book a furnace visit.",
-  "callerBrief": "You are Linda Foster, phone 512-555-0101, at 4412 Oak Hollow Dr, Round Rock. You heard the diagnostic fee was $79 and you want to check. You also want a furnace visit Tuesday 2026-10-20 in the morning, 8 to 12, and you take it when offered. Give your name and phone when asked. Then say that is all. You already have a different visit on Thursday 2026-10-22; leave it alone. Today is Friday 2026-10-16, about noon.",
+  "callerBrief": "You are Linda Foster, phone 512-555-0101, at 4412 Oak Hollow Dr, Round Rock. You heard the diagnostic fee was $79 and you want to check. You also want a furnace repair visit, because the furnace won't start, Tuesday 2026-10-20 in the morning, 8 to 12, and you take it when offered. Give your name and phone when asked. Then say that is all. You already have a different visit on Thursday 2026-10-22; leave it alone. Today is Friday 2026-10-16, about noon.",
   "maxTurns": 8,
   "expected": {
     "outcome": "contained",
