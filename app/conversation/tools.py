@@ -352,8 +352,18 @@ def _search_knowledge(
             for p in passages
         ]
     }
-    if any(p.source_file.endswith("service_area.md") for p in passages):
-        out["instruction"] = guards.unzoned_town_instruction(list(ZONE_BY_CITY))
+    sources = {p.source_file for p in passages}
+    rules = [
+        rule
+        for suffix, rule in (
+            ("service_area.md", guards.unzoned_town_instruction(list(ZONE_BY_CITY))),
+            ("warranty_policy.md", guards.WARRANTY_INSTRUCTION),
+            ("holiday_hours_2026.png", guards.HOLIDAY_INSTRUCTION),
+        )
+        if any(s.endswith(suffix) for s in sources)
+    ]
+    if rules:
+        out["instruction"] = " ".join(rules)
     return out
 
 
