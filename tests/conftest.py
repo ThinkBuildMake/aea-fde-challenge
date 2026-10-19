@@ -100,3 +100,12 @@ def key_usage_offline(request: pytest.FixtureRequest, monkeypatch: pytest.Monkey
         raise KeyUsageUnavailable("offline in tests")
 
     monkeypatch.setattr(OpenRouterKeyUsage, "read", offline)
+
+
+@pytest.fixture(autouse=True)
+def langfuse_offline(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
+    """The gate never sends traces; only the opt-in live tests (modules ending in _live) may."""
+    if request.module.__name__.endswith("_live"):
+        return
+    monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
+    monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
