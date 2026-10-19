@@ -27,13 +27,13 @@ class OpenRouterEmbedder:
         from openai import OpenAI
 
         try:
-            client = OpenAI(
+            with OpenAI(
                 base_url="https://openrouter.ai/api/v1",
                 api_key=self._settings.OPENROUTER_API_KEY.get_secret_value(),
                 timeout=30,
                 max_retries=0,
-            )
-            reply = client.embeddings.create(model=self.model, input=texts)
+            ) as client:
+                reply = client.embeddings.create(model=self.model, input=texts)
             vectors = [
                 item.embedding for item in sorted(reply.data, key=lambda i: i.index)
             ]
