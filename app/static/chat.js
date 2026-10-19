@@ -84,7 +84,7 @@
       stopTyping(typing);
       addBubble('bot', result.text);
       solvedBar.hidden = !result.actions.includes('ask_solved');
-    } catch (error) {
+    } catch {
       if (mine !== generation) return;
       stopTyping(typing);
     } finally {
