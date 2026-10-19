@@ -1,0 +1,10 @@
+.git
+.venv
+.claude
+.lazy
+docs
+analysis
+data/meridian_dataset/call_transcripts
+tests
+.env*
+__pycache__
