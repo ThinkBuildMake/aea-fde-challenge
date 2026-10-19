@@ -17,9 +17,10 @@ def conn(started: Settings) -> Iterator[sqlite3.Connection]:
 
 
 def row(conn: sqlite3.Connection) -> tuple[str | None, str | None]:
-    return conn.execute(
+    found = conn.execute(
         "SELECT outcome, ended_at FROM conversations WHERE id = 'c1'"
     ).fetchone()
+    return found[0], found[1]
 
 
 def test_end_with_handoff_twice_in_one_transaction(conn: sqlite3.Connection):
