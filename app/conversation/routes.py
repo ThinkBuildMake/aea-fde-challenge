@@ -5,15 +5,14 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.context import AppContext, get_ctx, get_db
+from app.conversation.turn import run_turn
 from app.errors import AppError
 from app.negotiation import respond
 from app.types import (
-    Reply,
     SendMessageRequest,
     SolvedRequest,
     SolvedResponse,
     StartConversationResponse,
-    TurnInfo,
 )
 
 router = APIRouter()
@@ -70,24 +69,7 @@ def send_message(
     db: sqlite3.Connection = Depends(get_db),
 ) -> Response:
     require_conversation(db, conversation_id)
-    started = ctx.clock.monotonic()
-    result = ctx.model.complete(
-        [{"role": "user", "content": payload.text}],
-        timeout_s=ctx.settings.TURN_DEADLINE,
-    )
-    latency_ms = round((ctx.clock.monotonic() - started) * 1000)
-    reply = Reply(
-        conversation_id=conversation_id,
-        status="active",
-        text=str(result.message.get("content", "")),
-        banner="none",
-        choices=[],
-        booking=None,
-        waitlisted=False,
-        actions=[],
-        turn=TurnInfo(seq=1, latency_ms=latency_ms),
-    )
-    return respond(request, reply)
+    return respond(request, run_turn(ctx, db, conversation_id, payload.text))
 
 
 @router.post("/conversations/{conversation_id}/solved")

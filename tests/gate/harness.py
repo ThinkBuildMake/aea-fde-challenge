@@ -55,3 +55,13 @@ def evaluate_pf1(results: list[CaseResult], limit_ms: int = 6000) -> GateVerdict
         f"over {len(results)} case(s): {'ok' if passed else 'FAILED'}"
     )
     return GateVerdict(passed, value, message)
+
+
+def evaluate_pf2(latencies_ms: list[int], limit_ms: int = 10000) -> GateVerdict:
+    value = p95(latencies_ms)
+    passed = value <= limit_ms
+    message = (
+        f"PF-2: p95 time for a turn with tool calls ≤ 10 s; measured {value} ms "
+        f"over {len(latencies_ms)} turn(s): {'ok' if passed else 'FAILED'}"
+    )
+    return GateVerdict(passed, value, message)
