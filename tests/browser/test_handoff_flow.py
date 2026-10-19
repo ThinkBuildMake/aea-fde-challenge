@@ -88,6 +88,8 @@ def test_dispute_to_followed_up(
     dispute(page, flow_url, width)
 
     page.get_by_role("button", name="Afternoon").click()
+    # The footer shows before the pick too: wait for the pick's own reply.
+    expect(page.locator(".msg-row.bot .bubble").last).to_contain_text("afternoon")
     expect(page.locator("#ended-text")).to_have_text(
         "This conversation has been handed over."
     )
