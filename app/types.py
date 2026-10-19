@@ -25,7 +25,7 @@ class Choice(Model):
     text: str
 
 
-class Booking(Model):
+class BookedVisit(Model):
     appointment_id: int
     slot_id: int
     date: str
@@ -33,6 +33,9 @@ class Booking(Model):
     technician_name: str
     service_type: ServiceType
     zone: Zone
+
+
+class Booking(BookedVisit):
     diagnostic_fee_cents: int | None
     diagnostic_fee_waived: bool
 

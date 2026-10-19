@@ -977,7 +977,7 @@ findOpenWindows(customerId, serviceType, preferredDate?, preferredWindow?) -> { 
 listAppointments(customerId) -> [AppointmentView]           scheduled visits only
 getAppointment(customerId, appointmentId) -> AppointmentView   throws AppointmentNotFound (also for another customer's)
 
-bookVisit(customerId, slotId, issue) -> Booking     without the diagnosticFee fields; Conversation adds them from Knowledge.getFee and the customer's tier
+bookVisit(customerId, slotId, issue, conversationId) -> BookedVisit     a Booking without the diagnosticFee fields (Booking extends it); Conversation adds them from Knowledge.getFee and the customer's tier
   One locked transaction. Throws SlotUnavailable, NotEligible(reason), SchedulingUnavailable.
 moveVisit(customerId, appointmentId, newSlotId) -> { booking: Booking, lateFeeApplies: boolean }
   One locked transaction. A move inside 24 hours carries the same fee as a cancel (FAQ, UC-1). Throws AppointmentNotFound, SlotUnavailable, NotEligible(reason), SchedulingUnavailable.

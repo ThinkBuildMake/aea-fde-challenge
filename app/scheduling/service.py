@@ -6,11 +6,12 @@ from contextlib import closing
 from datetime import date, datetime, timedelta
 
 from app.context import AppContext
+from app.logs import log_event
 from app.scheduling.store import SchedulingUnavailable, connect, zone_for_city
 from app.types import (
     AppointmentView,
     Billing,
-    Booking,
+    BookedVisit,
     CancelResult,
     CustomerRef,
     Invoice,
@@ -238,8 +239,118 @@ def get_appointment(
     raise AppointmentNotFound("appointment not found")
 
 
-def book_visit(ctx: AppContext, customer_id: str, slot_id: int, issue: str) -> Booking:
-    raise SchedulingUnavailable("not implemented")
+def book_visit(
+    ctx: AppContext,
+    customer_id: str,
+    slot_id: int,
+    issue: str,
+    conversation_id: str,
+) -> BookedVisit:
+    visit = _claim_slot(ctx, customer_id, slot_id, issue)
+    _record_book(ctx, conversation_id, customer_id, visit)
+    return visit
+
+
+def _claim_slot(
+    ctx: AppContext, customer_id: str, slot_id: int, issue: str
+) -> BookedVisit:
+    """Check, claim the slot and insert the appointment in one write-locked transaction."""
+    try:
+        with closing(connect(ctx)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                visit = _book_in_transaction(ctx, conn, customer_id, slot_id, issue)
+                conn.commit()
+                return visit
+            except BaseException:
+                conn.rollback()
+                raise
+    except sqlite3.Error as exc:
+        raise SchedulingUnavailable("scheduling database unavailable") from exc
+
+
+def _book_in_transaction(
+    ctx: AppContext,
+    conn: sqlite3.Connection,
+    customer_id: str,
+    slot_id: int,
+    issue: str,
+) -> BookedVisit:
+    slot = conn.execute(
+        "SELECT s.slot_date, s.window, s.zone, s.service_type, s.status, "
+        "t.name AS technician_name FROM appointment_slots s "
+        "JOIN technicians t ON t.tech_id = s.tech_id WHERE s.slot_id = ?",
+        (slot_id,),
+    ).fetchone()
+    if slot is None or slot["status"] in ("booked", "blocked"):
+        raise SlotUnavailable("slot is not available")
+    customer = conn.execute(
+        "SELECT city, membership_tier FROM customers WHERE customer_id = ?",
+        (customer_id,),
+    ).fetchone()
+    if customer is None:
+        raise NotEligible("unknown_customer")
+    if zone_for_city(customer["city"]) != slot["zone"]:
+        raise NotEligible("wrong_zone")
+    if slot["service_type"] == "estimate":
+        raise NotEligible("wrong_service_type")
+    if slot["slot_date"] < ctx.settings.REFERENCE_DATE:
+        raise NotEligible("before_reference_date")
+    allowed = ["open"]
+    if customer["membership_tier"] in ("standard", "plus"):
+        allowed.append("reserved_members")
+    elif slot["status"] == "reserved_members":
+        raise NotEligible("member_only")
+    claimed = conn.execute(
+        "UPDATE appointment_slots SET status = 'booked' "
+        f"WHERE slot_id = ? AND status IN ({','.join('?' * len(allowed))})",
+        (slot_id, *allowed),
+    )
+    if claimed.rowcount != 1:
+        raise SlotUnavailable("slot is not available")
+    created = conn.execute(
+        "INSERT INTO appointments (slot_id, customer_id, issue_description, "
+        "created_at, status, is_warranty_visit) VALUES (?, ?, ?, ?, 'scheduled', 0)",
+        (slot_id, customer_id, issue, ctx.settings.REFERENCE_DATE),
+    )
+    return BookedVisit(
+        appointment_id=created.lastrowid or 0,
+        slot_id=slot_id,
+        date=slot["slot_date"],
+        window=slot["window"],
+        technician_name=slot["technician_name"],
+        service_type=slot["service_type"],
+        zone=slot["zone"],
+    )
+
+
+def _record_book(
+    ctx: AppContext, conversation_id: str, customer_id: str, visit: BookedVisit
+) -> None:
+    """The audit row; a failure here is logged and never undoes the booking."""
+    try:
+        with closing(ctx.open_app_db()) as app_db:
+            app_db.execute(
+                "INSERT INTO visit_changes (conversation_id, action, appointment_id, "
+                "slot_id, customer_id, confirmed_date, confirmed_window, "
+                "confirmed_technician) VALUES (?, 'book', ?, ?, ?, ?, ?, ?)",
+                (
+                    conversation_id,
+                    visit.appointment_id,
+                    visit.slot_id,
+                    customer_id,
+                    visit.date,
+                    visit.window,
+                    visit.technician_name,
+                ),
+            )
+    except Exception as exc:  # noqa: BLE001 - never undo the booking
+        log_event(
+            "visit_change_audit_failed",
+            appointment_id=visit.appointment_id,
+            slot_id=visit.slot_id,
+            error=type(exc).__name__,
+        )
 
 
 def move_visit(
