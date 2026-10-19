@@ -11,6 +11,7 @@ from app.context import AppContext, Clock, SystemClock
 from app.conversation import tracing
 from app.conversation.routes import router as conversation_router
 from app.followups.routes import router as followups_router
+from app.headers import SecurityHeadersMiddleware
 from app.knowledge.embeddings import Embedder, OpenRouterEmbedder
 from app.knowledge.index import IndexStore
 from app.knowledge.routes import router as knowledge_router
@@ -63,6 +64,7 @@ def create_app(
     )
     app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
     errors.install(app)
+    app.add_middleware(SecurityHeadersMiddleware)
     for router in (
         conversation_router,
         followups_router,
