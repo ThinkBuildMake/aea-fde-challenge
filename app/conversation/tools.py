@@ -27,6 +27,8 @@ EARLIER_CHOICE = Choice(
     label="Nothing earlier? Ask for an earlier window",
     text="Can you do anything earlier?",
 )
+TALK_TO_PERSON = "Talk to a person instead"
+JOIN_SUFFIX = " and join the waitlist for earlier"
 WINDOW_CHOICES = 3
 MEMBER_TIERS = {"standard", "plus"}
 
@@ -203,6 +205,7 @@ class ToolState:
         self.write_failed = False
         self.unavailable: str | None = None
         self.waitlisted = False
+        self.waitlist_failed = False
         self.cancelled = False
         self.handoff: HandoffRecord | None = None
         self.cancel_asked: list[int] = []
@@ -408,17 +411,22 @@ def _customer(state: ToolState) -> str:
 def _find_open_windows(
     ctx: AppContext, state: ToolState, args: dict[str, Any]
 ) -> dict[str, Any]:
+    # The earlier button asks for the earliest windows, whatever day the model passes.
+    earlier = state.caller_text.strip() == EARLIER_CHOICE.text
     found = scheduling.find_open_windows(
         ctx,
         _customer(state),
         str(args["serviceType"]),
-        args.get("preferredDate"),
-        args.get("preferredWindow"),
+        None if earlier else args.get("preferredDate"),
+        None if earlier else args.get("preferredWindow"),
     )
     shown = found.model_copy(update={"windows": found.windows[:WINDOW_CHOICES]})
     state.windows = list(shown.windows)
     state.offer(slot_ids=[w.slot_id for w in shown.windows])
-    return _dump(shown)
+    out = _dump(shown)
+    if wants_earlier(state):
+        out["instruction"] = guards.EARLIER_INSTRUCTION
+    return out
 
 
 def _lookup_my_appointments(
@@ -476,7 +484,10 @@ def _book_visit(
         str(args["issue"]),
         state.conversation_id,
     )
-    return _booking_result(_stamp(ctx, state, visit))
+    out = _booking_result(_stamp(ctx, state, visit))
+    if state.caller_text.strip().endswith(JOIN_SUFFIX):
+        out["instruction"] = guards.JOIN_AFTER_BOOKING_INSTRUCTION
+    return out
 
 
 def _move_visit(
@@ -556,7 +567,31 @@ def _join_waitlist(
     ctx: AppContext, state: ToolState, args: dict[str, Any]
 ) -> dict[str, Any]:
     customer_id = _customer(state)
-    held = scheduling.get_appointment(ctx, customer_id, int(args["appointmentId"]))
+    # A join on the turn that booked holds that booking, whatever id the model passed.
+    appointment_id = (
+        state.booking.appointment_id
+        if state.booking is not None
+        else int(args["appointmentId"])
+    )
+    held = scheduling.get_appointment(ctx, customer_id, appointment_id)
+    # One earlier-window request per caller and visit type, whichever visit they name.
+    existing = next(
+        (
+            e
+            for e in followups.list_waitlist(ctx)
+            if e.caller.customer_id == customer_id
+            and e.service_type == held.service_type
+        ),
+        None,
+    )
+    if existing is not None:
+        state.waitlisted = True
+        return {
+            "ok": True,
+            "alreadyOnWaitlist": True,
+            "held": _dump(existing.held),
+            "instruction": guards.ALREADY_ON_WAITLIST_INSTRUCTION,
+        }
     entry = WaitlistRequest(
         conversation_id=state.conversation_id,
         customer_id=customer_id,
@@ -565,10 +600,18 @@ def _join_waitlist(
         held_date=held.date,
         held_window=held.window,
     )
-    followups.join_waitlist(ctx, entry)
-    state.commit()
+    created = followups.join_waitlist(ctx, entry).created
+    if created:
+        state.commit()
     state.waitlisted = True
-    return {"ok": True}
+    return {
+        "ok": True,
+        "alreadyOnWaitlist": not created,
+        "held": {"date": held.date, "window": held.window},
+        "instruction": guards.ON_WAITLIST_INSTRUCTION
+        if created
+        else guards.ALREADY_ON_WAITLIST_INSTRUCTION,
+    }
 
 
 def _escalate(
@@ -680,6 +723,9 @@ def run_tool(
         if name in guards.WRITE_TOOLS:
             result["instruction"] = guards.FAILED_WRITE_INSTRUCTION
             state.write_failed = True
+        elif name == "join_waitlist":
+            result["instruction"] = guards.WAITLIST_FAILED_INSTRUCTION
+            state.write_failed = state.waitlist_failed = True
     ms = round((ctx.clock.monotonic() - started) * 1000)
     return result, {"name": name, "ok": error is None, "ms": ms, "error": error}
 
@@ -689,17 +735,35 @@ def _hour(value: str) -> str:
     return f"{h % 12 or 12} {'AM' if h < 12 else 'PM'}"
 
 
-def _label(window: Window) -> str:
+def _when(window: Window) -> str:
     day = date.fromisoformat(window.date)
     start, end = window.window.split("-")
+    return f"{day:%A %B} {day.day}, {_hour(start)} to {_hour(end)}"
+
+
+def _label(window: Window) -> str:
+    return f"{_when(window)}, {window.technician_name}"
+
+
+def wants_earlier(state: ToolState) -> bool:
+    """The caller tapped the earlier-window button and this turn found windows to offer."""
     return (
-        f"{day:%A %B} {day.day}, {_hour(start)} to {_hour(end)}, "
-        f"{window.technician_name}"
+        state.caller_text.strip() == EARLIER_CHOICE.text
+        and bool(state.windows)
+        and state.booking is None
     )
 
 
 def choices(state: ToolState) -> list[Choice]:
     """Tap choices for the windows the tools offered this turn, plus the earlier-window ask."""
+    if wants_earlier(state):
+        earliest = _when(state.windows[0])
+        labels = [
+            f"Book {earliest}{JOIN_SUFFIX}",
+            f"Book {earliest} only",
+            TALK_TO_PERSON,
+        ]
+        return [Choice(label=label, text=label) for label in labels]
     if not state.windows or state.booking is not None:
         return []
     return [

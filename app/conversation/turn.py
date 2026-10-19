@@ -668,7 +668,15 @@ def run_turn(
                 end = _end_failed(db, conversation_id)
         else:
             choices = tools.choices(state)
-            if state.write_failed and booking is None:
+            if tools.wants_earlier(state):
+                actions = [*actions, "choices_only"]
+            # A committed booking with no report_status still counts as resolved,
+            # unless the waitlist join the caller asked for failed.
+            if state.booking is not None and state.resolved is None:
+                state.resolved = True
+            if state.waitlist_failed:
+                state.resolved = False
+            if state.write_failed and (booking is None or state.waitlist_failed):
                 actions = ["request_callback"]
             withheld = False
             fixed = _fixed_handoff_text(state)

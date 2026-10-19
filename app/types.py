@@ -15,7 +15,11 @@ ServiceType = Literal["hvac_repair", "hvac_tune_up", "plumbing"]
 ConversationStatus = Literal["active", "handed_off", "safety_stop", "ended"]
 Banner = Literal["none", "handoff", "safety_stop", "error"]
 Action = Literal[
-    "ask_solved", "choose_callback_window", "request_callback", "new_conversation"
+    "ask_solved",
+    "choose_callback_window",
+    "request_callback",
+    "new_conversation",
+    "choices_only",
 ]
 CallbackWindow = Literal["morning", "afternoon", "evening"]
 

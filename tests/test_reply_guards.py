@@ -136,6 +136,35 @@ def test_unsupported_figures(text: str, sources: list, unsupported: list[str]):
         ("We'll call you tomorrow.", True),
         ("We'll call you back by end of day.", True),
         ("We'll call you when the technician is on the way today.", False),
+        ("The team will call you on Friday.", True),
+        ("We will call you at 3 PM.", True),
+        ("The team will call you October 22.", True),
+        ("The team will call you on 2026-10-22.", True),
+        ("We will reach out to you on Monday.", True),
+        ("You can call back Monday through Friday, 7 AM to 7 PM.", False),
+        ("Feel free to reach out Monday to Friday 8 AM to 6 PM.", False),
+        (
+            "Feel free to reach out Monday to Friday 8 AM to 6 PM, or Saturday 9 AM to 1 PM.",
+            False,
+        ),
+        ("You can reach out 24/7 at the emergency line.", False),
+        ("For emergencies you can reach out 24/7 at the emergency line.", False),
+        ("If you want a callback, the office handles them Monday to Friday.", False),
+        ("If an earlier window opens, the team will call you.", False),
+        (
+            (
+                "You are booked for Wednesday October 21, 1 PM to 5 PM with Jun Park, "
+                "and the team will call you if an earlier one opens."
+            ),
+            False,
+        ),
+        (
+            (
+                "The earliest window is Wednesday October 21, 1 PM to 5 PM. If an "
+                "earlier one opens, the team will call you."
+            ),
+            False,
+        ),
     ],
 )
 def test_promises(text: str, promise: bool):
