@@ -180,6 +180,11 @@ def test_promises(text: str, promise: bool):
         "Sure, go ahead.",
         "OK, cancel it",
         "Confirm",
+        # Accepting the stated fee is still a clear yes.
+        "I accept the fee. Please go ahead and cancel it.",
+        "That's fine, I'll pay the $49. Yes, cancel it.",
+        "Understood about the fee. Go ahead and cancel.",
+        "Please cancel it.",
     ],
 )
 def test_a_clear_yes_confirms(text: str):
@@ -212,6 +217,10 @@ def test_refuses_card(text: str):
         "Wait",
         "Yes I would like you to cancel it but only if you can make sure there is no charge",
         "",
+        "What is the fee?",
+        "The fee is too high.",
+        "I don't accept the fee.",
+        "Is there a fee? Cancel it.",
     ],
 )
 def test_anything_else_is_not_a_yes(text: str):
@@ -247,3 +256,19 @@ def test_payment_link_text():
         "You can pay securely with this link, valid for 24 hours: "
         "https://pay.example.com/invoice/INV-1?token=a"
     )
+
+
+@pytest.mark.parametrize(
+    ("text", "claims"),
+    [
+        ("I've cancelled your appointment for Saturday.", True),
+        ("Your visit has been cancelled. A $49 fee was applied.", True),
+        ("Done, it's canceled.", True),
+        ("Your visit is not cancelled yet. Do you want me to cancel it?", False),
+        ("Would you like it cancelled?", False),
+        ("There is no fee to cancel. Do you want me to cancel it?", False),
+        ("Nothing has been cancelled.", False),
+    ],
+)
+def test_claims_cancelled(text: str, claims: bool):
+    assert guards.claims_cancelled(text) is claims

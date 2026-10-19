@@ -500,25 +500,50 @@ def last_cancel_asks(db: sqlite3.Connection, conversation_id: str) -> set[int]:
 
 
 _YES = re.compile(
-    r"^(?:yes|yeah|yep|yup|sure|ok|okay|confirm(?:ed)?|please do|go ahead|do it)\b",
+    r"^(?:yes|yeah|yep|yup|sure|ok|okay|confirm(?:ed)?|please do|go ahead|do it"
+    r"|(?:please )?(?:go ahead and )?cancel(?: it| the visit| my visit)?)\b",
     re.IGNORECASE,
 )
 _NOT_YES = re.compile(
-    r"\b(?:no|not|never|wait|maybe|unsure|but|if|waive\w*|fees?|refund\w*|discount\w*"
-    r"|charge\w*|cost\w*|price\w*)\b|n't|\$",
+    r"\b(?:no|not|never|wait|maybe|unsure|but|if|only|waive\w*|refund\w*|discount\w*"
+    r"|too)\b|n't|\?",
+    re.IGNORECASE,
+)
+# Naming the fee is fine only when the caller accepts it; otherwise it is a fee question.
+_FEE = re.compile(r"\b(?:fees?|charge\w*|cost\w*|price\w*)\b|\$", re.IGNORECASE)
+_ACCEPTS = re.compile(
+    r"\b(?:i accept|accepted|that's fine|that is fine|understood|i agree|i'll pay"
+    r"|i will pay|happy to pay|ok with|okay with)\b",
     re.IGNORECASE,
 )
 
 
 def clear_yes(text: str) -> bool:
-    """A short plain yes: no question, no condition and no ask about fees."""
+    """A short plain yes: no question, no condition, and the fee named only to accept it.
+    The first sentence may accept the fee ("I accept the fee. Please go ahead.")."""
     text = text.strip().replace("\u2019", "'")
-    return (
-        bool(_YES.match(text))
-        and "?" not in text
-        and len(text.split()) <= 8
-        and not _NOT_YES.search(text)
+    sentences = [s.strip() for s in re.split(r"[.!;]+", text) if s.strip()]
+    if not sentences or len(text.split()) > 16 or _NOT_YES.search(text):
+        return False
+    if _FEE.search(text) and not _ACCEPTS.search(text):
+        return False
+    return any(_YES.match(s) or _ACCEPTS.match(s) for s in sentences) and any(
+        _YES.match(s) for s in sentences
     )
+
+
+_CANCEL_CLAIM = re.compile(r"\bcancell?ed\b", re.IGNORECASE)
+_CLAIM_NEGATION = re.compile(r"\b(?:not|no|nothing|yet|would|want|like|if)\b|n't|\?")
+
+
+def claims_cancelled(text: str) -> bool:
+    """The reply tells the caller a visit is cancelled (a statement, not a question or a no)."""
+    for sentence in re.split(r"(?<=[.!?])\s+", text.replace("\u2019", "'")):
+        if _CANCEL_CLAIM.search(sentence) and not _CLAIM_NEGATION.search(
+            sentence.casefold()
+        ):
+            return True
+    return False
 
 
 def states_amount(text: str, cents: int) -> bool:
