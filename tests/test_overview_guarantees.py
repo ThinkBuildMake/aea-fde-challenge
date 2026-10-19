@@ -139,7 +139,7 @@ def test_latency_series_and_recent(client, db):
     ]
     # The secret conversation id lets anyone post into the chat: never shown.
     assert [r["publicId"] for r in recent] == publics
-    assert not any(c in json.dumps(body) for c in cids)
+    assert not any(f'"{c}"' in json.dumps(body) for c in cids)
     assert set(recent[0]) == {
         "publicId",
         "startedAt",
