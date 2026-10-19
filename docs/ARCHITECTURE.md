@@ -1188,6 +1188,7 @@ Request    none
 Response   201 { candidate: { scenarioId } }   (200 with the existing one on a repeat)
 Errors     404 conversation_not_found
            409 conversation_active — the conversation has no outcome yet
+           409 candidate_name_taken — another conversation already holds this CAND- name
 ```
 
 ```
