@@ -22,8 +22,8 @@ INSTRUCTIONS = (
     "tool call. Write the caller's answer once, after the tools have returned."
 )
 
-TOOLS: dict[str, dict[str, Any]] = {
-    "search_knowledge": {
+TOOLS: list[dict[str, Any]] = [
+    {
         "type": "function",
         "function": {
             "name": "search_knowledge",
@@ -35,7 +35,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             },
         },
     },
-    "report_status": {
+    {
         "type": "function",
         "function": {
             "name": "report_status",
@@ -50,7 +50,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             },
         },
     },
-}
+]
 
 
 class _TurnState:
@@ -106,11 +106,8 @@ def _run_tool(
     error: str | None = None
     result: dict[str, Any]
     try:
-        handler = HANDLERS.get(name)
-        if handler is None:
-            raise LookupError(f"unknown tool {name}")
         args = json.loads(call["function"].get("arguments") or "{}")
-        result = handler(ctx, state, args)
+        result = HANDLERS[name](ctx, state, args)
     except Exception as exc:  # noqa: BLE001 - the model gets the failure back as the tool result
         error = f"{type(exc).__name__}: {exc}"
         result = {"ok": False, "error": error}
@@ -139,7 +136,6 @@ def run_turn(
 
     user = {"role": "user", "content": redacted}
     stored: list[dict[str, Any]] = [user]
-    tools = list(TOOLS.values())
     tools_called: list[dict[str, Any]] = []
     cost = 0.0
     all_reported = True
@@ -150,7 +146,7 @@ def run_turn(
         remaining = ctx.settings.TURN_DEADLINE - (ctx.clock.monotonic() - started)
         result = ctx.model.complete(
             [{"role": "system", "content": INSTRUCTIONS}, *history, *stored],
-            tools=tools,
+            tools=TOOLS,
             timeout_s=max(remaining, 1.0),
         )
         stored.append(result.message)
