@@ -103,10 +103,9 @@ def play(
         settings=settings,
         out_path=tmp_path / "runs" / "run.json",
         work_dir=tmp_path / "work",
-        agent_model=model_for,
+        **{"agent_model": model_for, **extra},
         caller=caller or caller_for(scenarios),
         environment=environment(settings),
-        **extra,
     )
 
 

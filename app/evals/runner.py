@@ -7,22 +7,25 @@ import secrets
 import shutil
 import sqlite3
 import threading
+import time
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
 
+from app.conversation.service import close_idle_conversations
 from app.db import apply_migrations, connect_app_db
-from app.evals.caller import CallerModel
+from app.evals.caller import CallerModel, CallerMove
 from app.evals.checks import (
     db_diff,
     forbidden_hits,
     invariant_violations,
     seeded_customer_strings,
+    unconfirmed_changes,
     unsupported_figures,
 )
 from app.evals.judge import JudgeClient, grade_answer
@@ -44,6 +47,10 @@ log = logging.getLogger("meridian.evals")
 
 NO_LIMIT = 10**9
 Reporter = Callable[[RunResult, list[Scenario]], None]
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def make_run_id() -> str:
@@ -101,30 +108,37 @@ def _post(client: TestClient, path: str, body: dict[str, Any] | None = None) -> 
 def _drive(
     client: TestClient, scenario: Scenario, caller: CallerModel, max_turns: int
 ) -> tuple[str, float]:
-    """Play the conversation over the caller's routes; returns its id and the caller's cost."""
+    """Play the conversation over the caller's routes; returns its id and the caller's cost.
+
+    A caller move that ends the chat still sends its message first; the solved answer is
+    given only while the conversation is still open.
+    """
     conversation_id = _post(client, "/conversations")["conversationId"]
     messages = f"/conversations/{conversation_id}/messages"
     transcript: list[tuple[str, str]] = []
     cost = 0.0
     text: str | None = scenario.opening
+    final: CallerMove | None = None
+    status = "active"
     for _ in range(max_turns):
         if text is None:
             break
         reply = _post(client, messages, {"text": text})
         transcript += [("caller", text), ("agent", reply["text"])]
-        if reply["status"] != "active":
+        status = reply["status"]
+        if status != "active" or final is not None:
             break
         move = caller.next_move(scenario, transcript)
         cost += move.cost_usd
         if move.done:
-            if move.solved is not None:
-                _post(
-                    client,
-                    f"/conversations/{conversation_id}/solved",
-                    {"answer": "yes" if move.solved else "no"},
-                )
-            break
+            final = move
         text = move.text
+    if final is not None and final.solved is not None and status == "active":
+        _post(
+            client,
+            f"/conversations/{conversation_id}/solved",
+            {"answer": "yes" if final.solved else "no"},
+        )
     return conversation_id, cost
 
 
@@ -132,16 +146,16 @@ def _read_conversation(app_db: Path, conversation_id: str) -> dict[str, Any]:
     with closing(connect_app_db(app_db)) as conn:
         conn.row_factory = sqlite3.Row
         conversation = conn.execute(
-            "SELECT outcome, cost_usd FROM conversations WHERE id = ?",
+            "SELECT outcome, cost_usd, customer_id FROM conversations WHERE id = ?",
             (conversation_id,),
         ).fetchone()
         turns = conn.execute(
-            "SELECT kind, caller_text, reply_text, model_messages, has_write, latency_ms "
-            "FROM turns WHERE conversation_id = ? ORDER BY seq",
+            "SELECT seq, kind, caller_text, reply_text, model_messages, has_write, "
+            "latency_ms, created_at FROM turns WHERE conversation_id = ? ORDER BY seq",
             (conversation_id,),
         ).fetchall()
         handoff = conn.execute(
-            "SELECT reason, intent, told_caller, customer_id, caller_name "
+            "SELECT kind, reason, intent, told_caller, customer_id, caller_name "
             "FROM handoffs WHERE conversation_id = ?",
             (conversation_id,),
         ).fetchone()
@@ -149,12 +163,19 @@ def _read_conversation(app_db: Path, conversation_id: str) -> dict[str, Any]:
             "SELECT count(*) FROM waitlist_entries WHERE conversation_id = ?",
             (conversation_id,),
         ).fetchone()[0]
+        changes = conn.execute(
+            "SELECT action, appointment_id, committed_at FROM visit_changes "
+            "WHERE conversation_id = ? ORDER BY id",
+            (conversation_id,),
+        ).fetchall()
     return {
         "outcome": conversation["outcome"] if conversation else None,
         "cost_usd": conversation["cost_usd"] if conversation else 0.0,
+        "customer_id": conversation["customer_id"] if conversation else None,
         "turns": [dict(t) for t in turns],
         "handoff": dict(handoff) if handoff else None,
         "waitlist": waitlist,
+        "visit_changes": [dict(c) for c in changes],
     }
 
 
@@ -222,15 +243,27 @@ def _mismatches(scenario: Scenario, actual: dict[str, int]) -> list[str]:
     ]
 
 
-def _handoff_complete(handoff: dict[str, Any] | None) -> bool | None:
+def _handoff_complete(
+    handoff: dict[str, Any] | None, matched_customer_id: str | None
+) -> bool | None:
+    """The Definitions' handoff record: reason, intent and what the caller was told, and the
+    caller's identity when the conversation matched one."""
     if handoff is None:
         return None
     return bool(
         handoff["reason"]
         and handoff["intent"]
         and handoff["told_caller"]
-        and (handoff["caller_name"] or handoff["customer_id"])
+        and handoff["told_caller"].strip() != "-"
+        and (matched_customer_id is None or handoff["customer_id"])
     )
+
+
+def _close_if_open(worker: Worker) -> None:
+    """A conversation the caller left open ends as production's idle close would end it."""
+    ctx = worker.app.state.ctx
+    later = datetime.now(UTC) + timedelta(minutes=ctx.settings.IDLE_CLOSE_MINUTES + 1)
+    close_idle_conversations(ctx, later)
 
 
 def _play(
@@ -244,6 +277,7 @@ def _play(
     worker.app.state.ctx.model = model
     client = TestClient(worker.app, raise_server_exceptions=False)
     conversation_id, caller_cost = _drive(client, scenario, caller, scenario.max_turns)
+    _close_if_open(worker)
     read = _read_conversation(worker.settings.APP_DB_PATH, conversation_id)
     live = worker.settings.SCHEDULING_DB_PATH
     transcript: list[TranscriptLine] = []
@@ -268,7 +302,7 @@ def _play(
     notes = invariant_violations(
         worker.seed, live, worker.settings.APP_DB_PATH, conversation_id
     )
-    observed = read["outcome"] or "unfinished"
+    observed = read["outcome"] or "unfinished"  # only if the idle close failed
     figures = unsupported_figures(figure_input)
     hits = forbidden_hits(
         [t.text for t in transcript if t.role == "agent"], scenario.expected.forbidden
@@ -276,6 +310,8 @@ def _play(
     grade = grade_answer(scenario, transcript, judge)
     counts = db_change_counts(diff, int(read["handoff"] is not None), read["waitlist"])
     mismatches = _mismatches(scenario, counts)
+    unconfirmed = unconfirmed_changes(read["turns"], read["visit_changes"], diff)
+    handoff = read["handoff"]
     return ScenarioResult(
         scenario_id=scenario.id,
         observed_outcome=observed,
@@ -288,6 +324,7 @@ def _play(
             and figures == 0
             and not notes
             and not mismatches
+            and not unconfirmed
         ),
         facts_missing=grade.facts_missing,
         forbidden_hits=hits,
@@ -299,11 +336,16 @@ def _play(
         latencies_ms=latencies,
         cost_usd=round(float(read["cost_usd"]) + caller_cost + grade.cost_usd, 6),
         judge=grade.judge,
-        handoff_record_complete=_handoff_complete(read["handoff"]),
+        handoff_record_complete=_handoff_complete(handoff, read["customer_id"]),
         transcript=transcript,
         db_change_mismatches=mismatches,
         worker=worker.number,
         copy_path=str(live),
+        matched_customer_id=read["customer_id"],
+        handoff_kind=handoff["kind"] if handoff else None,
+        handoff_reason=handoff["reason"] if handoff else None,
+        unconfirmed_changes=len(unconfirmed),
+        unconfirmed_notes=unconfirmed,
     )
 
 
@@ -379,7 +421,8 @@ def run_eval(
     The caller's own scheduling file is never opened: workers copy settings.SEED_DB_PATH.
     `judge` grades each transcript (None: not graded); `human_grades` gives judgeAgreement.
     """
-    started_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    started_at = _now()
+    clock_start = time.monotonic()
     scenario_list = list(scenarios)
     count = max(1, min(workers, len(scenario_list)))
     batches = [scenario_list[i::count] for i in range(count)]
@@ -405,6 +448,9 @@ def run_eval(
     run = RunResult(
         run_id=run_id or make_run_id(),
         started_at=started_at,
+        finished_at=_now(),
+        duration_s=round(time.monotonic() - clock_start, 1),
+        workers=count,
         environment=environment,
         scenarios=results,
         summary=compute_summary(

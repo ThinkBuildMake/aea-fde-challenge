@@ -26,6 +26,7 @@ LABELS = (
     "Median booking turns",
     "Contained wrong",
     "Unsupported figures",
+    "Unconfirmed changes",
     "Invariant violations",
     "Database-change mismatches",
     "Errored",
@@ -51,6 +52,7 @@ def test_compare_prints_count_changes_and_bk2(capsys):
     assert "Database-change mismatches: 1 -> 0 (-1)" in lines
     assert "Errored: 0 -> 0 (+0)" in lines
     assert "  BK-2: handoff -> contained (fail -> pass)" in lines
+    assert "Pass or fail differs on 1 of 2 scenarios" in lines
     assert not any("BK-1" in x for x in lines)
 
 

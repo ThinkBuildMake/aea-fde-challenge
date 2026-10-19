@@ -11,6 +11,7 @@ from app.evals.checks import (
     forbidden_hits,
     invariant_violations,
     seeded_customer_strings,
+    unconfirmed_changes,
     unsupported_figures,
 )
 from app.startup import MIGRATIONS_DIR
@@ -167,3 +168,76 @@ def test_forbidden_hits_and_customer_strings(seed_path: Path):
     strings = seeded_customer_strings(seed_path, ["MHC-10001"])
     assert "Linda Foster" in strings["MHC-10001"]
     assert "512-555-0101" in strings["MHC-10001"]
+
+
+def test_rebooking_a_freed_slot_is_allowed(seed_path: Path, copy: Path, app_db: Path):
+    # Linda's own visit (appointment 159) sits on slot 159; this run cancels it and books
+    # the freed slot again, so the seed's "booked" no longer stands in the way (VR-7).
+    run(
+        copy,
+        "UPDATE appointments SET status = 'cancelled' WHERE appointment_id = 159",
+        *book(159, "MHC-10001"),
+    )
+    found = problems(seed_path, copy, app_db)
+    print(found)
+    assert found == []
+
+
+def test_booking_a_slot_booked_by_someone_else_is_caught(
+    seed_path: Path, copy: Path, app_db: Path
+):
+    run(copy, book(159, "MHC-10001")[1])
+    found = problems(seed_path, copy, app_db)
+    print(found)
+    assert any("VR-7" in line and "slot was booked" in line for line in found)
+    assert any("more than one" in line for line in found)
+
+
+def turn_rows(*texts: str) -> list[dict]:
+    return [
+        {"seq": n, "caller_text": text, "created_at": f"2026-10-16T12:00:0{n}.000Z"}
+        for n, text in enumerate(texts, start=1)
+    ]
+
+
+def change(action: str, at: str, appointment_id: int = 25) -> dict:
+    return {"action": action, "appointment_id": appointment_id, "committed_at": at}
+
+
+CANCEL_DIFF = {
+    "appointments": {
+        "added": [],
+        "changed": [
+            {
+                "key": 25,
+                "before": {"slot_id": 33, "status": "scheduled"},
+                "after": {"slot_id": 33, "status": "cancelled"},
+            }
+        ],
+        "removed": [],
+    }
+}
+
+
+def test_cancel_without_a_yes_is_unconfirmed():
+    turns = turn_rows("Cancel my visit", "Hmm, maybe, I'm not sure")
+    notes = unconfirmed_changes(
+        turns, [change("cancel", "2026-10-16T12:00:01.500Z")], CANCEL_DIFF
+    )
+    print(notes)
+    assert len(notes) == 1
+    assert notes[0].startswith("AZ-2 cancel of appointment 25")
+
+
+def test_cancel_after_yes_is_confirmed():
+    turns = turn_rows("Cancel my visit", "Yes, go ahead and cancel it")
+    notes = unconfirmed_changes(
+        turns, [change("cancel", "2026-10-16T12:00:01.500Z")], CANCEL_DIFF
+    )
+    assert notes == []
+
+
+def test_diff_cancel_without_audit_row_is_unconfirmed():
+    notes = unconfirmed_changes(turn_rows("Yes, cancel it"), [], CANCEL_DIFF)
+    print(notes)
+    assert notes == ["AZ-2 appointment 25 was cancelled with no visit_changes row"]
