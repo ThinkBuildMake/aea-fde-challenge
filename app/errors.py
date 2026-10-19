@@ -21,7 +21,10 @@ def _body(status: int, code: str, message: str) -> JSONResponse:
     return JSONResponse({"error": code, "message": message}, status_code=status)
 
 
-_HTTP_CODES = {404: "not_found", 405: "method_not_allowed"}
+_HTTP = {
+    404: ("not_found", "Nothing is served at this address."),
+    405: ("method_not_allowed", "This method is not allowed here."),
+}
 
 
 def install(app: FastAPI) -> None:
@@ -37,12 +40,9 @@ def install(app: FastAPI) -> None:
 
     @app.exception_handler(StarletteHTTPException)
     def http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse:
-        code = _HTTP_CODES.get(exc.status_code, "http_error")
-        message = {404: "Nothing is served at this address."}.get(
-            exc.status_code, "The request could not be served."
+        code, message = _HTTP.get(
+            exc.status_code, ("http_error", "The request could not be served.")
         )
-        if exc.status_code == 405:
-            message = "This method is not allowed here."
         return _body(exc.status_code, code, message)
 
     @app.exception_handler(Exception)
