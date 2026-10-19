@@ -289,6 +289,7 @@ def test_late_cancel_carries_the_fee(
     assert out["lateFeeApplies"] is True and out["lateFeeCents"] == 4900
     assert fees.calls[-1][1] == "FEE-LATE"
     assert cancel.calls[0][1] == "MHC-10002"
+    assert cancel.calls[0][-1] == cid
 
 
 def test_waitlist_uses_the_held_window_from_the_database(

@@ -979,9 +979,9 @@ getAppointment(customerId, appointmentId) -> AppointmentView   throws Appointmen
 
 bookVisit(customerId, slotId, issue, conversationId) -> BookedVisit     a Booking without the diagnosticFee fields (Booking extends it); Conversation adds them from Knowledge.getFee and the customer's tier
   One locked transaction. Throws SlotUnavailable, NotEligible(reason), SchedulingUnavailable.
-moveVisit(customerId, appointmentId, newSlotId) -> { booking: Booking, lateFeeApplies: boolean }
+moveVisit(customerId, appointmentId, newSlotId, conversationId) -> { booking: BookedVisit, lateFeeApplies: boolean }
   One locked transaction. A move inside 24 hours carries the same fee as a cancel (FAQ, UC-1). Throws AppointmentNotFound, SlotUnavailable, NotEligible(reason), SchedulingUnavailable.
-cancelVisit(customerId, appointmentId) -> { appointmentId, freedSlotId, lateFeeApplies: boolean, hoursBefore: number }
+cancelVisit(customerId, appointmentId, conversationId) -> { appointmentId, freedSlotId, lateFeeApplies: boolean, hoursBefore: number }
   (Scheduling knows no prices: Conversation adds the amount from Knowledge.getFee.)
   One locked transaction. Throws AppointmentNotFound, SchedulingUnavailable.
   NotEligible reasons: wrong_zone, wrong_service_type, member_only, before_reference_date, not_scheduled (more may be added).

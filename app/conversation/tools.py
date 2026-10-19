@@ -428,7 +428,11 @@ def _move_visit(
     ctx: AppContext, state: ToolState, args: dict[str, Any]
 ) -> dict[str, Any]:
     moved = scheduling.move_visit(
-        ctx, _customer(state), int(args["appointmentId"]), int(args["newSlotId"])
+        ctx,
+        _customer(state),
+        int(args["appointmentId"]),
+        int(args["newSlotId"]),
+        state.conversation_id,
     )
     out = _booking_result(_stamp(ctx, state, moved.booking))
     out["lateFeeApplies"] = moved.late_fee_applies
@@ -441,7 +445,7 @@ def _cancel_visit(
     ctx: AppContext, state: ToolState, args: dict[str, Any]
 ) -> dict[str, Any]:
     cancelled = scheduling.cancel_visit(
-        ctx, _customer(state), int(args["appointmentId"])
+        ctx, _customer(state), int(args["appointmentId"]), state.conversation_id
     )
     state.commit()
     out = _dump(cancelled)
