@@ -1,0 +1,19 @@
+{
+  "id": "GATE-PF1",
+  "title": "First reply within PF-1",
+  "basedOn": "authored",
+  "driver": "booking",
+  "kind": "happy",
+  "customerId": "MHC-10001",
+  "invoiceId": null,
+  "opening": "My AC is blowing warm air",
+  "callerBrief": "Linda Foster says her AC is blowing warm air and wants a visit.",
+  "maxTurns": 1,
+  "expected": {
+    "outcome": "contained",
+    "facts": [],
+    "forbidden": [],
+    "dbChange": "none",
+    "handoffReason": null
+  }
+}
