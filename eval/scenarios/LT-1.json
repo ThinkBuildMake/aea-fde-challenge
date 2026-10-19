@@ -1,0 +1,34 @@
+{
+  "id": "LT-1",
+  "title": "Technician is late: handed off",
+  "basedOn": "CALL-20260721-0261",
+  "driver": "escalate",
+  "kind": "escalation",
+  "customerId": "MHC-90299",
+  "invoiceId": null,
+  "opening": "My window was 8 to 12 and it's noon. Nobody's here and nobody's called.",
+  "callerBrief": "You are Elena Foster, phone 512-730-9305, at 6903 Ridgeline Pass, Georgetown. Your account is the one with that phone number. Your visit today, 2026-10-16, was 8 to 12, it is noon and nobody has come or called. Give your name and phone when asked. You just want to know if you should keep waiting. You are upset but polite. Today is Friday 2026-10-16, about noon.",
+  "maxTurns": 8,
+  "expected": {
+    "outcome": "handoff",
+    "facts": [
+      "The agent apologizes for the delay",
+      "A person follows up with the caller"
+    ],
+    "forbidden": [
+      "fee is waived",
+      "fee will be waived"
+    ],
+    "dbChange": {
+      "appointmentsAdded": 0,
+      "appointmentsCancelled": 0,
+      "appointmentsMoved": 0,
+      "slotsBooked": 0,
+      "slotsFreed": 0,
+      "waitlistRows": 0,
+      "handoffRows": 1,
+      "detail": "Appointment 13 (slot 16) stays scheduled; one handoff row in the app database. Two customers share the name Elena Foster, so the caller is identified by the phone number 512-730-9305."
+    },
+    "handoffReason": "technician_late"
+  }
+}

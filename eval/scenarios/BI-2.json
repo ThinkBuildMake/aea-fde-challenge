@@ -1,0 +1,33 @@
+{
+  "id": "BI-2",
+  "title": "What an invoice line is",
+  "basedOn": "CALL-20260710-0373",
+  "driver": "billing",
+  "kind": "edge",
+  "customerId": "MHC-23289",
+  "invoiceId": "INV-202812",
+  "opening": "I got an invoice, INV-202812, for $239 and I'm not sure what it's for.",
+  "callerBrief": "You are Grace Chen, phone 512-293-3681, at 6617 Windcrest Ave, Austin. You got invoice INV-202812 and do not understand it. Give your name and phone when asked. After the explanation ask what the condensate drain clearing line is. Then ask if you can get an itemized copy by email, and say that is all. Today is Friday 2026-10-16, about noon.",
+  "maxTurns": 8,
+  "expected": {
+    "outcome": "contained",
+    "facts": [
+      "INV-202812 is $239, issued 2026-07-26 and unpaid, made up of a diagnostic visit for $89 and condensate drain clearing for $150",
+      "The condensate drain clearing line the caller asks about is $150 of the $239 total"
+    ],
+    "forbidden": [
+      "$79"
+    ],
+    "dbChange": {
+      "appointmentsAdded": 0,
+      "appointmentsCancelled": 0,
+      "appointmentsMoved": 0,
+      "slotsBooked": 0,
+      "slotsFreed": 0,
+      "waitlistRows": 0,
+      "handoffRows": 0,
+      "detail": "No database change."
+    },
+    "handoffReason": null
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "id": "NS-1",
+  "title": "New system quote: the catalog range, estimate left to a person",
+  "basedOn": "CALL-20260709-0134",
+  "driver": "escalate",
+  "kind": "escalation",
+  "customerId": "MHC-95150",
+  "invoiceId": null,
+  "opening": "My system is about 14 years old and I'm thinking about replacing it. What would that cost?",
+  "callerBrief": "You are Susan Patel, phone 512-630-2328, at 4314 Brookside Ct, Round Rock. Your American Standard system is about 14 years old (installed 2012). Give your name and phone when asked. Ask for a ballpark. When offered a free estimate with a Comfort Advisor, say yes, let's do that. Accept that a person will arrange it. Today is Friday 2026-10-16, about noon.",
+  "maxTurns": 8,
+  "expected": {
+    "outcome": "handoff",
+    "facts": [
+      "Typical installed price for a full residential split system is $8,000 to $16,000, depending on tonnage, efficiency rating (SEER2), ductwork and brand",
+      "A free in-home estimate with a Comfort Advisor is available, and a person will arrange it"
+    ],
+    "forbidden": [],
+    "dbChange": {
+      "appointmentsAdded": 0,
+      "appointmentsCancelled": 0,
+      "appointmentsMoved": 0,
+      "slotsBooked": 0,
+      "slotsFreed": 0,
+      "waitlistRows": 0,
+      "handoffRows": 1,
+      "detail": "No slot or appointment rows change; the estimate service type is not bookable by the agent. One handoff row in the app database."
+    },
+    "handoffReason": "new_system_quote"
+  }
+}

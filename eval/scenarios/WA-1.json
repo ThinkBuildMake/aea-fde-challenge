@@ -1,0 +1,35 @@
+{
+  "id": "WA-1",
+  "title": "Three-year-old compressor: part covered, labor billable",
+  "basedOn": "CALL-20260709-0315",
+  "driver": "warranty",
+  "kind": "happy",
+  "customerId": "MHC-73972",
+  "invoiceId": null,
+  "opening": "My American Standard compressor died and the system is only three years old. Is that under warranty?",
+  "callerBrief": "You are Tom Ali, phone 512-304-6613, at 4437 Harbor View Way, Buda. Your American Standard system was installed in May 2023 and the compressor died. Give your name and phone when asked. Ask how much labor is on a compressor. After the answer say: okay, let's schedule it. Take the first visit window offered. Then say that covers it. Today is Friday 2026-10-16, about noon.",
+  "maxTurns": 8,
+  "expected": {
+    "outcome": "contained",
+    "facts": [
+      "The compressor part is covered: the manufacturer's compressor warranty is 10 years when registered, and Meridian registers every unit",
+      "Labor is billable, because the 2-year Meridian installation labor warranty ended in May 2025",
+      "Compressor replacement labor typically runs $600 to $900, and the technician confirms the exact price on site",
+      "A repair visit is booked and the date, window and technician are read back"
+    ],
+    "forbidden": [
+      "90-day"
+    ],
+    "dbChange": {
+      "appointmentsAdded": 1,
+      "appointmentsCancelled": 0,
+      "appointmentsMoved": 0,
+      "slotsBooked": 1,
+      "slotsFreed": 0,
+      "waitlistRows": 0,
+      "handoffRows": 0,
+      "detail": "One new hvac_repair appointment in the south zone (Buda): the earliest open slot is 115 (2026-10-21 08:00-12:00, Jun Park); slot 119 (13:00-17:00, Jun Park) is also acceptable. book_visit records is_warranty_visit 0."
+    },
+    "handoffReason": null
+  }
+}

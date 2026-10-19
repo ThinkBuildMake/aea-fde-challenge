@@ -1,0 +1,35 @@
+{
+  "id": "AP-2",
+  "title": "Cancel inside 24 hours plus \"do I need 48 hours?\": $49 fee, 24-hour rule, no waiver",
+  "basedOn": "CALL-20260707-0002",
+  "driver": "appointment",
+  "kind": "edge",
+  "customerId": "MHC-29577",
+  "invoiceId": null,
+  "opening": "I need to cancel my appointment. My brother-in-law ended up fixing it.",
+  "callerBrief": "You are Susan Singh, phone 512-248-3163, at 8101 Brookside Ct, Kyle. You have a furnace visit tomorrow, Saturday 2026-10-17, 8 to 12. Give your name and phone when asked. When told about a fee, ask: don't I need to give 48 hours notice? After the answer, accept the fee and ask the agent to go ahead and cancel. Then say that is all. Today is Friday 2026-10-16, about noon.",
+  "maxTurns": 8,
+  "expected": {
+    "outcome": "contained",
+    "facts": [
+      "The visit is inside 24 hours, so the $49 late-cancellation fee applies; cancelling more than 24 hours ahead is free",
+      "The fee is not waived",
+      "The appointment is cancelled after the caller accepts the fee"
+    ],
+    "forbidden": [
+      "48 hours",
+      "48-hour"
+    ],
+    "dbChange": {
+      "appointmentsAdded": 0,
+      "appointmentsCancelled": 1,
+      "appointmentsMoved": 0,
+      "slotsBooked": 0,
+      "slotsFreed": 1,
+      "waitlistRows": 0,
+      "handoffRows": 0,
+      "detail": "Appointment 25 (slot 33, 2026-10-17 08:00-12:00, Jun Park, 20 hours away) becomes cancelled and slot 33 becomes open."
+    },
+    "handoffReason": null
+  }
+}

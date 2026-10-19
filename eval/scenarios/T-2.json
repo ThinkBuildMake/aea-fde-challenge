@@ -1,0 +1,37 @@
+{
+  "id": "T-2",
+  "title": "Holiday and Sunday hours (the image)",
+  "basedOn": "authored",
+  "driver": "trap",
+  "kind": "trap",
+  "customerId": "MHC-35862",
+  "invoiceId": null,
+  "opening": "Are you guys open this Sunday? And what about Thanksgiving?",
+  "callerBrief": "You are Wei Cruz, phone 512-865-1554, at 7992 Sunset Terrace, Pflugerville. Ask if phone support is open this Sunday, then what the hours are on Thanksgiving, then what the fee is if you have an emergency on a holiday. Give your name and phone only if asked. Then say that is all. Today is Friday 2026-10-16, about noon.",
+  "maxTurns": 8,
+  "expected": {
+    "outcome": "contained",
+    "facts": [
+      "Phone support is closed on Sunday; it is open Monday to Friday 7am to 7pm and Saturday 8am to 4pm",
+      "On Thanksgiving, November 26 and 27, the office is closed and the emergency line is open",
+      "The holiday emergency dispatch fee is $199"
+    ],
+    "forbidden": [
+      "8:00am-6:00pm",
+      "9:00am-1:00pm",
+      "8:00am–6:00pm",
+      "9:00am–1:00pm"
+    ],
+    "dbChange": {
+      "appointmentsAdded": 0,
+      "appointmentsCancelled": 0,
+      "appointmentsMoved": 0,
+      "slotsBooked": 0,
+      "slotsFreed": 0,
+      "waitlistRows": 0,
+      "handoffRows": 0,
+      "detail": "No database change. Sunday hours come from the 2026 FAQ; Thanksgiving and the holiday fee come from the holiday-hours image."
+    },
+    "handoffReason": null
+  }
+}

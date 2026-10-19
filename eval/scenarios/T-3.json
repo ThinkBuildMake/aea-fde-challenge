@@ -1,0 +1,33 @@
+{
+  "id": "T-3",
+  "title": "After-hours fee (the PDF)",
+  "basedOn": "authored",
+  "driver": "trap",
+  "kind": "trap",
+  "customerId": "MHC-93743",
+  "invoiceId": null,
+  "opening": "What does after-hours emergency dispatch cost?",
+  "callerBrief": "You are David Rivera, phone 512-777-1976, at 3474 Harbor View Way, Cedar Park. You are not a member. Ask what the after-hours emergency dispatch fee is, then whether members pay it. Give your name and phone only if asked. Then say that is all. Today is Friday 2026-10-16, about noon.",
+  "maxTurns": 8,
+  "expected": {
+    "outcome": "contained",
+    "facts": [
+      "After-hours emergency dispatch is $149 for non-members",
+      "It is waived for Comfort Club and Comfort Club Plus members"
+    ],
+    "forbidden": [
+      "$129"
+    ],
+    "dbChange": {
+      "appointmentsAdded": 0,
+      "appointmentsCancelled": 0,
+      "appointmentsMoved": 0,
+      "slotsBooked": 0,
+      "slotsFreed": 0,
+      "waitlistRows": 0,
+      "handoffRows": 0,
+      "detail": "No database change. The figures come from the 2026 fee schedule PDF."
+    },
+    "handoffReason": null
+  }
+}
