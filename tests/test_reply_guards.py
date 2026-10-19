@@ -189,6 +189,20 @@ def test_a_clear_yes_confirms(text: str):
 @pytest.mark.parametrize(
     "text",
     [
+        guards.CARD_REFUSAL_TEXT,
+        "Sorry, I can't accept card numbers here.",
+        "I’m unable to take card details in this chat.",
+        "For your security I do not store or process card numbers.",
+        "We cannot process payments by card number in chat.",
+    ],
+)
+def test_refuses_card(text: str):
+    assert guards.refuses_card(text) is True
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
         "Can you waive the $49?",
         "Maybe I'll cancel, I'm not sure",
         "Cancel my visit",
@@ -202,3 +216,34 @@ def test_a_clear_yes_confirms(text: str):
 )
 def test_anything_else_is_not_a_yes(text: str):
     assert guards.clear_yes(text) is False
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Thanks, your card is noted.",
+        "Your balance is $478.00. I cannot waive it. Your card was charged.",
+        "You can pay with a card using the link.",
+        "",
+    ],
+)
+def test_does_not_count_as_card_refusal(text: str):
+    assert guards.refuses_card(text) is False
+
+
+def test_no_match_handoff_text():
+    assert guards.handoff_text("no_account_match", "handoff") == guards.NO_MATCH_TEXT
+    assert "could not find an account" in guards.NO_MATCH_TEXT
+    assert "$" not in guards.NO_MATCH_TEXT
+
+
+def test_payment_link_text():
+    from app.types import PaymentLink
+
+    link = PaymentLink(
+        url="https://pay.example.com/invoice/INV-1?token=a", valid_for_hours=24
+    )
+    assert guards.payment_link_text(link) == (
+        "You can pay securely with this link, valid for 24 hours: "
+        "https://pay.example.com/invoice/INV-1?token=a"
+    )

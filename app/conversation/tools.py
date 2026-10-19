@@ -18,6 +18,7 @@ from app.types import (
     Booking,
     Choice,
     HandoffRecord,
+    PaymentLink,
     ServiceType,
     WaitlistRequest,
     Window,
@@ -213,6 +214,8 @@ class ToolState:
         self.cancel_asked: list[int] = []
         self.cancel_fee_cents: dict[int, int] = {}
         self.cancel_confirmable: set[int] = set()
+        self.card_removed = False
+        self.payment_link: PaymentLink | None = None
 
     def offer(
         self, slot_ids: Iterable[int] = (), appointment_ids: Iterable[int] = ()
@@ -337,7 +340,11 @@ def _search_knowledge(
     passages = knowledge.search_knowledge(ctx, str(args["query"]), 5)
     for p in passages:
         state.retrieved.append(
-            {"passageId": p.passage_id, "sourceFile": p.source_file, "score": p.score}
+            {
+                "passageId": p.passage_id,
+                "sourceFile": p.source_file,
+                "score": round(p.score, 4),
+            }
         )
     out: dict[str, Any] = {
         "passages": [
@@ -364,6 +371,14 @@ def _report_status(
 def _identify_customer(
     ctx: AppContext, state: ToolState, args: dict[str, Any]
 ) -> dict[str, Any]:
+    if state.customer_id is not None:
+        return {
+            "ok": False,
+            "error": "already_identified",
+            "message": "The caller is already matched to their own account. Never look "
+            "up or share anyone else's account; say you can only discuss the caller's "
+            "own account.",
+        }
     if not any(args.get(k) for k in ("phone", "accountNumber", "serviceAddress")):
         return {
             "ok": False,
@@ -393,7 +408,25 @@ def _identify_customer(
     )
     if ref is None:
         state.identify_attempts += 1
-        return {"ok": False, "error": "no_match", "message": "No account matched."}
+        if state.handoff is None:
+            state.handoff = HandoffRecord(
+                conversation_id=state.conversation_id,
+                kind="handoff",
+                reason="no_account_match",
+                by_error=False,
+                customer_id=None,
+                stated_name=str(args.get("name") or "") or None,
+                stated_phone=args.get("phone") or None,
+                intent=state.caller_text[:120],
+                told_caller="-",
+                summary_source="system",
+            )
+        return {
+            "ok": False,
+            "error": "no_match",
+            "message": "No account matched. The caller is being passed to a person; "
+            "share no account details.",
+        }
     state.db.execute(
         "UPDATE conversations SET identify_attempts = identify_attempts - 1 "
         "WHERE id = ?",
@@ -567,7 +600,27 @@ def _send_payment_link(
     ctx: AppContext, state: ToolState, args: dict[str, Any]
 ) -> dict[str, Any]:
     link = scheduling.create_payment_link(ctx, _customer(state), str(args["invoiceId"]))
+    state.payment_link = link
     return _dump(link)
+
+
+def card_turn_link(ctx: AppContext, state: ToolState) -> PaymentLink | None:
+    """A link for the matched caller's newest owed invoice, or None."""
+    if state.customer_id is None:
+        return None
+    try:
+        owed = [
+            i
+            for i in scheduling.get_billing(ctx, state.customer_id).invoices
+            if i.balance_cents > 0
+        ]
+        if not owed:
+            return None
+        return scheduling.create_payment_link(
+            ctx, state.customer_id, owed[0].invoice_id
+        )
+    except Exception:  # noqa: BLE001 - the refusal still stands without a link
+        return None
 
 
 def _join_waitlist(
@@ -625,6 +678,14 @@ def _escalate(
     ctx: AppContext, state: ToolState, args: dict[str, Any]
 ) -> dict[str, Any]:
     """Note the handoff; the turn writes it with the outcome when it saves."""
+    if state.card_removed and state.handoff is None:
+        return {
+            "ok": False,
+            "error": "card_number_turn",
+            "instruction": "The caller sent a card number; it was removed and not kept. "
+            "Do not hand off for it. Say you cannot take card numbers here and offer the "
+            "payment link.",
+        }
     if state.handoff is None:
         matched = state.customer_id is not None
         reason = str(args.get("reason") or "").strip() or "other"

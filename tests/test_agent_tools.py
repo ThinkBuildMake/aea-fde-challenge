@@ -165,9 +165,13 @@ def tool_results(started: Settings, cid: str) -> list[dict[str, Any]]:
 
 
 def identify(customer_id: str) -> list[dict[str, Any]]:
-    call = tool_call("id", "identify_customer")
-    call["function"]["arguments"] = json.dumps({"name": "Test", "phone": "555-0100"})
-    return [call]
+    return [identify_as("id", "Test", "555-0100")]
+
+
+def identify_as(call_id: str, name: str, phone: str) -> dict[str, Any]:
+    call = tool_call(call_id, "identify_customer")
+    call["function"]["arguments"] = json.dumps({"name": name, "phone": phone})
+    return call
 
 
 def identify_and_offer(
@@ -242,15 +246,98 @@ def test_account_tools_wait_for_a_match(
 
 
 def test_identification_is_capped(started: Settings, monkeypatch: pytest.MonkeyPatch):
+    from app.conversation.tools import IDENTIFY_ATTEMPT_LIMIT
+
     ident = stub(monkeypatch, "app.scheduling.service.identify_customer", None)
-    cid, _ = run(
-        started,
-        *[identify("X") for _ in range(4)],
-    )
-    assert len(ident.calls) == 3
+    results = [result(assistant(calls=identify("X"))), result(assistant("answer"))]
+    client = client_for(started, FakeModelProvider(results=results))
+    cid = new_conversation(client)
+    conn = sqlite3.connect(started.APP_DB_PATH)
+    with conn:
+        conn.execute(
+            "UPDATE conversations SET identify_attempts = ?", (IDENTIFY_ATTEMPT_LIMIT,)
+        )
+    conn.close()
+    say(client, cid, "message 0")
+    assert ident.calls == []
     last = tool_results(started, cid)[-1]
     assert last["error"] == "identify_limit_reached" and "escalate" in last["message"]
     assert rows(started, "SELECT identify_attempts FROM conversations")[0][0] == 3
+
+
+def test_no_match_hands_off_with_fixed_text(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    from app.conversation.guards import NO_MATCH_TEXT
+
+    stub(monkeypatch, "app.scheduling.service.identify_customer", None)
+    call = identify_as("id", "Omar Patel", "512-555-0101")
+    cid, replies = run(started, [call])
+    reply = replies[0]
+    assert reply["text"] == NO_MATCH_TEXT
+    assert (reply["status"], reply["banner"]) == ("handed_off", "handoff")
+    assert reply["actions"] == ["choose_callback_window"]
+    row = rows(
+        started,
+        "SELECT reason, kind, customer_id, caller_name, caller_phone, summary_source "
+        "FROM handoffs WHERE conversation_id = ?",
+        cid,
+    )[0]
+    assert dict(row) == {
+        "reason": "no_account_match",
+        "kind": "handoff",
+        "customer_id": None,
+        "caller_name": "Omar Patel",
+        "caller_phone": "512-555-0101",
+        "summary_source": "system",
+    }
+    assert rows(started, "SELECT customer_id FROM conversations")[0][0] is None
+
+
+def test_matched_caller_cannot_identify_someone_else(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    ident = stub(
+        monkeypatch, "app.scheduling.service.identify_customer", customer("MHC-10002")
+    )
+    linda = identify_as("id2", "Linda Foster", "512-555-0101")
+    cid, _ = run(started, identify("MHC-10002"), [linda])
+    assert len(ident.calls) == 1
+    out = tool_results(started, cid)[-1]
+    assert out["ok"] is False and out["error"] == "already_identified"
+    assert "own account" in out["message"]
+    assert rows(started, "SELECT customer_id FROM conversations")[0][0] == "MHC-10002"
+
+
+def test_card_turn_escalate_is_refused(started: Settings):
+    from app.context import AppContext
+    from app.conversation.tools import HANDLERS
+
+    conn = sqlite3.connect(":memory:")
+    state = ToolState(
+        conn,
+        "c1",
+        "My card is [card number removed]",
+        "other",
+        [],
+        "MHC-10002",
+        None,
+        0,
+    )
+    state.card_removed = True
+    out = HANDLERS["escalate"](
+        AppContext.__new__(AppContext),
+        state,
+        {
+            "kind": "supervisor_callback",
+            "reason": "billing_dispute",
+            "intent": "x",
+            "toldCaller": "x",
+        },
+    )
+    assert out["ok"] is False and out["error"] == "card_number_turn"
+    assert "payment link" in out["instruction"]
+    assert state.handoff is None
 
 
 def test_window_choices_come_from_the_tool_result(
