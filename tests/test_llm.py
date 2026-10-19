@@ -2,6 +2,8 @@ import json
 from typing import Any
 
 import httpx2
+import openai
+import pytest
 
 from app.llm import FakeModelProvider, ModelResult, OpenRouterProvider
 from app.settings import Settings
@@ -49,10 +51,8 @@ def test_openrouter_request_is_pinned(tmp_settings: Settings):
         {"role": "tool", "tool_call_id": "call_1", "content": "{}"},
     ]
     llm = provider(tmp_settings, handler)
-    try:
+    with pytest.raises(openai.APIStatusError):
         llm.complete(messages, tools=TOOLS, timeout_s=5)
-    except Exception:
-        pass
     assert len(seen) == 1
     assert seen[0].url.path.endswith("/chat/completions")
     body = json.loads(seen[0].content)
