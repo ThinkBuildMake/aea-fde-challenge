@@ -110,6 +110,32 @@ def test_unsupported_figures(text: str, sources: list, unsupported: list[str]):
         ("I'll call you back within 1 business day.", False),
         ("No refund will be issued for that visit.", False),
         ("I can take a credit card over the phone.", False),
+        (
+            (
+                "I've logged your refund request, and a supervisor will call you "
+                "within 1 business day."
+            ),
+            False,
+        ),
+        (
+            (
+                "I'll pass your refund request to a supervisor, who will call you "
+                "within 1 business day."
+            ),
+            False,
+        ),
+        ("I've escalated your refund request.", False),
+        ("We'll review your refund request.", False),
+        ("I've opened a refund case for you.", False),
+        ("We'll look at your refund claim.", False),
+        ("I can explain our refund policy.", False),
+        ("I'll note your refund question.", False),
+        ("We'll issue you a full refund.", True),
+        ("You will get a refund.", True),
+        ("You'll receive a refund within 5 business days.", True),
+        ("We'll call you tomorrow.", True),
+        ("We'll call you back by end of day.", True),
+        ("We'll call you when the technician is on the way today.", False),
     ],
 )
 def test_promises(text: str, promise: bool):

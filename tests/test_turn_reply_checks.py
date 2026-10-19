@@ -367,3 +367,27 @@ def test_an_answer_before_an_empty_final_round_is_kept(started: Settings, stubs:
     assert reply["text"] == "The diagnostic visit is $89."
     assert reply["banner"] == "none" and "ask_solved" in reply["actions"]
     assert error_of(started, cid, 1) is None
+
+
+def test_a_refund_request_handed_to_a_supervisor_is_not_a_promise(
+    started: Settings, stubs: Stubs
+):
+    stubs.handoff_rows = True
+    text = (
+        "I've logged your refund request, and a supervisor will call you "
+        "within 1 business day."
+    )
+    esc = tool_call(
+        "e",
+        "escalate",
+        kind="handoff",
+        reason="refund request",
+        intent="billing_dispute",
+        toldCaller=text,
+    )
+    _, cid, reply = one_turn(
+        started, [result(assistant(calls=[esc])), result(assistant(text))]
+    )
+    show("refund request", reply, error_of(started, cid, 1))
+    assert reply["text"] == text
+    assert error_of(started, cid, 1) is None

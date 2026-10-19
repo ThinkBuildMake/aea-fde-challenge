@@ -185,17 +185,25 @@ def unsupported_figures(text: str, messages: list[dict[str, Any]]) -> list[str]:
     return unsupported
 
 
-_MONEY = r"(?:refund|waive|credit(?!\s*cards?)|reimburse)"
+# A money word used as a noun for the case ("refund request") is not a promise.
+_CASE_NOUN = r"(?!\w*\s+(?:request|case|claim|policy|question|decision)s?\b)"
+_MONEY = rf"(?:refund|waive|credit(?!\s*cards?)|reimburse){_CASE_NOUN}"
 _MONEY_PROMISES = [
     # we'll refund / I can waive / we are going to credit
     re.compile(
         r"\b(?:we'll|we will|i'll|i will|we can|i can|i'm going to|we're going to|we are going to)"
-        rf"(?![\w'])\s+(?:[\w']+\s+){{0,3}}{_MONEY}",
+        rf"(?![\w'])\s+(?:[\w']+\s+){{0,4}}{_MONEY}",
         re.IGNORECASE,
     ),
     # a refund will be issued / a credit is going to be applied
     re.compile(
         r"\b(?:refund|credit|reimbursement|waiver)s?\s+(?:will|is going to)\b",
+        re.IGNORECASE,
+    ),
+    # you'll get a refund / you will receive a credit
+    re.compile(
+        r"\byou(?:'ll| will)\s+(?:get|receive|see)\s+(?:[\w']+\s+){0,3}"
+        rf"(?:refund|credit|reimbursement){_CASE_NOUN}",
         re.IGNORECASE,
     ),
     # you'll be refunded / the fee will be waived
@@ -213,7 +221,8 @@ _TOWARD_REPAIR = re.compile(
 _CONTACT = r"(?:call(?:\s+you)?\s+back|call you|callback|reach out|contact you|get back to you)"
 _COUNT = r"(?:\d+|one|two|three|four|five|six|seven|ten|twenty-four|forty-eight)"
 _TIME = (
-    r"(?:today|tonight|this (?:morning|afternoon|evening)"
+    r"(?:today|tonight|tomorrow|this (?:morning|afternoon|evening)"
+    r"|by (?:the )?end of (?:the )?(?:day|business day)"
     rf"|(?:in|within) {_COUNT} (?:business |working )?(?:days?|hours?))"
 )
 _CALLBACK_PROMISE = re.compile(
@@ -221,6 +230,8 @@ _CALLBACK_PROMISE = re.compile(
 )
 # The knowledge base's own callback window (policies/escalation_and_safety.md).
 _POLICY_WINDOW = re.compile(r"\b(?:in|within) (?:1|one) business day\b", re.IGNORECASE)
+# "call you when the technician is on the way today" ties the call to an event, not a deadline.
+_CONDITION = re.compile(r"\b(?:when|once|if|as soon as)\b", re.IGNORECASE)
 _OFFER = re.compile(
     r"^(?:would|do|does|shall|should|can|could|may|is|are|want)\b", re.IGNORECASE
 )
@@ -241,6 +252,7 @@ def _sentence_promises(sentence: str) -> bool:
             return True
     return any(
         not _POLICY_WINDOW.fullmatch(found.group(1) or found.group(2))
+        and not _CONDITION.search(found.group())
         for found in _CALLBACK_PROMISE.finditer(sentence)
     )
 
