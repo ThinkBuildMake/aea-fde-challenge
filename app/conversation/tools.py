@@ -714,7 +714,10 @@ def run_tool(
         else:
             result = HANDLERS[name](ctx, state, args)
     except Exception as exc:  # noqa: BLE001 - the model gets the failure back as the tool result
-        error = f"{type(exc).__name__}: {exc}"
+        # Only the type, or a scheduling refusal's code: never a raw exception message.
+        error = type(exc).__name__
+        if isinstance(exc, scheduling.NotEligible):
+            error = f"{error}: {exc}"
         result = {"ok": False, "error": error}
         if isinstance(exc, scheduling.SchedulingUnavailable):
             state.unavailable = "scheduling_unavailable"

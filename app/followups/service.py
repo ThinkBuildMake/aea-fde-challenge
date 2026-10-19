@@ -37,6 +37,13 @@ CALLBACK_REASONS: dict[str | None, tuple[str, bool]] = {
     "unsupported_figure": ("not_sure", False),
     "promise_withheld": ("not_sure", False),
     "embedding_unavailable": ("knowledge_unavailable", True),
+    "write_failed": ("write_failed", True),
+}
+
+# A fallback turn's error -> the reason of the handoff a picked window records.
+FALLBACK_REASONS = {
+    "scheduling_unavailable": "scheduling_unavailable",
+    "handoff_save_failed": "app_db_unavailable",
 }
 
 _COLUMNS = (
@@ -240,14 +247,7 @@ def _handoff_after_fallback(
         # Nothing to hand over, or the conversation already ended another way.
         raise NoHandoff(conversation_id)
     if last[0]:
-        reason, by_error = (
-            (
-                "scheduling_unavailable"
-                if last[1] == "scheduling_unavailable"
-                else "provider_failure"
-            ),
-            True,
-        )
+        reason, by_error = FALLBACK_REASONS.get(last[1], "provider_failure"), True
     elif last[1] in CALLBACK_REASONS:
         reason, by_error = CALLBACK_REASONS[last[1]]
     else:
