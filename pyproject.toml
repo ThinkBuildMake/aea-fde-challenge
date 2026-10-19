@@ -12,6 +12,7 @@ dependencies = [
     "openai==3.35.1",
     "numpy==2.5.3",
     "langfuse==4.16.0",
+    "limits==5.8.0",
 ]
 
 [dependency-groups]

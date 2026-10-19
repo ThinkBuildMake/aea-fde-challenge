@@ -10,6 +10,7 @@ from app.monitoring import conversations
 from app.monitoring.service import get_health, get_overview
 from app.monitoring.view import overview_view, page_data
 from app.negotiation import respond
+from app.ratelimit import limit_business_writes
 from app.types import (
     FlagRequest,
 )
@@ -71,7 +72,9 @@ def get_conversation(
     return respond(request, conversations.get_conversation(ctx, public_id))
 
 
-@router.post("/conversations/{public_id}/flag")
+@router.post(
+    "/conversations/{public_id}/flag", dependencies=[Depends(limit_business_writes)]
+)
 def flag_conversation(
     public_id: str,
     payload: FlagRequest,
@@ -83,7 +86,10 @@ def flag_conversation(
     )
 
 
-@router.post("/conversations/{public_id}/eval-candidate")
+@router.post(
+    "/conversations/{public_id}/eval-candidate",
+    dependencies=[Depends(limit_business_writes)],
+)
 def create_eval_candidate(
     public_id: str, request: Request, ctx: AppContext = Depends(get_ctx)
 ) -> Response:

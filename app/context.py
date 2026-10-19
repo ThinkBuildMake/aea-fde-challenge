@@ -1,7 +1,7 @@
 import sqlite3
 import time
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
 from fastapi import Request
@@ -11,6 +11,7 @@ from app.db import connect_app_db
 from app.knowledge.embeddings import Embedder
 from app.knowledge.index import IndexStore
 from app.llm import ModelProvider
+from app.ratelimit import RateLimiter
 from app.settings import Settings
 
 if TYPE_CHECKING:
@@ -39,6 +40,7 @@ class AppContext:
     spend: "KeyUsageCache"
     safety: "SafetyClassifier | None" = None
     tracer: "Tracer | None" = None
+    limiter: RateLimiter = field(default_factory=RateLimiter)
 
     def open_app_db(self) -> sqlite3.Connection:
         return connect_app_db(self.settings.APP_DB_PATH)

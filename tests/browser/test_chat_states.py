@@ -165,6 +165,10 @@ def test_wants_earlier_choices(page: Page, live_url: str, stub: StateStub):
     assert shown == WANTS_EARLIER
     assert shown[-1] == "Talk to a person instead"
     buttons.last.click()
+    # Wait for the sent message before reading the stub's requests.
+    expect(page.locator(".msg-row.you .bubble").last).to_have_text(
+        "Talk to a person instead"
+    )
     assert stub.requests[-1][1] == {"text": "Talk to a person instead"}
     print("posted:", stub.requests[-1][1])
 

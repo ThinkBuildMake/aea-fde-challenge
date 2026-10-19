@@ -65,3 +65,16 @@ def evaluate_pf2(latencies_ms: list[int], limit_ms: int = 10000) -> GateVerdict:
         f"over {len(latencies_ms)} turn(s): {'ok' if passed else 'FAILED'}"
     )
     return GateVerdict(passed, value, message)
+
+
+def evaluate_sc1(
+    single_ms: list[int], concurrent_ms: list[int], factor: float = 1.5
+) -> GateVerdict:
+    single, concurrent = p95(single_ms), p95(concurrent_ms)
+    passed = concurrent <= factor * single
+    message = (
+        f"SC-1: p95 with 5 simultaneous conversations within {factor}× the "
+        f"single-conversation p95; measured {concurrent} ms vs {single} ms: "
+        f"{'ok' if passed else 'FAILED'}"
+    )
+    return GateVerdict(passed, concurrent, message)
