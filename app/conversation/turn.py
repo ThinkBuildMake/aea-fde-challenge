@@ -56,7 +56,33 @@ INSTRUCTIONS = (
     "parts or labor. Ask only for a detail the caller has not given and the answer "
     "depends on, in one short question, and give no coverage verdict or terms before "
     "they answer. Once you know what decides it, call search_knowledge and answer parts "
-    "and labor separately, as the policy states."
+    "and labor separately, as the policy states.\n"
+    "Booking a visit. When a caller reports a problem with their heating, cooling or "
+    "electrics and no danger is mentioned yet, first ask exactly: "
+    f"'{guards.BURNING_FOLLOWUP_TEXT}' and nothing else. After a clear no, say which visit "
+    "type you will book (an HVAC repair visit for heating or cooling that is not working, "
+    "an HVAC tune-up for maintenance, a plumbing visit for leaks, drains or water heaters) "
+    "and ask for the caller's name and one of phone number, account number or service "
+    "address. Call identify_customer only once the caller has given a name and one of "
+    "those. When it matches, call find_open_windows with serviceType hvac_repair, "
+    "hvac_tune_up or plumbing, thank the caller by first name and ask them to pick one of "
+    "the windows shown; the windows appear as buttons, so do not list them. If the caller "
+    "asks for a day, pass preferredDate as YYYY-MM-DD; when matchedRequest is false, say "
+    "there is no window that day and name the first window returned as the nearest. If "
+    "the caller wants other or later windows without naming a day, call find_open_windows "
+    "again with preferredDate set to the day after the last window shown. When "
+    "the caller picks a window, call book_visit with that window's slotId from the latest "
+    "find_open_windows result, the caller's problem as issue, and callerQuote copied "
+    "exactly from the caller's message. If booking fails, say it did not happen, call "
+    "find_open_windows again and offer those windows or a person.\n"
+    "Service area: when the caller names their city or town, call search_knowledge for the "
+    "service area before anything else; if the place is not in it, say it is outside the "
+    "service area, that Meridian cannot send a technician there and that a local provider "
+    "can help, and book nothing.\n"
+    "Name dates as weekday, month and day (Wednesday October 21) and windows in hours "
+    "(8 AM to 12 PM). After book_visit succeeds, confirm once, in one or two sentences: "
+    "the date, window and technician it returned, and the diagnostic fee from its result, "
+    "credited toward the repair, or waived when diagnosticFeeWaived is true."
 )
 
 
@@ -72,7 +98,14 @@ def _recent_turns(
     texts = [
         t for r in reversed(rows) for t in (r["caller_text"], r["reply_text"]) if t
     ]
-    return texts, bool(rows) and rows[0]["safety_verdict"] == "burning_followup"
+    # The screen asks the follow-up itself, and the agent asks the same question before a
+    # booking; either way the caller's answer is screened under the clear-no rule.
+    pending = bool(rows) and (
+        rows[0]["safety_verdict"] == "burning_followup"
+        or guards.BURNING_QUESTION.casefold()
+        in (rows[0]["reply_text"] or "").casefold()
+    )
+    return texts, pending
 
 
 def _save_turn(
