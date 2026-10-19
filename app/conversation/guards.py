@@ -88,12 +88,14 @@ _MONTHS = [
     "dec",
 ]
 _MONTH = r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?"
-_MONTH_DAY = re.compile(rf"\b{_MONTH}\s+(\d{{1,2}})(?!\d|:)", re.I)
-_DAY_MONTH = re.compile(rf"\b(\d{{1,2}})(?:st|nd|rd|th)?\s+(?:of\s+)?{_MONTH}", re.I)
+_MONTH_DAY = re.compile(rf"\b{_MONTH}\s+(\d{{1,2}})(?!\d|:)", re.IGNORECASE)
+_DAY_MONTH = re.compile(
+    rf"\b(\d{{1,2}})(?:st|nd|rd|th)?\s+(?:of\s+)?{_MONTH}", re.IGNORECASE
+)
 _ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 _SLASH_DATE = re.compile(r"(?<![\d/])(\d{1,2})/(\d{1,2})(?![\d/])")
 _CLOCK = re.compile(
-    r"\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\b\.?|\b(\d{1,2}):(\d{2})\b", re.I
+    r"\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\b\.?|\b(\d{1,2}):(\d{2})\b", re.IGNORECASE
 )
 _WITH_NAME = re.compile(r"\bwith ((?:[A-Z][a-z]+)(?: [A-Z][a-z]+)*)")
 
@@ -164,9 +166,9 @@ def figure_sources(messages: list[dict[str, Any]]) -> set[Decimal]:
     for message in messages:
         if message.get("role") != "tool":
             continue
-        content = message.get("content")
+        content: Any = message.get("content")
         try:
-            _numbers(json.loads(content), out)
+            _numbers(json.loads(str(content)), out)
         except (TypeError, ValueError):
             _numbers(content, out)
     return out
@@ -185,12 +187,12 @@ def unsupported_figures(text: str, messages: list[dict[str, Any]]) -> list[str]:
 _MONEY_PROMISE = re.compile(
     r"\b(?:we'll|we will|i'll|i will|we can|i can|i'm going to|we're going to|we are going to)"
     r"(?![\w'])\s+(?:\w+\s+){0,3}(?:refund|waive|credit|reimburse)",
-    re.I,
+    re.IGNORECASE,
 )
 _CONTACT = r"(?:call(?:\s+you)?\s+back|call you|callback|reach out|contact you|get back to you)"
 _TIME = r"(?:today|tonight|this (?:morning|afternoon|evening)|in (?:two|2) days|within 48 hours)"
 _CALLBACK_PROMISE = re.compile(
-    rf"{_CONTACT}[^.!?]*\b{_TIME}|\b{_TIME}[^.!?]*{_CONTACT}", re.I
+    rf"{_CONTACT}[^.!?]*\b{_TIME}|\b{_TIME}[^.!?]*{_CONTACT}", re.IGNORECASE
 )
 
 

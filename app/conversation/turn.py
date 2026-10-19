@@ -26,7 +26,10 @@ INSTRUCTIONS = (
     "policy_question, warranty_question, membership_question, billing_lookup, billing_dispute, "
     "membership_change, complaint_or_refund, safety, new_system_quote, technician_late, "
     "out_of_scope or other) and whether their need is resolved, in the same step as your first "
-    "tool call. Write the caller's answer once, after the tools have returned."
+    "tool call. Write the caller's answer once, after the tools have returned. State a dollar "
+    "figure only when a tool result in this conversation gives it, never promise a refund, a "
+    "waiver or a callback time, and confirm a booking only with the date, window and "
+    "technician the booking tool returned."
 )
 
 
@@ -94,13 +97,15 @@ def _save_turn(
         db.execute(
             "UPDATE conversations SET turn_count = turn_count + 1, cost_usd = cost_usd + ?, "
             "last_activity_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'), intent = ?, "
-            "intents_seen = ?, resolved_at = CASE WHEN ? THEN "
-            "COALESCE(resolved_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')) ELSE resolved_at END "
+            "intents_seen = ?, resolved_at = CASE WHEN ? = 1 THEN "
+            "COALESCE(resolved_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')) "
+            "WHEN ? = 0 THEN NULL ELSE resolved_at END "
             "WHERE id = ?",
             (
                 cost,
                 state.intent,
                 json.dumps(state.intents_seen),
+                state.resolved,
                 state.resolved,
                 conversation_id,
             ),
@@ -200,7 +205,7 @@ def run_turn(
     all_reported = True
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
-    said: list[str] = []
+    last_said = ""
     verdict: Verdict | None = None
     failure: str | None = "provider_error" if simulate_outage else None
 
@@ -259,8 +264,7 @@ def run_turn(
                 failure = "malformed_reply"
                 break
             stored.append(result.message)
-            if result.message.get("content"):
-                said.append(str(result.message["content"]).strip())
+            last_said = str(result.message.get("content") or "").strip()
             if not calls:
                 break
             for call in calls:
@@ -322,7 +326,7 @@ def run_turn(
             state.intent = "safety"
             end = _stop_for(db, conversation_id, state.customer_id, verdict)
     else:
-        final_text = "\n\n".join(said)
+        final_text = last_said
         if not failure and not final_text.strip():
             failure = "empty_reply"
         if failure:
@@ -347,6 +351,40 @@ def run_turn(
             choices = tools.choices(state)
             if state.write_failed and booking is None:
                 actions = ["request_callback"]
+            withheld = False
+            if state.booking and guards.confirmation_mismatch(
+                final_text, state.booking
+            ):
+                final_text = guards.confirmation_text(state.booking)
+                turn["error"] = "confirmation_mismatch"
+            elif guards.unsupported_figures(final_text, [*history, *stored]):
+                withheld, turn["error"] = True, "unsupported_figure"
+            elif guards.makes_promise(final_text):
+                withheld, turn["error"] = True, "promise_withheld"
+            if withheld:
+                final_text = " ".join(
+                    filter(
+                        None,
+                        [
+                            guards.committed_text(
+                                state.booking, state.cancelled, state.waitlisted
+                            ),
+                            guards.NOT_SURE_TEXT,
+                        ],
+                    )
+                )
+                actions = ["request_callback"]
+                choices = []
+                state.resolved = False
+            elif (
+                state.resolved
+                and not state.handed_off
+                and not db.execute(
+                    "SELECT 1 FROM handoffs WHERE conversation_id = ?",
+                    (conversation_id,),
+                ).fetchone()
+            ):
+                actions = [*actions, "ask_solved"]
     turn["reply_text"] = final_text
     turn["latency_ms"] = round((ctx.clock.monotonic() - started) * 1000)
     try:
