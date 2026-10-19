@@ -115,8 +115,9 @@ INSTRUCTIONS = (
     "you cannot waive fees in this chat and offer to pass them to a person.\n"
     "Billing: once the caller is matched, call get_my_billing and give the balance with "
     "each open invoice id; explain a line from its line items. To pay, call "
-    "send_payment_link and give its url. Never ask for card details. Discuss only the "
-    "matched caller's own account; for anyone else's, say you can only discuss theirs."
+    "send_payment_link and give its url here; nothing is sent by phone or email. Never "
+    "ask for card details. Discuss only the matched caller's own account; for anyone "
+    "else's, say you can only discuss theirs."
 )
 
 
@@ -285,6 +286,20 @@ def _handoff_end(
         conversation_service.end_with_handoff(db, conversation_id)
 
     return end
+
+
+def _gives_earlier_link(text: str, history: list[dict[str, Any]]) -> bool:
+    """True when the reply holds a payment link a tool returned in an earlier turn."""
+    for message in history:
+        if message.get("role") != "tool":
+            continue
+        try:
+            url = json.loads(str(message.get("content"))).get("url")
+        except (ValueError, AttributeError):
+            continue
+        if isinstance(url, str) and url in text:
+            return True
+    return False
 
 
 def _fixed_handoff_text(state: tools.ToolState) -> str | None:
@@ -787,7 +802,11 @@ def run_turn(
             ):
                 actions = [*actions, "ask_solved"]
             if state.handoff is None and not withheld:
-                if state.card_removed and state.payment_link is None:
+                if (
+                    state.card_removed
+                    and state.payment_link is None
+                    and not _gives_earlier_link(final_text, history)
+                ):
                     state.payment_link = tools.card_turn_link(ctx, state)
                 link = state.payment_link
                 if link is not None and link.url not in final_text:

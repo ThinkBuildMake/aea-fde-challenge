@@ -601,7 +601,10 @@ def _send_payment_link(
 ) -> dict[str, Any]:
     link = scheduling.create_payment_link(ctx, _customer(state), str(args["invoiceId"]))
     state.payment_link = link
-    return _dump(link)
+    return {
+        **_dump(link),
+        "instruction": "Give the caller this url in your reply; it is sent nowhere else.",
+    }
 
 
 def card_turn_link(ctx: AppContext, state: ToolState) -> PaymentLink | None:

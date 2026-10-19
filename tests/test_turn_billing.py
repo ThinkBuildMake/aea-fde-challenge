@@ -160,3 +160,21 @@ def test_card_turn_already_refused_is_not_prefixed(started: Settings, omar):
     assert text.startswith("Sorry, I can't accept card numbers here.")
     assert guards.CARD_REFUSAL_TEXT not in text
     assert URL in text
+
+
+def test_card_turn_reuses_a_link_the_reply_already_holds(started: Settings, omar):
+    _, replies = converse(
+        started,
+        [
+            ("Omar Patel, 512-555-0102", identify("MHC-10002"), "Thanks Omar."),
+            (
+                "I'd like to pay that now.",
+                [tool_call("p", "send_payment_link", invoiceId="INV-204411")],
+                f"Here is your link: {URL}",
+            ),
+            (CARD, [], f"I can't accept card numbers here. Please use {URL}"),
+        ],
+    )
+    text = replies[2]["text"]
+    assert text.count(URL) == 1
+    assert len(omar.calls) == 1

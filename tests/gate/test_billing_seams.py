@@ -94,12 +94,17 @@ def test_five_cards_and_a_payment_leave_no_digit_run(
     turns = rows(kb_settings, "SELECT * FROM turns WHERE conversation_id = ?", cid)
     out = capfd.readouterr().out
     stored = [str(v) for t in turns for v in dict(t).values() if v is not None]
+    # The conversation id is a hyphenated uuid, so only the bare-run check applies to it.
+    texts = [
+        str(v) for t in turns for k, v in dict(t).items() if k != "conversation_id"
+    ]
     found = [
         m.group()
-        for text in [*stored, *out.splitlines(), *screened]
-        for m in [DIGIT_RUN.search(text), BARE_RUN.search(text)]
+        for t in [*texts, *out.splitlines(), *screened]
+        for m in [DIGIT_RUN.search(t)]
         if m
     ]
+    found += [m.group() for t in stored for m in [BARE_RUN.search(t)] if m]
     handoffs = rows(kb_settings, "SELECT COUNT(*) FROM handoffs")[0][0]
     print(
         f"turns={len(turns)} stored values={len(stored)} stdout lines="
