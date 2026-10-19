@@ -37,7 +37,7 @@ FUNCTIONS = [
     (scheduling.create_payment_link, ["ctx", "customer_id", "invoice_id"]),
     (scheduling.reset_scheduling, ["ctx"]),
     (scheduling.scheduling_status, ["ctx"]),
-    (followups.create_handoff, ["tx", "record"]),
+    (followups.create_handoff, ["tx", "record", "ctx"]),
     (followups.set_callback_window, ["ctx", "conversation_id", "window"]),
     (followups.join_waitlist, ["ctx", "entry"]),
 ]

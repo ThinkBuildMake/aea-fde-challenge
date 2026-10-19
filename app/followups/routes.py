@@ -1,4 +1,5 @@
 import sqlite3
+from typing import cast, get_args
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
@@ -6,9 +7,10 @@ from fastapi.responses import Response
 from app.context import AppContext, get_ctx, get_db
 from app.conversation.routes import require_conversation
 from app.errors import AppError
-from app.followups.service import placeholder_handoff, set_callback_window
+from app.followups.service import NoHandoff, placeholder_handoff, set_callback_window
 from app.negotiation import respond
 from app.types import (
+    CallbackWindow,
     CallbackWindowRequest,
     CallbackWindowResponse,
     FollowedUpRequest,
@@ -29,8 +31,16 @@ def submit_callback_window(
     db: sqlite3.Connection = Depends(get_db),
 ) -> Response:
     require_conversation(db, conversation_id)
-    handoff = set_callback_window(ctx, conversation_id, payload.window)
-    text = f"Thanks. We will call you back in the {payload.window}."
+    window = payload.window
+    if window not in get_args(CallbackWindow):
+        raise AppError(422, "invalid_window", "Choose morning, afternoon or evening.")
+    try:
+        handoff = set_callback_window(
+            ctx, conversation_id, cast(CallbackWindow, window)
+        )
+    except NoHandoff:
+        raise AppError(404, "no_handoff", "This conversation has no handoff.") from None
+    text = f"Thanks. We will call you back in the {window}."
     return respond(request, CallbackWindowResponse(handoff=handoff, text=text))
 
 
