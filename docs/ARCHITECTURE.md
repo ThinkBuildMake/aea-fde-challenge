@@ -572,7 +572,7 @@ A draft test scenario made from a logged conversation (OB-4).
 |---|---|---|---|---|
 | id | INTEGER | no | autoincrement | key |
 | conversation_id | TEXT → conversations.id | no | | |
-| scenario_id | TEXT | no | | name the file will have, `CAND-` plus the first 8 characters of the conversation id |
+| scenario_id | TEXT | no | | name the file will have, `CAND-` plus the first 8 characters of the public id (never the secret conversation id) |
 | scenario | TEXT (JSON) | no | | a Scenario draft (see Offline tools → Eval files) with the caller's messages, the observed outcome, and empty expected fields for a person to fill in |
 | created_at | TEXT | no | now | |
 
