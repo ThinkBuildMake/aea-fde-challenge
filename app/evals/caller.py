@@ -9,7 +9,7 @@ from typing import Any, Protocol, cast
 from openai import OpenAI
 
 from app.evals.records import Scenario
-from app.llm import OPENROUTER_BASE_URL
+from app.llm import OPENROUTER_BASE_URL, reported_cost
 from app.settings import Settings
 
 Transcript = Sequence[tuple[str, str]]  # (role, text), role is "caller" or "agent"
@@ -98,4 +98,4 @@ class OpenRouterCaller:
         data = json.loads(raw.text)
         usage = data.get("usage") or {}
         content = data["choices"][0]["message"].get("content") or ""
-        return parse_move(content, float(usage.get("cost") or 0.0))
+        return parse_move(content, float(reported_cost(usage) or 0.0))
