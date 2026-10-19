@@ -194,6 +194,7 @@
       addCallbackPicker();
     }
     solvedBar.hidden = !actions.includes('ask_solved');
+    composer.hidden = actions.includes('choices_only');
     if (STATUS_ENDED_TEXT[result.status]) showEnded(STATUS_ENDED_TEXT[result.status]);
   }
 

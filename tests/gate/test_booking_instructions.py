@@ -33,6 +33,10 @@ def test_instructions_carry_the_booking_rules(started: Settings):
         "move_visit",
         "clear yes",
         "Never waive",
+        "anything earlier",
+        "join_waitlist",
+        "alreadyOnWaitlist",
+        "Never say when the team will call",
     ):
         assert rule in system, rule
     print(

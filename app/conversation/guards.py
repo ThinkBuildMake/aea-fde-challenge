@@ -63,6 +63,9 @@ CANCEL_CONFIRM_INSTRUCTION = (
     "lateFeeCents when it is true, and end with one question asking them to confirm, "
     "such as 'Do you want me to cancel it?'. Call cancel_visit again only if their next "
     "message is a clear yes."
+WAITLIST_FAILED_INSTRUCTION = (
+    "The caller was not added to the waitlist. Do not say they are on it. "
+    "Offer to pass them to a person."
 )
 SEARCH_UNAVAILABLE_INSTRUCTION = (
     "The knowledge base is unavailable. Do not answer fees, policy, membership or "
@@ -272,8 +275,14 @@ _TIME = (
     r"|by (?:the )?end of (?:the )?(?:day|business day)"
     rf"|(?:in|within) {_COUNT} (?:business |working )?(?:days?|hours?))"
 )
+# A named day, date or clock time after the contact word ("call you on Friday").
+_WHEN = (
+    rf"(?:{'|'.join(_WEEKDAYS)}|(?:{'|'.join(_MONTHS)})[a-z]*\.?\s+\d{{1,2}}"
+    r"|\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}|\d{1,2}(?::\d{2})?\s*[ap]\.?m\b)"
+)
 _CALLBACK_PROMISE = re.compile(
-    rf"{_CONTACT}[^.!?]*\b({_TIME})|\b({_TIME})[^.!?]*{_CONTACT}", re.IGNORECASE
+    rf"{_CONTACT}[^.!?]*\b({_TIME}|{_WHEN})|\b({_TIME})[^.!?]*{_CONTACT}",
+    re.IGNORECASE,
 )
 # The knowledge base's own callback window (policies/escalation_and_safety.md).
 _POLICY_WINDOW = re.compile(r"\b(?:in|within) (?:1|one) business day\b", re.IGNORECASE)

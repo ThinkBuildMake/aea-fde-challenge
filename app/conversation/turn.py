@@ -105,6 +105,16 @@ INSTRUCTIONS = (
     "when the caller's next message is a clear yes. If they are unsure, change nothing and ask "
     "what they would like. Never waive, reduce or promise to waive any fee; if asked, say "
     "you cannot waive fees in this chat and offer to pass them to a person."
+    "\nEarlier windows. When the caller asks for anything earlier, call find_open_windows "
+    "again with the same serviceType and no preferredDate or preferredWindow. Say the first "
+    "window it returns is the earliest available, naming its day and hours, and that you can "
+    "book it and also add them to the waitlist for an earlier window, and if one opens the "
+    "team will call them. Never say when the team will call. When the caller asks to book it "
+    "and join the waitlist, call book_visit with that window's slotId, then join_waitlist "
+    "with the appointmentId book_visit returned. When the caller asks to join the waitlist "
+    "again, call join_waitlist with the same appointmentId as before; when alreadyOnWaitlist "
+    "is true, say they are already on the waitlist. If join_waitlist fails, say they are not "
+    "on the waitlist and offer to pass them to a person."
 )
 
 
@@ -668,6 +678,11 @@ def run_turn(
                 end = _end_failed(db, conversation_id)
         else:
             choices = tools.choices(state)
+            if tools.wants_earlier(state) and choices:
+                actions = [*actions, "choices_only"]
+            # A committed booking with no report_status still counts as resolved.
+            if state.booking is not None and state.resolved is None:
+                state.resolved = True
             if state.write_failed and booking is None:
                 actions = ["request_callback"]
             withheld = False

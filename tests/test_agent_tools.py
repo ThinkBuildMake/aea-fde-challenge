@@ -20,8 +20,12 @@ from app.types import (
     CancelResult,
     CustomerRef,
     Fee,
+    HeldWindow,
+    JoinWaitlistResult,
     MoveResult,
     OpenWindows,
+    WaitlistCaller,
+    WaitlistView,
     Window,
 )
 from tests.test_turn import (
@@ -87,6 +91,37 @@ def booking() -> Booking:
         zone="south",
         diagnostic_fee_cents=0,
         diagnostic_fee_waived=False,
+    )
+
+
+def held(appointment_id: int = 7, start: str = "08:00", end: str = "12:00"):
+    return AppointmentView(
+        appointment_id=appointment_id,
+        date="2026-10-21",
+        window=f"{start}-{end}",
+        technician_name="Jun Park",
+        service_type="hvac_repair",
+        zone="south",
+        issue="x",
+        late_cancel_fee_applies=False,
+    )
+
+
+def joined(created: bool) -> JoinWaitlistResult:
+    return JoinWaitlistResult(
+        entry=WaitlistView(
+            id=1,
+            conversation_public_id="c",
+            caller=WaitlistCaller(
+                customer_id="MHC-10002", name="Omar Patel", phone="x", city="Kyle"
+            ),
+            service_type="hvac_repair",
+            zone="south",
+            held=HeldWindow(date="2026-10-21", window="13:00-17:00"),
+            created_at="2026-10-19T10:00:00Z",
+            waiting_seconds=0,
+        ),
+        created=created,
     )
 
 
@@ -421,7 +456,9 @@ def test_waitlist_uses_the_held_window_from_the_database(
             late_cancel_fee_applies=False,
         ),
     )
-    waitlist = stub(monkeypatch, "app.followups.service.join_waitlist", None)
+    waitlist = stub(
+        monkeypatch, "app.followups.service.join_waitlist", joined(created=True)
+    )
     cid, replies = run(
         started,
         identify("MHC-10002"),
@@ -725,3 +762,157 @@ def test_late_cancel_without_a_price_book_never_commits(
     out = tool_results(started, cid)[-1]
     assert cancel.calls == []
     assert out["needsConfirmation"] is True and out["lateFeeUnavailable"] is True
+EARLIER_LABELS = [
+    "Book Wednesday October 21, 1 PM to 5 PM and join the waitlist for earlier",
+    "Book Wednesday October 21, 1 PM to 5 PM only",
+    "Talk to a person instead",
+]
+
+
+def test_earlier_ask_offers_three_choices(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    stub(monkeypatch, "app.scheduling.service.identify_customer", customer("MHC-10002"))
+    stub(
+        monkeypatch,
+        "app.scheduling.service.find_open_windows",
+        OpenWindows(
+            windows=[window(119, "13:00", "17:00"), window(185, "12:00", "16:00")],
+            matched_request=True,
+            reason=None,
+        ),
+    )
+    _, replies = run(
+        started,
+        identify("MHC-10002"),
+        [tool_call("w", "find_open_windows", serviceType="hvac_repair")],
+        texts=["Omar Patel, MHC-10002", "Can you do anything earlier?"],
+    )
+    choices = replies[1]["choices"]
+    assert [c["label"] for c in choices] == EARLIER_LABELS
+    assert [c["text"] for c in choices] == EARLIER_LABELS
+    assert "choices_only" in replies[1]["actions"]
+
+
+def test_typed_earlier_variant_keeps_window_buttons(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    stub(monkeypatch, "app.scheduling.service.identify_customer", customer("MHC-10002"))
+    stub(
+        monkeypatch,
+        "app.scheduling.service.find_open_windows",
+        OpenWindows(
+            windows=[window(119, "13:00", "17:00")], matched_request=True, reason=None
+        ),
+    )
+    _, replies = run(
+        started,
+        identify("MHC-10002"),
+        [tool_call("w", "find_open_windows", serviceType="hvac_repair")],
+        texts=["Omar Patel, MHC-10002", "anything sooner?"],
+    )
+    assert (
+        replies[1]["choices"][-1]["label"]
+        == "Nothing earlier? Ask for an earlier window"
+    )
+    assert "choices_only" not in replies[1]["actions"]
+
+
+def test_waitlist_repeat_says_already_on_it(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    stub(monkeypatch, "app.scheduling.service.identify_customer", customer("MHC-10002"))
+    stub(
+        monkeypatch, "app.scheduling.service.get_appointment", held(7, "13:00", "17:00")
+    )
+    stub(monkeypatch, "app.followups.service.join_waitlist", joined(created=False))
+    cid, replies = run(
+        started,
+        identify("MHC-10002"),
+        [tool_call("j", "join_waitlist", appointmentId=7)],
+    )
+    out = tool_results(started, cid)[-1]
+    assert out == {
+        "ok": True,
+        "alreadyOnWaitlist": True,
+        "held": {"date": "2026-10-21", "window": "13:00-17:00"},
+    }
+    has_write = rows(
+        started,
+        "SELECT has_write FROM turns WHERE conversation_id = ? ORDER BY seq",
+        cid,
+    )
+    assert [r[0] for r in has_write][-1] == 0
+    assert replies[1]["waitlisted"] is True
+
+
+def test_join_after_booking_holds_the_new_booking(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    stub(monkeypatch, "app.scheduling.service.identify_customer", customer("MHC-10002"))
+    stub(monkeypatch, "app.scheduling.service.book_visit", booking())
+    stub(
+        monkeypatch,
+        "app.knowledge.service.get_fee",
+        Fee(code="FEE-DIAG", cents=8900, source_file="pricing"),
+    )
+    got = stub(monkeypatch, "app.scheduling.service.get_appointment", held(7))
+    stub(monkeypatch, "app.followups.service.join_waitlist", joined(created=True))
+    _, replies = run(
+        started,
+        identify_and_offer(monkeypatch, "MHC-10002"),
+        [
+            tool_call(
+                "b", "book_visit", slotId=3, issue="no cooling", callerQuote="yes"
+            ),
+            tool_call("j", "join_waitlist", appointmentId=99),
+        ],
+        texts=["hi", "yes"],
+    )
+    assert got.calls[0][1:] == ("MHC-10002", 7)
+    assert replies[1]["booking"]["appointmentId"] == 7
+    assert replies[1]["waitlisted"] is True
+
+
+def raise_not_found(*args: Any, **kwargs: Any) -> AppointmentView:
+    from app.scheduling.service import AppointmentNotFound
+
+    raise AppointmentNotFound("no such appointment")
+
+
+def test_failed_join_offers_a_person(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    stub(monkeypatch, "app.scheduling.service.identify_customer", customer("MHC-10002"))
+    monkeypatch.setattr("app.scheduling.service.get_appointment", raise_not_found)
+    waitlist = stub(monkeypatch, "app.followups.service.join_waitlist", None)
+    cid, replies = run(
+        started,
+        identify("MHC-10002"),
+        [tool_call("j", "join_waitlist", appointmentId=1)],
+    )
+    out = tool_results(started, cid)[-1]
+    assert out["ok"] is False
+    assert "not added to the waitlist" in out["instruction"]
+    assert waitlist.calls == []
+    assert replies[1]["waitlisted"] is False
+    assert "request_callback" in replies[1]["actions"]
+
+
+def test_booking_without_report_status_asks_solved(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    stub(monkeypatch, "app.scheduling.service.identify_customer", customer("MHC-10002"))
+    stub(monkeypatch, "app.scheduling.service.book_visit", booking())
+    stub(
+        monkeypatch,
+        "app.knowledge.service.get_fee",
+        Fee(code="FEE-DIAG", cents=8900, source_file="pricing"),
+    )
+    _, replies = run(
+        started,
+        identify_and_offer(monkeypatch, "MHC-10002"),
+        [tool_call("b", "book_visit", slotId=3, issue="no cooling", callerQuote="yes")],
+        texts=["hi", "yes"],
+    )
+    assert "ask_solved" in replies[1]["actions"]

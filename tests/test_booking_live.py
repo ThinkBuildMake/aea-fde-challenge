@@ -1,4 +1,4 @@
-"""Opt-in: S33's booking conversations against the real agent model, embedder and danger screen.
+"""Opt-in: S33's and S34's booking conversations against the real agent model, embedder and danger screen.
 
 Needs MERIDIAN_LIVE_TESTS=1 and OPENROUTER_API_KEY; about $0.05 for the module.
 Every booking lands in a temp copy of the scheduling database.
@@ -17,6 +17,7 @@ from pydantic import SecretStr
 from app.knowledge.service import rebuild_index
 from app.llm import OpenRouterProvider
 from app.main import create_app
+from app.scheduling import service as scheduling
 from app.settings import Settings
 
 pytestmark = pytest.mark.skipif(
@@ -200,3 +201,68 @@ def test_unclear_answer_to_the_safety_question_stops(live: Chat, answer: str):
     assert reply["status"] == "safety_stop"
     assert reply["banner"] == "safety_stop"
     assert reply["booking"] is None and reply["choices"] == []
+
+
+EARLIER_LABELS = [
+    "Book Wednesday October 21, 1 PM to 5 PM and join the waitlist for earlier",
+    "Book Wednesday October 21, 1 PM to 5 PM only",
+    "Talk to a person instead",
+]
+WHEN = re.compile(
+    r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|within"
+    r"|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? \d"
+    r"|\d ?(?:am|pm)\b|\d:\d\d",
+    re.IGNORECASE,
+)
+
+
+def call_sentences_name_no_time(text: str) -> bool:
+    """Every sentence that mentions a call names no day, date or clock time."""
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    return not any(
+        WHEN.search(s) for s in sentences if re.search(r"\bcall", s, re.IGNORECASE)
+    )
+
+
+def waitlist_rows(chat: Chat) -> list[tuple[Any, ...]]:
+    return chat.app_db(
+        "SELECT service_type, zone, held_date, held_window FROM waitlist_entries "
+        "WHERE customer_id = ?",
+        "MHC-10002",
+    )
+
+
+def test_omar_books_and_joins_the_waitlist(live: Chat):
+    live.start()  # S33's demo left slot 115 booked for Omar
+    scheduling.book_visit(
+        live.client.app.state.ctx, "MHC-10002", 115, "AC blowing warm air", live.cid
+    )
+    slots_before = dict(live.schedule("SELECT slot_id, status FROM appointment_slots"))
+    shown = live.identify("Omar Patel, account MHC-10002")
+    assert shown["choices"][-1]["label"] == EARLIER
+    earlier = live.say(shown["choices"][-1]["text"])
+    text = earlier["text"]
+    assert has(text, r"Wednesday,? October 21")
+    assert has(text, r"1 ?PM.{0,10}5 ?PM")
+    assert has(text, r"call")
+    assert has(text, r"earlier|opens|opening")
+    assert [c["label"] for c in earlier["choices"]] == EARLIER_LABELS
+    assert "choices_only" in earlier["actions"]
+    assert call_sentences_name_no_time(text)
+
+    booked = live.say(earlier["choices"][0]["text"])
+    assert booked["booking"]["slotId"] == 119
+    assert booked["waitlisted"] is True
+    assert waitlist_rows(live) == [
+        ("hvac_repair", "south", "2026-10-21", "13:00-17:00")
+    ]
+    slots_after = dict(live.schedule("SELECT slot_id, status FROM appointment_slots"))
+    changed = {k: v for k, v in slots_after.items() if slots_before[k] != v}
+    assert changed == {119: "booked"}
+    assert call_sentences_name_no_time(booked["text"])
+
+    again = live.say("Put me on the waitlist again")
+    assert has(again["text"], r"already.{0,40}waitlist")
+    assert call_sentences_name_no_time(again["text"])
+    print(f"waitlist rows={waitlist_rows(live)} slots changed={changed}")
+    assert len(waitlist_rows(live)) == 1
