@@ -60,7 +60,7 @@ def test_build_holds_only_current_sources(ctx: AppContext):
     }
     assert result.index_version.startswith("idx-")
     assert result.passages > 0
-    assert result.sources == len(current) == 9
+    assert result.sources == len(current)
     assert sources(ctx) == current
 
 

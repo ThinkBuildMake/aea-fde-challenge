@@ -93,7 +93,14 @@ def test_command_leaves_conversations_handoffs_and_waitlist(env, cid):
     before = [rows(env.APP_DB_PATH, f"SELECT * FROM {t}") for t in tables]
     assert all(len(r) == 1 for r in before)
     assert reset.main() == 0
-    assert [rows(env.APP_DB_PATH, f"SELECT * FROM {t}") for t in tables] == before
+    after = [rows(env.APP_DB_PATH, f"SELECT * FROM {t}") for t in tables]
+    for table, b, a in zip(tables, before, after, strict=True):
+        print(f"{table}: before {len(b)} after {len(a)} identical {a == b}")
+    print(
+        "waitlist held:",
+        rows(env.APP_DB_PATH, "SELECT held_date, held_window FROM waitlist_entries"),
+    )
+    assert after == before
 
 
 def test_command_retires_the_book_row(env, ctx, cid):
@@ -165,3 +172,45 @@ def test_reset_fails_cleanly_without_the_seed(env, ctx, cid):
     assert (error.value.status, error.value.code) == (500, "reset_failed")
     assert env.SCHEDULING_DB_PATH.read_bytes() == before
     assert not (env.SCHEDULING_DB_PATH.parent / "backups").exists()
+
+
+def test_extended_busy_code_answers_busy(env, ctx, cid, monkeypatch):
+    book_visit(ctx, "MHC-10001", 56, ISSUE, cid)
+    before = env.SCHEDULING_DB_PATH.read_bytes()
+    busy = sqlite3.OperationalError("database is locked")
+    busy.sqlite_errorcode = 517  # SQLITE_BUSY_SNAPSHOT
+
+    def locked(conn, seed):
+        raise busy
+
+    monkeypatch.setattr("app.scheduling.service._restore", locked)
+    with pytest.raises(AppError) as error:
+        reset_scheduling(ctx)
+    print("status:", error.value.status, "code:", error.value.code)
+    assert (error.value.status, error.value.code) == (409, "busy")
+    assert env.SCHEDULING_DB_PATH.read_bytes() == before
+
+
+def test_retire_failure_after_commit_says_the_seed_was_restored(
+    env, ctx, cid, monkeypatch
+):
+    book_visit(ctx, "MHC-10001", 56, ISSUE, cid)
+
+    def broken(ctx):
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr("app.scheduling.service._retire_visit_changes", broken)
+    with pytest.raises(AppError) as error:
+        reset_scheduling(ctx)
+    print("status:", error.value.status, "code:", error.value.code)
+    print("message:", error.value.message)
+    assert (error.value.status, error.value.code) == (500, "reset_failed")
+    assert "restored" in error.value.message
+    grouped = dict(
+        rows(
+            env.SCHEDULING_DB_PATH,
+            "SELECT status, count(*) FROM appointment_slots GROUP BY status",
+        )
+    )
+    print("slot counts:", grouped)
+    assert grouped == {"open": 323, "booked": 159, "reserved_members": 42, "blocked": 4}
