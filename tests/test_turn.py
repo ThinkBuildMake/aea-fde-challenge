@@ -235,3 +235,22 @@ def test_first_turn_latency_is_stored(started: Settings):
     ]
     assert turn["latency_ms"] == 2000
     assert body["turn"] == {"seq": 1, "latencyMs": 2000}
+
+
+def test_instructions_carry_the_policy_rules(started: Settings):
+    model = FakeModelProvider(results=[result(assistant("hello"))])
+    client = client_for(started, model)
+    say(client, new_conversation(client), "Is the diagnostic fee $79?")
+    system = model.received[0][0]
+    assert system["role"] == "system"
+    for rule in (
+        "resolved is true when you can answer the question in full",
+        "never repeat the caller's figure",
+        "give every day's hours and the closed days",
+        "the exact dates the document lists and whether the emergency line is open",
+        "the technician confirms pricing on site",
+        "never as something you or Meridian will do",
+        "do not name or list any fee, waiver or discount",
+        "ask for them in one short question",
+    ):
+        assert rule in system["content"], rule

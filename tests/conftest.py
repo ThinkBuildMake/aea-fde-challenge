@@ -74,9 +74,11 @@ def kb_settings(started: Settings, kb_copy: Path) -> Settings:
 @pytest.fixture(autouse=True)
 def screen_says_safe(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
     """The real danger screen runs everywhere; only its network call answers safe.
-    Its own tests and S14's choose a verdict."""
+    Its own tests and S14's choose a verdict; the S29 live test uses the real one."""
     name = request.module.__name__
-    if name.startswith(("tests.test_safety", "tests.test_interfaces")):
+    if name.startswith(
+        ("tests.test_safety", "tests.test_interfaces", "tests.test_policy_answers_live")
+    ):
         return
     from app.safety.service import OpenRouterSafetyClassifier
 
