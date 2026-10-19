@@ -229,7 +229,16 @@ def run_turn(
                 )
                 break
             if verdict is None:
-                verdict = screening.result(timeout=max(left(), 1.0))
+                try:
+                    verdict = screening.result(
+                        timeout=max(left() - FALLBACK_RESERVE_S, 0.0)
+                    )
+                except Exception as exc:  # noqa: BLE001 - an unscreened turn takes the fallback
+                    failure = _failure_code(exc, False)
+                    log_event(
+                        "screen_failed", error=failure, error_type=type(exc).__name__
+                    )
+                    break
             if result.prompt_tokens is not None:
                 prompt_tokens = (prompt_tokens or 0) + result.prompt_tokens
             if result.completion_tokens is not None:
@@ -269,7 +278,9 @@ def run_turn(
                 failure = "tool_rounds_exhausted"
         if failure and verdict is None:
             try:
-                verdict = screening.result(timeout=max(left(), 0.0))
+                verdict = screening.result(
+                    timeout=max(left() - FALLBACK_RESERVE_S, 0.0)
+                )
             except Exception:  # noqa: BLE001 - an unscreened turn keeps the failure path
                 verdict = None
     finally:
@@ -302,6 +313,7 @@ def run_turn(
         )
         turn["stored"] = [user, {"role": "assistant", "content": final_text}]
         turn["tools_called"] = []
+        turn["error"] = failure
         if emergency:
             status = banner = "safety_stop"
             actions = ["new_conversation"]

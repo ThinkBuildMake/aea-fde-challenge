@@ -107,11 +107,11 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> Calls:
             raise c.book_error
         return BOOKING
 
-    def move(ctx, customer_id, appointment_id, new_slot_id):
+    def move(ctx, customer_id, appointment_id, new_slot_id, conversation_id):
         c.moves.append((appointment_id, new_slot_id))
         return MoveResult(booking=BOOKING, late_fee_applies=False)
 
-    def cancel(ctx, customer_id, appointment_id):
+    def cancel(ctx, customer_id, appointment_id, conversation_id):
         c.cancels.append(appointment_id)
         return CancelResult(
             appointment_id=appointment_id,

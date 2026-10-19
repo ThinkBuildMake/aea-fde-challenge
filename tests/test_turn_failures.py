@@ -48,13 +48,16 @@ def test_a_hanging_model_still_answers_within_the_deadline(started: Settings):
         elapsed = time.monotonic() - t0
     finally:
         release.set()
+    turn = turn_row(started, cid)
     print(
-        f"hang: answered in {elapsed:.1f}s banner={reply['banner']} actions={reply['actions']}"
+        f"hang: answered in {elapsed:.1f}s text={reply['text']!r} "
+        f"text==FALLBACK_TEXT: {reply['text'] == guards.FALLBACK_TEXT} "
+        f"banner={reply['banner']} actions={reply['actions']} "
+        f"fallback_used={turn['fallback_used']} error={turn['error']}"
     )
     assert elapsed < 15
     assert_fallback(reply)
     assert reply["status"] == "active"
-    turn = turn_row(started, cid)
     assert turn["fallback_used"] == 1 and turn["error"] == "provider_timeout"
     assert turn["latency_ms"] < 15000
 
@@ -73,7 +76,10 @@ def test_provider_status_errors_get_the_fallback(started: Settings, code: int):
     client = client_for(started, model)
     cid = new_conversation(client)
     reply = say(client, cid, "hello")
-    print(f"{code}: text={reply['text'][:30]!r} status={reply['status']}")
+    print(
+        f"{code}: text={reply['text']!r} text==FALLBACK_TEXT: "
+        f"{reply['text'] == guards.FALLBACK_TEXT} status={reply['status']}"
+    )
     assert_fallback(reply)
     assert reply["status"] == "active"
     turn = turn_row(started, cid)
@@ -88,10 +94,14 @@ def test_a_rejected_replay_ends_the_conversation(started: Settings):
     cid = new_conversation(client)
     assert say(client, cid, "hello")["banner"] == "none"
     reply = say(client, cid, "and again")
-    print(f"replay: status={reply['status']} text={reply['text'][:20]!r}")
+    conv = rows(started, "SELECT * FROM conversations WHERE id = ?", cid)[0]
+    print(
+        f"replay: status={reply['status']} text={reply['text']!r} "
+        f"text==FALLBACK_TEXT: {reply['text'] == guards.FALLBACK_TEXT} "
+        f"outcome={conv['outcome']} outcome_reason={conv['outcome_reason']}"
+    )
     assert_fallback(reply)
     assert reply["status"] == "ended"
-    conv = rows(started, "SELECT * FROM conversations WHERE id = ?", cid)[0]
     assert conv["outcome"] == "failed" and conv["outcome_reason"] == "replay_rejected"
     assert conv["ended_at"]
     turn = turn_row(started, cid, 2)
@@ -135,6 +145,28 @@ def test_an_emergency_verdict_wins_over_a_provider_failure(
     reply = say(client, cid, "I smell gas")
     assert reply["text"] == guards.emergency_text(matched=False)
     assert reply["status"] == "safety_stop" and len(calls.handoffs) == 1
+    assert turn_row(started, cid)["error"] == "provider_error"
+
+
+def test_a_slow_screen_after_the_model_returns_takes_the_fallback(
+    started: Settings,
+    calls: Calls,  # noqa: F811
+):
+    calls.screen_gate = threading.Event()
+    settings = started.model_copy(update={"TURN_DEADLINE": 3})
+    client = client_for(settings, FakeModelProvider(replies=["Hi."]), SystemClock())
+    cid = new_conversation(client)
+    try:
+        t0 = time.monotonic()
+        reply = say(client, cid, "hello")
+        elapsed = time.monotonic() - t0
+    finally:
+        calls.screen_gate.set()
+    assert elapsed < 3
+    assert_fallback(reply)
+    turn = turn_row(started, cid)
+    assert turn["fallback_used"] == 1 and turn["error"] == "provider_timeout"
+    assert calls.windows == [] and calls.books == []
 
 
 def test_a_committed_cancel_survives_a_failed_turn(
