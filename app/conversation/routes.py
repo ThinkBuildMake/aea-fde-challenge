@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.context import AppContext, get_ctx, get_db
+from app.conversation.guards import TURN_CAP_TEXT
 from app.conversation.service import close_idle_conversations
 from app.conversation.turn import run_turn
 from app.errors import AppError
@@ -115,9 +116,7 @@ def send_message(
                 "WHERE id = ? AND outcome IS NULL",
                 (conversation_id,),
             )
-            raise AppError(
-                409, "turn_limit_reached", "This conversation has reached its limit."
-            )
+            raise AppError(409, "turn_limit_reached", TURN_CAP_TEXT)
         reply = run_turn(
             ctx,
             db,
