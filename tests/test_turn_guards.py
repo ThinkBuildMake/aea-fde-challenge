@@ -101,7 +101,7 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> Calls:
         c.windows.append((customer_id, service_type))
         return OpenWindows(windows=[WINDOW], matched_request=True, reason=None)
 
-    def book(ctx, customer_id, slot_id, issue):
+    def book(ctx, customer_id, slot_id, issue, conversation_id):
         c.books.append(slot_id)
         if c.book_error:
             raise c.book_error
