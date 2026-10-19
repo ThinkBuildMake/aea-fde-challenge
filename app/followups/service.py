@@ -270,17 +270,88 @@ def _handoff_after_fallback(
     end_with_handoff(conn, conversation_id)
 
 
+_WAITLIST_COLUMNS = (
+    "w.id, c.public_id, w.customer_id, w.caller_name, w.caller_phone, w.service_type, "
+    "w.zone, w.held_date, w.held_window, w.created_at, "
+    "CAST((julianday('now') - julianday(w.created_at)) * 86400 AS INTEGER)"
+)
+_UNIQUE_KEY = (
+    "w.customer_id = ? AND w.service_type = ? AND w.held_date = ? AND w.held_window = ?"
+)
+
+
+def _waitlist_views(
+    conn: sqlite3.Connection, ctx: AppContext, where: str, params: tuple
+) -> list[WaitlistView]:
+    rows = conn.execute(
+        f"SELECT {_WAITLIST_COLUMNS} FROM waitlist_entries w JOIN conversations c "
+        f"ON c.id = w.conversation_id WHERE {where} ORDER BY w.created_at, w.id",
+        params,
+    ).fetchall()
+    views = []
+    for row in rows:
+        found = _customer(ctx, row[2])
+        views.append(
+            WaitlistView(
+                id=row[0],
+                conversation_public_id=row[1],
+                caller=WaitlistCaller(
+                    customer_id=row[2],
+                    name=row[3],
+                    phone=row[4],
+                    city="" if found is None else found[2],
+                ),
+                service_type=row[5],
+                zone=row[6],
+                held=HeldWindow(date=row[7], window=row[8]),
+                created_at=row[9],
+                waiting_seconds=max(row[10], 0),
+            )
+        )
+    return views
+
+
+def list_waitlist(ctx: AppContext) -> list[WaitlistView]:
+    """Every waitlist entry, oldest first."""
+    with closing(ctx.open_app_db()) as conn:
+        return _waitlist_views(conn, ctx, "1 = 1", ())
+
+
 def join_waitlist(ctx: AppContext, entry: WaitlistRequest) -> JoinWaitlistResult:
-    view = WaitlistView(
-        id=0,
-        conversation_public_id="stub",
-        caller=WaitlistCaller(
-            customer_id=entry.customer_id, name="stub", phone="stub", city="stub"
-        ),
-        service_type=entry.service_type,
-        zone=entry.zone,
-        held=HeldWindow(date=entry.held_date, window=entry.held_window),
-        created_at="1970-01-01T00:00:00.000Z",
-        waiting_seconds=0,
+    """Record a copy of the held window; asking again for the same visit returns the entry."""
+    found = _customer(ctx, entry.customer_id)
+    if found is None:
+        raise ValueError("customer not found")
+    key = (
+        entry.customer_id,
+        entry.service_type,
+        entry.held_date,
+        entry.held_window,
     )
-    return JoinWaitlistResult(entry=view, created=False)
+    with closing(ctx.open_app_db()) as conn:
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            cursor = conn.execute(
+                "INSERT INTO waitlist_entries (conversation_id, customer_id, "
+                "caller_name, caller_phone, service_type, zone, held_date, held_window) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (customer_id, "
+                "service_type, held_date, held_window) DO NOTHING",
+                (
+                    entry.conversation_id,
+                    entry.customer_id,
+                    found[0],
+                    found[1],
+                    entry.service_type,
+                    entry.zone,
+                    entry.held_date,
+                    entry.held_window,
+                ),
+            )
+            created = cursor.rowcount == 1
+            view = _waitlist_views(conn, ctx, _UNIQUE_KEY, key)[0]
+            conn.execute("COMMIT")
+        except BaseException:
+            if conn.in_transaction:
+                conn.execute("ROLLBACK")
+            raise
+    return JoinWaitlistResult(entry=view, created=created)

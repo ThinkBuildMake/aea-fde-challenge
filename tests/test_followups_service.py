@@ -1,5 +1,6 @@
 import sqlite3
 from collections.abc import Iterator
+from contextlib import closing
 from typing import Any
 
 import pytest
@@ -10,14 +11,17 @@ from app.followups.service import (
     HandoffNotFound,
     NoHandoff,
     create_handoff,
+    join_waitlist,
     list_handoffs,
     mark_handoff_followed_up,
     set_callback_window,
 )
 from app.llm import FakeModelProvider
 from app.main import create_app
+from app.scheduling.service import book_visit, get_appointment
+from app.scheduling.store import connect as scheduling_connect
 from app.settings import Settings
-from app.types import HandoffRecord
+from app.types import HandoffRecord, WaitlistRequest
 
 TOLD = "I will pass this to a supervisor."
 
@@ -254,3 +258,58 @@ def test_mark_followed_up_then_again_then_undo(
 def test_mark_unknown_handoff_raises(ctx: AppContext):
     with pytest.raises(HandoffNotFound):
         mark_handoff_followed_up(ctx, 9999, True)
+
+
+def held_request(ctx: AppContext) -> WaitlistRequest:
+    visit = book_visit(ctx, "MHC-10002", 115, "AC not cooling", "c1")
+    held = get_appointment(ctx, "MHC-10002", visit.appointment_id)
+    return WaitlistRequest(
+        conversation_id="c1",
+        customer_id="MHC-10002",
+        service_type=held.service_type,
+        zone=held.zone,
+        held_date=held.date,
+        held_window=held.window,
+    )
+
+
+def scheduling_snapshot(ctx: AppContext) -> list:
+    with closing(scheduling_connect(ctx)) as scheduling:
+        return [
+            scheduling.execute(f"SELECT * FROM {table} ORDER BY 1").fetchall()
+            for table in ("appointment_slots", "appointments")
+        ]
+
+
+def test_joining_writes_one_row_and_nothing_else(
+    ctx: AppContext, conn: sqlite3.Connection
+):
+    entry = held_request(ctx)
+    before = scheduling_snapshot(ctx)
+    result = join_waitlist(ctx, entry)
+    rows = conn.execute(
+        "SELECT held_date, held_window, zone, service_type, caller_name, caller_phone "
+        "FROM waitlist_entries"
+    ).fetchall()
+    assert result.created is True
+    assert [tuple(row) for row in rows] == [
+        (
+            "2026-10-21",
+            "08:00-12:00",
+            "south",
+            "hvac_repair",
+            "Omar Patel",
+            "512-555-0102",
+        )
+    ]
+    assert scheduling_snapshot(ctx) == before
+
+
+def test_asking_twice_writes_one_row(ctx: AppContext, conn: sqlite3.Connection):
+    entry = held_request(ctx)
+    first = join_waitlist(ctx, entry)
+    second = join_waitlist(ctx, entry)
+    count = conn.execute("SELECT COUNT(*) FROM waitlist_entries").fetchone()[0]
+    assert (first.created, second.created) == (True, False)
+    assert second.entry.id == first.entry.id
+    assert count == 1
