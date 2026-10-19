@@ -296,15 +296,15 @@ def _book_in_transaction(
         raise NotEligible("wrong_service_type")
     if slot["slot_date"] < ctx.settings.REFERENCE_DATE:
         raise NotEligible("before_reference_date")
-    allowed = ["open"]
-    if customer["membership_tier"] in ("standard", "plus"):
-        allowed.append("reserved_members")
-    elif slot["status"] == "reserved_members":
+    if slot["status"] == "reserved_members" and customer["membership_tier"] not in (
+        "standard",
+        "plus",
+    ):
         raise NotEligible("member_only")
     claimed = conn.execute(
         "UPDATE appointment_slots SET status = 'booked' "
-        f"WHERE slot_id = ? AND status IN ({','.join('?' * len(allowed))})",
-        (slot_id, *allowed),
+        "WHERE slot_id = ? AND status IN ('open', 'reserved_members')",
+        (slot_id,),
     )
     if claimed.rowcount != 1:
         raise SlotUnavailable("slot is not available")
