@@ -14,6 +14,7 @@ from app.followups.service import (
     set_callback_window,
 )
 from app.followups.service import list_handoffs as list_handoffs_service
+from app.followups.service import list_waitlist as list_waitlist_service
 from app.negotiation import respond
 from app.types import (
     CallbackWindow,
@@ -80,5 +81,5 @@ def mark_followed_up(
 
 
 @router.get("/waitlist")
-def list_waitlist(request: Request) -> Response:
-    return respond(request, WaitlistList(entries=[]))
+def list_waitlist(request: Request, ctx: AppContext = Depends(get_ctx)) -> Response:
+    return respond(request, WaitlistList(entries=list_waitlist_service(ctx)))
