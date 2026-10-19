@@ -1,6 +1,7 @@
 """The model's twelve tools. The customer and conversation always come from the conversation."""
 
 import json
+import re
 import sqlite3
 from collections.abc import Callable, Iterable
 from datetime import date
@@ -51,6 +52,25 @@ def _tool(
 
 
 _STR = {"type": "string"}
+# Reasons the model may give; system-only reasons (provider_failure, safety, ...) are not.
+ESCALATE_REASONS = [
+    "no_account_match",
+    "caller_asked_for_person",
+    "out_of_scope",
+    "no_document_answer",
+    "documents_disagree",
+    "no_plumber_in_zone",
+    "outside_service_area",
+    "membership_change",
+    "billing_dispute",
+    "refund_demand",
+    "complaint",
+    "manager_request",
+    "technician_late",
+    "new_system_quote",
+    "other",
+]
+_LABEL = re.compile(r"^[a-z_]+$")
 _INT = {"type": "integer"}
 _NEEDS_ID = " Needs identify_customer to have matched the caller first."
 
@@ -124,11 +144,15 @@ TOOLS: list[dict[str, Any]] = [
     ),
     _tool(
         "escalate",
-        "Hand the conversation to a person.",
+        "Hand the conversation to a person. The app writes the reply about the call back.",
         {
-            "kind": _STR,
-            "reason": _STR,
-            "intent": _STR,
+            "kind": {"type": "string", "enum": ["handoff", "supervisor_callback"]},
+            "reason": {"type": "string", "enum": ESCALATE_REASONS},
+            "intent": {
+                "type": "string",
+                "description": "What the caller needs, in a few plain words from what "
+                "they said, e.g. Charged twice for the same visit. Not a label.",
+            },
             "toldCaller": _STR,
             "callerName": _STR,
             "callerPhone": _STR,
@@ -179,6 +203,7 @@ class ToolState:
         self.unavailable: str | None = None
         self.waitlisted = False
         self.cancelled = False
+        self.handoff: HandoffRecord | None = None
 
     def offer(
         self, slot_ids: Iterable[int] = (), appointment_ids: Iterable[int] = ()
@@ -502,21 +527,35 @@ def _join_waitlist(
 def _escalate(
     ctx: AppContext, state: ToolState, args: dict[str, Any]
 ) -> dict[str, Any]:
-    matched = state.customer_id is not None
-    record = HandoffRecord(
-        conversation_id=state.conversation_id,
-        kind=str(args["kind"]),
-        reason=str(args["reason"]),
-        by_error=False,
-        customer_id=state.customer_id,
-        stated_name=None if matched else args.get("callerName"),
-        stated_phone=None if matched else args.get("callerPhone"),
-        intent=str(args["intent"]),
-        told_caller=str(args["toldCaller"]),
-        summary_source="agent",
-    )
-    followups.create_handoff(state.db, record)
-    return {"ok": True}
+    """Note the handoff; the turn writes it with the outcome when it saves."""
+    if state.handoff is None:
+        matched = state.customer_id is not None
+        reason = str(args.get("reason") or "").strip() or "other"
+        intent = str(args.get("intent") or "").strip()
+        supervisor = (
+            reason in followups.SUPERVISOR_REASONS
+            or args.get("kind") == "supervisor_callback"
+        )
+        state.handoff = HandoffRecord(
+            conversation_id=state.conversation_id,
+            kind="supervisor_callback" if supervisor else "handoff",
+            reason=reason,
+            by_error=False,
+            customer_id=state.customer_id,
+            stated_name=None if matched else args.get("callerName") or None,
+            stated_phone=None if matched else args.get("callerPhone") or None,
+            intent=state.caller_text[:120]
+            if not intent or _LABEL.match(intent)
+            else intent,
+            told_caller=str(args.get("toldCaller") or "").strip() or "-",
+            summary_source="agent",
+        )
+    return {
+        "ok": True,
+        "instruction": "Handoff noted. Tell the caller a person will take over, why, "
+        "and that they will call back at the time the caller picks. Do not promise a "
+        "time or ask for anything else.",
+    }
 
 
 HANDLERS: dict[str, Handler] = {

@@ -1,5 +1,6 @@
 """What a reply says is checked before the caller sees it: four rules on the turn."""
 
+import sqlite3
 from typing import Any
 
 import pytest
@@ -44,7 +45,6 @@ BOOKING = Booking(
 class Stubs:
     def __init__(self) -> None:
         self.passage_text = "The diagnostic fee is $89."
-        self.handoff_rows = False
 
 
 @pytest.fixture
@@ -63,22 +63,7 @@ def stubs(monkeypatch: pytest.MonkeyPatch) -> Stubs:
             )
         ]
 
-    def handoff(tx, record):
-        if s.handoff_rows:
-            tx.execute(
-                "INSERT INTO handoffs (conversation_id, kind, reason, intent, told_caller) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (
-                    record.conversation_id,
-                    record.kind,
-                    record.reason,
-                    record.intent,
-                    "ok",
-                ),
-            )
-
     monkeypatch.setattr("app.knowledge.service.search_knowledge", search)
-    monkeypatch.setattr("app.followups.service.create_handoff", handoff)
     monkeypatch.setattr(
         "app.knowledge.service.get_fee",
         lambda ctx, code: Fee(code=code, cents=8900, source_file="pricing"),
@@ -268,11 +253,10 @@ def test_no_tap_after_a_handoff(started: Settings, stubs: Stubs, when: str):
         "e",
         "escalate",
         kind="handoff",
-        reason="asked",
+        reason="no_document_answer",
         intent="other",
         toldCaller="A person will call.",
     )
-    stubs.handoff_rows = True
     if when == "same_turn":
         both = [esc, tool_call("r", "report_status", intent="other", resolved=True)]
         script = [
@@ -280,6 +264,7 @@ def test_no_tap_after_a_handoff(started: Settings, stubs: Stubs, when: str):
             result(assistant("A person will pick this up.")),
         ]
         _, cid, reply = one_turn(started, script)
+        assert "ask_solved" not in reply["actions"]
     else:
         client = client_for(
             started,
@@ -293,12 +278,14 @@ def test_no_tap_after_a_handoff(started: Settings, stubs: Stubs, when: str):
             ),
         )
         cid = new_conversation(client)
-        say(client, cid, "person please")
-        reply = say(client, cid, "thanks")
+        reply = say(client, cid, "person please")
+        later = client.post(f"/conversations/{cid}/messages", json={"text": "thanks"})
+        print(f"second message -> {later.status_code} {later.json()['error']}")
+        assert later.status_code == 409
     count = rows(started, "SELECT COUNT(*) FROM handoffs WHERE conversation_id=?", cid)
     show(f"AC5 {when}", reply, error_of(started, cid, 1))
     print(f"handoff rows={count[0][0]}")
-    assert "ask_solved" not in reply["actions"]
+    assert count[0][0] == 1 and reply["actions"] == ["choose_callback_window"]
 
 
 def test_filler_from_a_tool_round_does_not_reach_the_caller(
@@ -336,15 +323,15 @@ def test_a_later_unresolved_report_clears_resolved_at(started: Settings, stubs: 
 def test_no_tap_after_a_failed_escalate(
     started: Settings, stubs: Stubs, monkeypatch: pytest.MonkeyPatch
 ):
-    def broken(tx, record):
-        raise RuntimeError("down")
+    def broken(tx, conversation_id):
+        raise sqlite3.OperationalError("disk I/O error")
 
-    monkeypatch.setattr("app.followups.service.create_handoff", broken)
+    monkeypatch.setattr("app.conversation.service.end_with_handoff", broken)
     esc = tool_call(
         "e",
         "escalate",
         kind="handoff",
-        reason="asked",
+        reason="no_document_answer",
         intent="other",
         toldCaller="A person will call.",
     )
@@ -352,7 +339,8 @@ def test_no_tap_after_a_failed_escalate(
     _, _, reply = one_turn(
         started, [result(assistant(calls=both)), result(assistant("Noted."))]
     )
-    assert "ask_solved" not in reply["actions"]
+    assert reply["text"] == guards.FALLBACK_TEXT
+    assert reply["actions"] == ["request_callback"] and reply["status"] == "active"
 
 
 def test_an_answer_before_an_empty_final_round_is_kept(started: Settings, stubs: Stubs):
@@ -372,7 +360,6 @@ def test_an_answer_before_an_empty_final_round_is_kept(started: Settings, stubs:
 def test_a_refund_request_handed_to_a_supervisor_is_not_a_promise(
     started: Settings, stubs: Stubs
 ):
-    stubs.handoff_rows = True
     text = (
         "I've logged your refund request, and a supervisor will call you "
         "within 1 business day."
@@ -381,13 +368,13 @@ def test_a_refund_request_handed_to_a_supervisor_is_not_a_promise(
         "e",
         "escalate",
         kind="handoff",
-        reason="refund request",
-        intent="billing_dispute",
+        reason="refund_demand",
+        intent="Wants a refund",
         toldCaller=text,
     )
     _, cid, reply = one_turn(
         started, [result(assistant(calls=[esc])), result(assistant(text))]
     )
     show("refund request", reply, error_of(started, cid, 1))
-    assert reply["text"] == text
+    assert reply["text"] == guards.SUPERVISOR_TEXT
     assert error_of(started, cid, 1) is None

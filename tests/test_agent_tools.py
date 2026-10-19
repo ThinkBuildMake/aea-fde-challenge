@@ -346,7 +346,6 @@ def test_handoff_gets_the_conversations_ids(
     started: Settings, monkeypatch: pytest.MonkeyPatch
 ):
     stub(monkeypatch, "app.scheduling.service.identify_customer", customer("MHC-10002"))
-    handoff = stub(monkeypatch, "app.followups.service.create_handoff", None)
     cid, _ = run(
         started,
         identify("MHC-10002"),
@@ -361,14 +360,19 @@ def test_handoff_gets_the_conversations_ids(
                 conversationId="other",
                 customerId="MHC-10001",
                 summarySource="system",
+                callerName="Someone Else",
+                callerPhone="512-555-9999",
             )
         ],
     )
-    record = handoff.calls[0][1]
-    assert record.conversation_id == cid
-    assert record.customer_id == "MHC-10002"
-    assert record.summary_source == "agent"
-    assert record.stated_name is None and record.stated_phone is None
+    row = rows(
+        started,
+        "SELECT conversation_id, customer_id, summary_source, caller_name, "
+        "caller_phone, stated_by_caller FROM handoffs",
+    )
+    assert [tuple(r) for r in row] == [
+        (cid, "MHC-10002", "agent", "Omar Patel", "512-555-0102", 0)
+    ]
 
 
 def raise_unknown_fee(*args: Any, **kwargs: Any) -> Fee:
