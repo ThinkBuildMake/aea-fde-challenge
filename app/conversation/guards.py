@@ -71,8 +71,9 @@ ESCALATE_INSTRUCTIONS = {
     "the system's price, then give the typical installed range from the documents and "
     "say the exact price comes from a free in-home estimate on site. Book nothing; a "
     "person will call back to arrange the estimate.",
-    "no_document_answer": "Handoff noted. Say you are not sure, state no answer, give "
-    "nothing from memory, and say a person will call back.",
+    "no_document_answer": "Handoff noted. Give only what a retrieved document settles, "
+    "say you are not sure about the rest, give nothing from memory, and say a person "
+    "will call back.",
     "out_of_scope": "Handoff noted. Only if a search_knowledge result lists this "
     "service as not offered, say Meridian does not offer it and offer the partner or "
     "referral the documents name; a person will follow up with it and call back. If no "
