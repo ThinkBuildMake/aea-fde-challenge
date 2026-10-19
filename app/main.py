@@ -1,3 +1,5 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -23,7 +25,20 @@ def create_app(
     model: ModelProvider | None = None,
     clock: Clock | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="Meridian", docs_url=None, redoc_url=None, openapi_url=None)
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        yield
+        close = getattr(app.state.ctx.safety, "close", None)
+        if close is not None:
+            close()
+
+    app = FastAPI(
+        title="Meridian",
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+        lifespan=lifespan,
+    )
     app.state.ctx = AppContext(
         settings=settings,
         model=model or StubModelProvider(),
