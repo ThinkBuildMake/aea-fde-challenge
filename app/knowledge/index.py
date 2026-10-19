@@ -1,7 +1,9 @@
 """The index file (numpy vectors plus passage records), written atomically, and its in-memory copy."""
 
 import fcntl
+import hashlib
 import json
+import logging
 import os
 import threading
 from collections.abc import Iterator
@@ -15,6 +17,8 @@ from numpy.typing import NDArray
 from app.errors import AppError
 from app.knowledge.passages import PassageRecord
 
+log = logging.getLogger("meridian.index")
+
 
 @dataclass(frozen=True)
 class LoadedIndex:
@@ -25,6 +29,13 @@ class LoadedIndex:
     vectors: NDArray[np.float32]
 
 
+def passages_hash(passages: list[PassageRecord]) -> str:
+    digest = hashlib.sha256()
+    for p in passages:
+        digest.update(f"\0{p.text}".encode())
+    return digest.hexdigest()
+
+
 def write_index(path: Path, loaded: LoadedIndex) -> None:
     """Write beside the old file, then replace it; a failure leaves the old file as it was."""
     meta = json.dumps(
@@ -32,6 +43,7 @@ def write_index(path: Path, loaded: LoadedIndex) -> None:
             "version": loaded.version,
             "model": loaded.model,
             "dims": loaded.dims,
+            "passages_sha256": passages_hash(loaded.passages),
             "passages": [asdict(p) for p in loaded.passages],
         }
     )
@@ -45,12 +57,14 @@ def write_index(path: Path, loaded: LoadedIndex) -> None:
 
 
 def read_index(path: Path) -> LoadedIndex:
-    with np.load(path, allow_pickle=False) as data:
+    with path.open("rb") as handle, np.load(handle, allow_pickle=False) as data:
         meta = json.loads(str(data["meta"]))
         vectors = np.asarray(data["vectors"], dtype=np.float32)
     passages = [PassageRecord(**p) for p in meta["passages"]]
     if vectors.shape != (len(passages), meta["dims"]):
         raise ValueError("index file does not match itself")
+    if meta["passages_sha256"] != passages_hash(passages):
+        raise ValueError("index passages do not match their stored hash")
     return LoadedIndex(meta["version"], meta["model"], meta["dims"], passages, vectors)
 
 
@@ -82,8 +96,9 @@ class IndexStore:
     def _load(self) -> LoadedIndex | None:
         try:
             loaded = read_index(self._path)
-        except (OSError, ValueError, KeyError, TypeError):
-            return None
+        except Exception as error:  # noqa: BLE001 - any unreadable file keeps the last good index
+            log.error("index file unreadable: %s", type(error).__name__)
+            return self._loaded
         return loaded if loaded.model == self._model else None
 
     def swap(self, loaded: LoadedIndex) -> None:

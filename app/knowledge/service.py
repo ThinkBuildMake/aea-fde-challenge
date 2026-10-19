@@ -57,13 +57,17 @@ def rebuild_index(ctx: AppContext) -> RebuildIndexResult:
                 "embedding_failed",
                 "The embedding provider failed; the old index stays in use.",
             ) from None
-        matrix = np.asarray(vectors, dtype=np.float32)
+        unusable = AppError(
+            502,
+            "embedding_failed",
+            "The embedding provider returned unusable vectors.",
+        )
+        try:
+            matrix = np.asarray(vectors, dtype=np.float32)
+        except (ValueError, TypeError):
+            raise unusable from None
         if matrix.ndim != 2 or matrix.shape[0] != len(passages):
-            raise AppError(
-                502,
-                "embedding_failed",
-                "The embedding provider returned unusable vectors.",
-            )
+            raise unusable
         digest = hashlib.sha256(ctx.embedder.model.encode())
         for p in passages:
             digest.update(f"\0{p.passage_id}\0{p.text}".encode())

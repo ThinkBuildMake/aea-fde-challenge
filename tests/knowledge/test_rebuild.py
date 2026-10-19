@@ -257,3 +257,55 @@ def test_a_damaged_index_file_is_not_loaded(kb_settings: Settings):
     rebuild_index(ctx)
     Path(kb_settings.INDEX_PATH).write_bytes(b"not an index")
     assert make_ctx(kb_settings).index.current() is None
+
+
+@pytest.mark.parametrize("damage", [b"", b"PK\x03\x04truncated"])
+def test_an_empty_or_truncated_index_file_keeps_the_last_good_index(
+    kb_settings: Settings, damage: bytes
+):
+    ctx = make_ctx(kb_settings)
+    version = rebuild_index(ctx).index_version
+    kb_settings.INDEX_PATH.write_bytes(damage)
+    assert ctx.index.current().version == version  # type: ignore[union-attr]
+    assert ctx.index.current().version == version  # type: ignore[union-attr]
+    assert make_ctx(kb_settings).index.current() is None
+
+
+@pytest.mark.parametrize("bad", ["ragged", "text"])
+def test_unusable_vectors_keep_the_old_index(kb_settings: Settings, bad: str):
+    ctx = make_ctx(kb_settings)
+    first = rebuild_index(ctx).index_version
+
+    class Bad(FakeEmbedder):
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            vectors = super().embed(texts)
+            if bad == "ragged":
+                vectors[0] = vectors[0][:3]
+            else:
+                vectors[0][0] = "x"  # type: ignore[assignment]
+            return vectors
+
+    (kb_settings.KB_DIR / "faq" / "customer_faq.md").write_text("# Changed\nNew words")
+    ctx.embedder = Bad()
+    with pytest.raises(AppError) as error:
+        rebuild_index(ctx)
+    assert error.value.status == 502 and error.value.code == "embedding_failed"
+    assert ctx.index.current().version == first  # type: ignore[union-attr]
+
+
+def test_an_index_whose_passages_do_not_match_their_hash_is_refused(
+    kb_settings: Settings,
+):
+    import numpy as np
+
+    ctx = make_ctx(kb_settings)
+    rebuild_index(ctx)
+    path = kb_settings.INDEX_PATH
+    with np.load(path, allow_pickle=False) as data:
+        vectors = data["vectors"]
+        meta = json.loads(str(data["meta"]))
+    assert len(meta["passages_sha256"]) == 64
+    meta["passages"][0]["text"] += " tampered"
+    with path.open("wb") as handle:
+        np.savez(handle, vectors=vectors, meta=np.array(json.dumps(meta)))
+    assert make_ctx(kb_settings).index.current() is None
