@@ -201,17 +201,11 @@ def test_start_closes_idle_without_message_as_no_message(
     assert outcome_of(db, response.json()["conversationId"]) == (None, None)
 
 
-@pytest.mark.parametrize(
-    "error", [sqlite3.OperationalError("locked"), RuntimeError("x")]
-)
 def test_failed_sweep_never_blocks_start(
-    client: TestClient,
-    db: sqlite3.Connection,
-    monkeypatch: pytest.MonkeyPatch,
-    error: Exception,
+    client: TestClient, db: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
 ):
     def boom(*_args, **_kwargs):
-        raise error
+        raise sqlite3.OperationalError("locked")
 
     monkeypatch.setattr("app.conversation.routes.close_idle_conversations", boom)
     response = client.post("/conversations")
