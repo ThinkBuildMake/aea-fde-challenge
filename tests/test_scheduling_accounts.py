@@ -1,3 +1,4 @@
+import re
 import sqlite3
 from collections.abc import Iterator
 from urllib.parse import urlparse
@@ -105,6 +106,10 @@ def test_payment_link_for_own_invoice(ctx: AppContext, db: sqlite3.Connection):
         "SELECT balance_cents FROM invoices WHERE invoice_id = 'INV-204411'"
     ).fetchone()
     assert row[0] == 47800
+    links = [
+        create_payment_link(ctx, "MHC-10002", "INV-204411").url for _ in range(200)
+    ]
+    assert not [u for u in links if re.search(r"\d{13}", u)]
 
 
 def test_no_link_for_another_customers_invoice(ctx: AppContext):

@@ -1,5 +1,6 @@
 import json
 import re
+import secrets
 import shutil
 import sqlite3
 import uuid
@@ -561,7 +562,7 @@ def create_payment_link(
     if row["balance_cents"] <= 0:
         raise NothingOwed("nothing owed")
     return PaymentLink(
-        url=f"https://pay.example.com/invoice/{invoice_id}?token={uuid.uuid4().hex}",
+        url=f"https://pay.example.com/invoice/{invoice_id}?token={secrets.token_urlsafe(16)}",
         valid_for_hours=24,
     )
 

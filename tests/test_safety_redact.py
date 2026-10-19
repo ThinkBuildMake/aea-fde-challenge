@@ -4,7 +4,7 @@ import pytest
 
 from app.safety.service import redact_card_numbers
 
-DIGIT_RUN = re.compile(r"\d(?:[ \t-]{0,3}\d){12,18}")
+DIGIT_RUN = re.compile(r"\d(?:[\s.\-]*\d){12,}")
 
 
 def test_spaced_card_is_removed() -> None:
@@ -21,6 +21,12 @@ def test_spaced_card_is_removed() -> None:
         "4111  1111 1111 1111",
         "4111 - 1111 - 1111 - 1111",
         "4111\t1111\t1111\t1111",
+        "4111    1111    1111    1111",
+        "4111\n1111\n1111\n1111",
+        "4111.1111.1111.1111",
+        "4111 -  1111\t\t1111  1111",
+        "3782 822463 10005",
+        "6011000990139424123",
     ],
 )
 def test_other_formats_removed_and_stable(text: str) -> None:
@@ -33,6 +39,6 @@ def test_other_formats_removed_and_stable(text: str) -> None:
 
 
 def test_phone_number_stays() -> None:
-    r = redact_card_numbers("Call me at 512-555-0101")
-    assert r.text == "Call me at 512-555-0101"
+    r = redact_card_numbers("Call me at 512-555-0101 about INV-204411")
+    assert r.text == "Call me at 512-555-0101 about INV-204411"
     assert r.removed is False

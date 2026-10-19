@@ -13,7 +13,7 @@ from app.llm import reported_cost
 from app.logs import log_event
 from app.types import RedactResult, Verdict
 
-CARD_RUN = re.compile(r"(?<!\d)\d(?:[ \t-]{0,3}\d){12,}(?!\d)")
+CARD_RUN = re.compile(r"(?<!\d)\d(?:[\s.\-]*\d){12,}(?!\d)")
 CARD_PLACEHOLDER = "[card number removed]"
 SAFETY_TIMEOUT_S = 8.0
 
