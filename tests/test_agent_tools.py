@@ -528,3 +528,58 @@ def test_unavailable_tool_failures_are_classified(
         assert "from memory" in SEARCH_UNAVAILABLE_INSTRUCTION
     else:
         assert out["ok"] is False and "SchedulingUnavailable" in out["error"]
+
+
+def test_window_choices_are_capped_at_three(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    stub(monkeypatch, "app.scheduling.service.identify_customer", customer("MHC-10002"))
+    stub(
+        monkeypatch,
+        "app.scheduling.service.find_open_windows",
+        OpenWindows(
+            windows=[
+                window(i, f"{7 + i:02d}:00", f"{11 + i:02d}:00") for i in range(1, 6)
+            ],
+            matched_request=True,
+            reason=None,
+        ),
+    )
+    cid, replies = run(
+        started,
+        identify("MHC-10002"),
+        [tool_call("w", "find_open_windows", serviceType="hvac_repair")],
+    )
+    labels = [c["label"] for c in replies[1]["choices"]]
+    assert labels == [
+        "Wednesday October 21, 8 AM to 12 PM, Jun Park",
+        "Wednesday October 21, 9 AM to 1 PM, Jun Park",
+        "Wednesday October 21, 10 AM to 2 PM, Jun Park",
+        "Nothing earlier? Ask for an earlier window",
+    ]
+    told = tool_results(started, cid)[-1]
+    assert [w["slotId"] for w in told["windows"]] == [1, 2, 3]
+    offered = rows(
+        started,
+        "SELECT offered FROM turns WHERE conversation_id = ? ORDER BY seq",
+        cid,
+    )
+    assert json.loads(offered[-1]["offered"])["slotIds"] == [1, 2, 3]
+
+
+def test_find_open_windows_schema_is_closed():
+    from app.conversation.tools import TOOLS
+
+    params = next(
+        t["function"]["parameters"]
+        for t in TOOLS
+        if t["function"]["name"] == "find_open_windows"
+    )["properties"]
+    assert params["serviceType"]["enum"] == ["hvac_repair", "hvac_tune_up", "plumbing"]
+    assert params["preferredWindow"]["enum"] == [
+        "08:00-12:00",
+        "12:00-16:00",
+        "13:00-17:00",
+        "16:00-19:00",
+    ]
+    assert "YYYY-MM-DD" in params["preferredDate"]["description"]

@@ -4,7 +4,7 @@ import json
 import sqlite3
 from collections.abc import Callable, Iterable
 from datetime import date
-from typing import Any
+from typing import Any, get_args
 
 from app.context import AppContext
 from app.conversation import guards
@@ -16,6 +16,7 @@ from app.types import (
     Booking,
     Choice,
     HandoffRecord,
+    ServiceType,
     WaitlistRequest,
     Window,
 )
@@ -25,6 +26,7 @@ EARLIER_CHOICE = Choice(
     label="Nothing earlier? Ask for an earlier window",
     text="Can you do anything earlier?",
 )
+WINDOW_CHOICES = 3
 MEMBER_TIERS = {"standard", "plus"}
 
 
@@ -74,7 +76,14 @@ TOOLS: list[dict[str, Any]] = [
     _tool(
         "find_open_windows",
         "List open visit windows for the caller." + _NEEDS_ID,
-        {"serviceType": _STR, "preferredDate": _STR, "preferredWindow": _STR},
+        {
+            "serviceType": {"type": "string", "enum": list(get_args(ServiceType))},
+            "preferredDate": {"type": "string", "description": "YYYY-MM-DD"},
+            "preferredWindow": {
+                "type": "string",
+                "enum": ["08:00-12:00", "12:00-16:00", "13:00-17:00", "16:00-19:00"],
+            },
+        },
         ["serviceType"],
     ),
     _tool(
@@ -362,9 +371,10 @@ def _find_open_windows(
         args.get("preferredDate"),
         args.get("preferredWindow"),
     )
-    state.windows = list(found.windows)
-    state.offer(slot_ids=[w.slot_id for w in found.windows])
-    return _dump(found)
+    shown = found.model_copy(update={"windows": found.windows[:WINDOW_CHOICES]})
+    state.windows = list(shown.windows)
+    state.offer(slot_ids=[w.slot_id for w in shown.windows])
+    return _dump(shown)
 
 
 def _lookup_my_appointments(
