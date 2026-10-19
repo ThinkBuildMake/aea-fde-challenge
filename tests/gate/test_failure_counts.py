@@ -111,4 +111,4 @@ def test_failure_handoffs_stay_out_of_handled_topic_handoffs(kb_settings: Settin
     )
     assert picked.json()["handoff"]["byError"] is True
     assert errors == 1
-    assert pct == 33.3 and top == "out_of_scope"
+    assert pct == 50.0 and top == "out_of_scope"

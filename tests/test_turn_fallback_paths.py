@@ -171,3 +171,95 @@ def test_tool_error_stores_only_the_type(
     print(f"\nstored error={entry['error']!r} model saw error={sent['error']!r}")
     assert entry["error"] == "OperationalError"
     assert sent["error"] == "OperationalError"
+
+
+def test_replay_rejected_call_back_records_a_handoff(started: Settings):
+    client = client_for(started, FakeModelProvider(replies=["Hi."], reject_replay=True))
+    cid = new_conversation(client)
+    say(client, cid, "hello")
+    reply = say(client, cid, "again")
+    picked = client.post(
+        f"/conversations/{cid}/callback-window", json={"window": "morning"}
+    )
+    handoffs = rows(
+        started,
+        "SELECT reason, by_error, preferred_window FROM handoffs WHERE conversation_id = ?",
+        cid,
+    )
+    outcome = rows(started, "SELECT outcome FROM conversations WHERE id = ?", cid)[0][0]
+    print(
+        f"\nreplay rejected: status={reply['status']} actions={reply['actions']} "
+        f"pick={picked.status_code} handoffs={[tuple(h) for h in handoffs]} "
+        f"outcome={outcome}"
+    )
+    assert "request_callback" in reply["actions"]
+    assert picked.status_code == 200
+    assert [tuple(h) for h in handoffs] == [("provider_failure", 1, "morning")]
+    assert outcome == "handoff"
+
+
+class FailsAfterATool(FakeModelProvider):
+    def complete(self, messages, *, tools=None, timeout_s):
+        if any(m["role"] == "tool" for m in messages):
+            raise RuntimeError("provider down")
+        return super().complete(messages, tools=tools, timeout_s=timeout_s)
+
+
+def test_failed_fallback_save_is_retried_so_the_call_back_works(started: Settings):
+    model = FailsAfterATool(
+        results=[
+            result(assistant(calls=[tool_call("s", "search_knowledge", query="fee")]))
+        ]
+    )
+    client = client_for(started, model)
+    cid = new_conversation(client)
+    conn = sqlite3.connect(started.APP_DB_PATH)
+    # The full row cannot be written; the plain fallback row can.
+    conn.execute(
+        "CREATE TRIGGER boom BEFORE INSERT ON turns WHEN NEW.tools_called <> '[]' "
+        "BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END"
+    )
+    conn.commit()
+    conn.close()
+    reply = say(client, cid, "What is the fee?")
+    turn = rows(
+        started, "SELECT fallback_used, error FROM turns WHERE conversation_id = ?", cid
+    )
+    picked = client.post(
+        f"/conversations/{cid}/callback-window", json={"window": "morning"}
+    )
+    print(
+        f"\nfallback={reply['text'] == guards.FALLBACK_TEXT} actions={reply['actions']} "
+        f"turns={[tuple(t) for t in turn]} pick={picked.status_code}"
+    )
+    assert reply["text"] == guards.FALLBACK_TEXT
+    assert [tuple(t) for t in turn] == [(1, "provider_error")]
+    assert picked.status_code == 200
+    assert picked.json()["handoff"]["reason"] == "provider_failure"
+
+
+def test_late_cost_counted_when_the_call_finishes_at_the_timeout(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    """The call finished just as the wait timed out: its cost still counts."""
+    from concurrent.futures import Future
+
+    from app.llm import ModelResult
+
+    original = Future.result
+
+    def finished_at_the_timeout(self, timeout=None):
+        value = original(self)
+        if timeout is not None and isinstance(value, ModelResult):
+            raise TimeoutError
+        return value
+
+    monkeypatch.setattr(Future, "result", finished_at_the_timeout)
+    model = FakeModelProvider(results=[result(assistant("late"), cost=0.01)])
+    client = client_for(started, model, SystemClock())
+    cid = new_conversation(client)
+    reply = say(client, cid, "hello")
+    cost = rows(started, "SELECT cost_usd FROM conversations WHERE id = ?", cid)[0][0]
+    print(f"\nfallback={reply['text'] == guards.FALLBACK_TEXT} cost_usd={cost}")
+    assert reply["text"] == guards.FALLBACK_TEXT
+    assert cost == pytest.approx(0.01)

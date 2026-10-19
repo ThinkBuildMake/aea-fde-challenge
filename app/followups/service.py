@@ -243,7 +243,9 @@ def _handoff_after_fallback(
         "WHERE c.id = ? ORDER BY t.seq DESC LIMIT 1",
         (conversation_id,),
     ).fetchone()
-    if last is None or last[5] is not None:
+    # A refused replay ended the conversation on a fallback that still offered a call back.
+    replay = last is not None and last[1] == "replay_rejected" and last[5] == "failed"
+    if last is None or (last[5] is not None and not replay):
         # Nothing to hand over, or the conversation already ended another way.
         raise NoHandoff(conversation_id)
     if last[0]:
@@ -266,7 +268,13 @@ def _handoff_after_fallback(
         ),
         ctx,
     )
-    end_with_handoff(conn, conversation_id)
+    if replay:
+        conn.execute(
+            "UPDATE conversations SET outcome = 'handoff' WHERE id = ? AND outcome = 'failed'",
+            (conversation_id,),
+        )
+    else:
+        end_with_handoff(conn, conversation_id)
 
 
 _WAITLIST_COLUMNS = (

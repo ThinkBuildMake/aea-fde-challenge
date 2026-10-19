@@ -535,7 +535,7 @@ def run_turn(
                 result = call.result(timeout=remaining - FALLBACK_RESERVE_S)
             except Exception as exc:  # noqa: BLE001 - any provider failure falls back
                 failure = _failure_code(exc, bool(history))
-                if call is not None and not call.done():
+                if call is not None and isinstance(exc, TimeoutError):
                     call.add_done_callback(
                         lambda late: _add_late_cost(ctx, conversation_id, late)
                     )
@@ -797,14 +797,17 @@ def run_turn(
         seq = last_seq + 1
         if status == "safety_stop" and end is not None:
             _record_stop_alone(db, end, final_text)
-        elif status == "handed_off":
-            # No handoff was written: the caller gets the fallback, the conversation stays
-            # open, and a fallback turn (best effort) lets a picked time record the call back.
-            final_text = turn["reply_text"] = guards.FALLBACK_TEXT
-            status, banner, actions = "active", "error", ["request_callback"]
+        elif status == "handed_off" or (
+            status == "active" and "request_callback" in actions
+        ):
+            if status == "handed_off":
+                # No handoff was written: the caller gets the fallback and the
+                # conversation stays open.
+                final_text = turn["reply_text"] = guards.FALLBACK_TEXT
+                status, banner, actions = "active", "error", ["request_callback"]
+                turn.update(fallback_used=1, error="handoff_save_failed")
+            # The reply offers a call back: a plain row (best effort) lets the pick find it.
             turn.update(
-                fallback_used=1,
-                error="handoff_save_failed",
                 stored=[user, {"role": "assistant", "content": final_text}],
                 tools_called=[],
             )
