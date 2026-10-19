@@ -1,5 +1,5 @@
 import sqlite3
-from typing import cast, get_args
+from typing import Literal, cast, get_args
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
@@ -7,7 +7,13 @@ from fastapi.responses import Response
 from app.context import AppContext, get_ctx, get_db
 from app.conversation.routes import require_conversation
 from app.errors import AppError
-from app.followups.service import NoHandoff, placeholder_handoff, set_callback_window
+from app.followups.service import (
+    HandoffNotFound,
+    NoHandoff,
+    mark_handoff_followed_up,
+    set_callback_window,
+)
+from app.followups.service import list_handoffs as list_handoffs_service
 from app.negotiation import respond
 from app.types import (
     CallbackWindow,
@@ -45,20 +51,31 @@ def submit_callback_window(
 
 
 @router.get("/handoffs")
-def list_handoffs(request: Request, status: str = "open") -> Response:
+def list_handoffs(
+    request: Request,
+    status: str = "open",
+    ctx: AppContext = Depends(get_ctx),
+) -> Response:
     if status not in ("open", "followed_up"):
         raise AppError(422, "invalid_status", "Status must be open or followed_up.")
-    return respond(request, HandoffList(handoffs=[]))
+    handoffs = list_handoffs_service(ctx, cast(Literal["open", "followed_up"], status))
+    return respond(request, HandoffList(handoffs=handoffs))
 
 
 @router.post("/handoffs/{handoff_id}/followed-up")
 def mark_followed_up(
-    handoff_id: int, request: Request, payload: FollowedUpRequest | None = None
+    handoff_id: int,
+    request: Request,
+    payload: FollowedUpRequest | None = None,
+    ctx: AppContext = Depends(get_ctx),
 ) -> Response:
     followed_up = True if payload is None else payload.followed_up
-    handoff = placeholder_handoff()
-    handoff.id = handoff_id
-    handoff.status = "followed_up" if followed_up else "open"
+    try:
+        handoff = mark_handoff_followed_up(ctx, handoff_id, followed_up)
+    except HandoffNotFound:
+        raise AppError(
+            404, "handoff_not_found", "No handoff matches this id."
+        ) from None
     return respond(request, HandoffResponse(handoff=handoff))
 
 

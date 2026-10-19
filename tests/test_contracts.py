@@ -84,7 +84,7 @@ CASES: list[Case] = [
 
 def call(client: TestClient, case: Case, ids: dict[str, str], extra: dict[str, str]):
     method, path, body, headers, _, _ = case
-    if path.endswith("/callback-window"):
+    if path.endswith(("/callback-window", "/followed-up")):
         conn = sqlite3.connect(client.app.state.ctx.settings.APP_DB_PATH)
         conn.execute(
             "INSERT INTO handoffs (conversation_id, kind, reason, intent, told_caller) "
