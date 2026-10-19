@@ -35,6 +35,8 @@ def now_iso() -> str:
 
 
 def app_db_status(ctx: AppContext) -> Literal["ok", "error"]:
+    if not ctx.settings.APP_DB_PATH.is_file():
+        return "error"
     try:
         db = ctx.open_app_db()
         try:

@@ -72,3 +72,21 @@ def test_failing_part_is_named_and_still_200(
     expected = {"schedulingDb": "ok", "appDb": "ok", "index": "loaded"}
     expected[failing] = "error"
     assert response.json() == {"status": "degraded", "components": expected}
+
+
+def test_missing_app_db_is_error_and_not_created(
+    client: TestClient, started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    stub_parts(monkeypatch, loaded=True, scheduling="ok")
+    db = started.APP_DB_PATH
+    for path in (db, db.with_name(db.name + "-wal"), db.with_name(db.name + "-shm")):
+        path.unlink(missing_ok=True)
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "degraded",
+        "components": {"schedulingDb": "ok", "appDb": "error", "index": "loaded"},
+    }
+    assert not db.exists()
