@@ -1,4 +1,10 @@
-"""The exportEvalCandidates command: python -m app.monitoring.export <base_url> [--out DIR]"""
+"""The exportEvalCandidates command, the one documented way to pull drafts into the repo:
+
+    ADMIN_TOKEN=... uv run python -m app.monitoring.export <base_url> [--out DIR]
+
+It reads GET /admin/eval-candidates and writes eval/candidates/CAND-xxxxxxxx.json per
+draft. On any failure it writes nothing and says why on stderr.
+"""
 
 import argparse
 import json
@@ -15,6 +21,27 @@ SCENARIO_ID = re.compile(r"^CAND-[0-9a-f]{8}$")
 def _fail(code: str, message: str) -> int:
     sys.stderr.write(json.dumps({"error": code, "message": message}) + "\n")
     return 1
+
+
+def _drafts(response: httpx2.Response) -> list[tuple[str, dict]] | None:
+    """Every (scenarioId, scenario) pair, or None when the answer is not a list of drafts."""
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    items = body.get("candidates") if isinstance(body, dict) else None
+    if not isinstance(items, list):
+        return None
+    drafts = []
+    for item in items:
+        if not (
+            isinstance(item, dict)
+            and isinstance(item.get("scenarioId"), str)
+            and isinstance(item.get("scenario"), dict)
+        ):
+            return None
+        drafts.append((item["scenarioId"], item["scenario"]))
+    return drafts
 
 
 def main(argv: list[str] | None = None, client: httpx2.Client | None = None) -> int:
@@ -40,15 +67,18 @@ def main(argv: list[str] | None = None, client: httpx2.Client | None = None) -> 
     if response.status_code != 200:
         error = "unauthorized" if response.status_code == 401 else "export_failed"
         return _fail(error, f"The app answered {response.status_code}.")
-    candidates = response.json()["candidates"]
+    drafts = _drafts(response)
+    if drafts is None:
+        return _fail(
+            "export_failed", "The app answered 200 but not with a list of drafts."
+        )
     args.out.mkdir(parents=True, exist_ok=True)
     written, skipped = 0, []
-    for item in candidates:
-        scenario_id = item["scenarioId"]
+    for scenario_id, scenario in drafts:
         if not SCENARIO_ID.match(scenario_id):
             skipped.append(scenario_id)
             continue
-        text = json.dumps(item["scenario"], indent=2, sort_keys=True) + "\n"
+        text = json.dumps(scenario, indent=2, sort_keys=True) + "\n"
         (args.out / f"{scenario_id}.json").write_text(text)
         written += 1
     summary: dict[str, object] = {"written": written, "out": str(args.out)}

@@ -243,11 +243,18 @@ def create_eval_candidate(
                 "conversation_active",
                 "A conversation still in progress cannot become a test.",
             )
-        cursor = conn.execute(
-            "INSERT INTO eval_candidates (conversation_id, scenario_id, scenario)"
-            " VALUES (?, ?, ?) ON CONFLICT (conversation_id) DO NOTHING",
-            (row["id"], scenario_id, json.dumps(_scenario(conn, row, scenario_id))),
-        )
+        try:
+            cursor = conn.execute(
+                "INSERT INTO eval_candidates (conversation_id, scenario_id, scenario)"
+                " VALUES (?, ?, ?) ON CONFLICT (conversation_id) DO NOTHING",
+                (row["id"], scenario_id, json.dumps(_scenario(conn, row, scenario_id))),
+            )
+        except sqlite3.IntegrityError:
+            raise AppError(
+                409,
+                "candidate_name_taken",
+                "Another conversation already has a draft with this name.",
+            ) from None
         created = cursor.rowcount == 1
         conn.commit()
     return CandidateCreated(
