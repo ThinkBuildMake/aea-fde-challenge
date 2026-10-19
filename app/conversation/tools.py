@@ -167,6 +167,7 @@ class ToolState:
         self.booking: Booking | None = None
         self.has_write = False
         self.write_failed = False
+        self.unavailable: str | None = None
         self.waitlisted = False
         self.cancelled = False
 
@@ -558,6 +559,17 @@ def run_tool(
     except Exception as exc:  # noqa: BLE001 - the model gets the failure back as the tool result
         error = f"{type(exc).__name__}: {exc}"
         result = {"ok": False, "error": error}
+        if isinstance(exc, scheduling.SchedulingUnavailable):
+            state.unavailable = "scheduling_unavailable"
+        elif isinstance(
+            exc, (knowledge.EmbeddingUnavailable, knowledge.IndexUnavailable)
+        ):
+            state.unavailable = state.unavailable or "embedding_unavailable"
+            result = {
+                "ok": False,
+                "error": "embedding_unavailable",
+                "instruction": guards.SEARCH_UNAVAILABLE_INSTRUCTION,
+            }
         if name in guards.WRITE_TOOLS:
             result["instruction"] = guards.FAILED_WRITE_INSTRUCTION
             state.write_failed = True
