@@ -4,7 +4,7 @@ import pytest
 
 from app.safety.service import redact_card_numbers
 
-DIGIT_RUN = re.compile(r"\d(?:[\s.\-]*\d){12,}")
+DIGIT_RUN = re.compile(r"\d(?:[\s.\-\u2010-\u2015\u2212/,_]*\d){12,}")
 
 
 def test_spaced_card_is_removed() -> None:
@@ -27,6 +27,12 @@ def test_spaced_card_is_removed() -> None:
         "4111 -  1111\t\t1111  1111",
         "3782 822463 10005",
         "6011000990139424123",
+        "4111\u20131111\u20131111\u20131111",
+        "4111 \u2014 1111 \u2014 1111 \u2014 1111",
+        "4111/1111/1111/1111",
+        "4111,1111,1111,1111",
+        "4111_1111_1111_1111",
+        "4111\u22121111\u22121111\u22121111",
     ],
 )
 def test_other_formats_removed_and_stable(text: str) -> None:
@@ -41,4 +47,20 @@ def test_other_formats_removed_and_stable(text: str) -> None:
 def test_phone_number_stays() -> None:
     r = redact_card_numbers("Call me at 512-555-0101 about INV-204411")
     assert r.text == "Call me at 512-555-0101 about INV-204411"
+    assert r.removed is False
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Call 512-555-0102",
+        "The repair was $1,200 and the visit $89.",
+        "Book me for 2026/10/21 please",
+        "INV-204411 and account MHC-10002",
+        "Prices: $89, $245, $144",
+    ],
+)
+def test_ordinary_numbers_stay(text: str) -> None:
+    r = redact_card_numbers(text)
+    assert r.text == text
     assert r.removed is False

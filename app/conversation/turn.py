@@ -683,6 +683,8 @@ def run_turn(
     end = None
     booking = state.booking
     choices: list[Any] = []
+    amended = False  # the app added a card refusal or a payment link to the reply
+    unamended = ""
     if verdict is not None and verdict.verdict != "safe":
         emergency = verdict.verdict == "emergency"
         final_text = (
@@ -701,7 +703,6 @@ def run_turn(
             state.intent = "safety"
             end = _stop_for(ctx, db, conversation_id, state.customer_id, verdict)
     else:
-        amended = False
         final_text = last_said
         if not failure and not final_text.strip() and state.handoff is None:
             failure = "empty_reply"
@@ -801,6 +802,7 @@ def run_turn(
                 ).fetchone()
             ):
                 actions = [*actions, "ask_solved"]
+            unamended = final_text
             if state.handoff is None and not withheld:
                 if (
                     state.card_removed
@@ -818,10 +820,9 @@ def run_turn(
         if amended:
             turn["stored"] = [*stored, {"role": "assistant", "content": final_text}]
     # A yes can confirm a cancel only after the model's own reply put the terms.
+    model_said = final_text == last_said or (amended and unamended == last_said)
     state.keep_cancel_asks(
-        final_text
-        if status == "active" and final_text == last_said and not turn["error"]
-        else None
+        last_said if status == "active" and model_said and not turn["error"] else None
     )
     if status == "active" and earlier + 1 >= ctx.settings.TURN_CAP:
         final_text = f"{final_text} {guards.TURN_CAP_TEXT}".strip()

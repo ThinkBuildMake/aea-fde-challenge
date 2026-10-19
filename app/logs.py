@@ -2,7 +2,7 @@ import json
 import re
 import sys
 
-_DIGIT_RUN = re.compile(r"\d(?:[\s.\-]*\d){12,}")
+_DIGIT_RUN = re.compile(r"\d(?:[\s.\-\u2010-\u2015\u2212/,_]*\d){12,}")
 
 
 def mask_digit_runs(text: str) -> str:

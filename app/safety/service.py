@@ -13,7 +13,8 @@ from app.llm import reported_cost
 from app.logs import log_event
 from app.types import RedactResult, Verdict
 
-CARD_RUN = re.compile(r"(?<!\d)\d(?:[\s.\-]*\d){12,}(?!\d)")
+# Digits with any whitespace, dot, dash, slash, comma or underscore between them.
+CARD_RUN = re.compile(r"(?<!\d)\d(?:[\s.\-\u2010-\u2015\u2212/,_]*\d){12,}(?!\d)")
 CARD_PLACEHOLDER = "[card number removed]"
 SAFETY_TIMEOUT_S = 8.0
 

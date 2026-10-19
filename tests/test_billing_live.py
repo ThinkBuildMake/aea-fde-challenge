@@ -29,7 +29,7 @@ pytestmark = pytest.mark.skipif(
 OMAR = "What do I owe? Omar Patel, account MHC-10002."
 LINK = "https://pay.example.com/invoice/INV-204411?token="
 LINDA = ["MHC-10001", "4412 Oak Hollow", "linda.foster@", "Round Rock"]
-DIGIT_RUN = re.compile(r"\d(?:[\s.\-]*\d){12,}")
+DIGIT_RUN = re.compile(r"\d(?:[\s.\-\u2010-\u2015\u2212/,_]*\d){12,}")
 
 
 @pytest.fixture(autouse=True)

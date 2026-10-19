@@ -197,6 +197,26 @@ def refuses_card(text: str) -> bool:
     return _CARD_REFUSAL.search(text.replace("\u2019", "'")) is not None
 
 
+# What a caller writes beside a card number when they really want a person or dispute.
+_CARD_TURN_HANDOFF = {
+    "caller_asked_for_person": re.compile(
+        r"\b(?:person|human|someone|somebody|agent|representative|supervisor|manager)\b",
+        re.IGNORECASE,
+    ),
+    "billing_dispute": re.compile(
+        r"\b(?:charged twice|double[- ]charged|dispute\w*|overcharg\w*|wrong\w* charged"
+        r"|refund\w*)\b",
+        re.IGNORECASE,
+    ),
+}
+
+
+def card_turn_handoff(reason: str, caller_text: str) -> bool:
+    """True when a card turn's message itself asks for a person or disputes a charge."""
+    rule = _CARD_TURN_HANDOFF.get(reason)
+    return rule is not None and rule.search(caller_text) is not None
+
+
 def payment_link_text(link: PaymentLink) -> str:
     return (
         f"You can pay securely with this link, valid for {link.valid_for_hours} "

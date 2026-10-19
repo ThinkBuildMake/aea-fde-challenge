@@ -372,6 +372,15 @@ def _identify_customer(
     ctx: AppContext, state: ToolState, args: dict[str, Any]
 ) -> dict[str, Any]:
     if state.customer_id is not None:
+        again = scheduling.identify_customer(
+            ctx,
+            str(args.get("name") or ""),
+            args.get("phone"),
+            args.get("accountNumber"),
+            args.get("serviceAddress"),
+        )
+        if again is not None and again.customer_id == state.customer_id:
+            return {"ok": True, "customer": _dump(again)}
         return {
             "ok": False,
             "error": "already_identified",
@@ -681,7 +690,13 @@ def _escalate(
     ctx: AppContext, state: ToolState, args: dict[str, Any]
 ) -> dict[str, Any]:
     """Note the handoff; the turn writes it with the outcome when it saves."""
-    if state.card_removed and state.handoff is None:
+    if (
+        state.card_removed
+        and state.handoff is None
+        and not guards.card_turn_handoff(
+            str(args.get("reason") or ""), state.caller_text
+        )
+    ):
         return {
             "ok": False,
             "error": "card_number_turn",

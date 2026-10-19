@@ -23,9 +23,10 @@ CARDS = [
     "4111\n1111\n1111\n1111",
     "3782 822463 10005",
     "6011000990139424123",
+    "4111\u20131111\u20131111\u20131111",
 ]
 # Any 13 or more digits, whatever whitespace, dots or hyphens sit between them.
-DIGIT_RUN = re.compile(r"\d(?:[\s.\-]*\d){12,}")
+DIGIT_RUN = re.compile(r"\d(?:[\s.\-\u2010-\u2015\u2212/,_]*\d){12,}")
 BARE_RUN = re.compile(r"\d{13,19}")
 LINDA = ["MHC-10001", "4412 Oak Hollow", "linda.foster@", "Round Rock"]
 
@@ -113,7 +114,7 @@ def test_five_cards_and_a_payment_leave_no_digit_run(
         f"{len(out.splitlines())} screen inputs={len(screened)} "
         f"digit runs found={found} handoffs={handoffs}"
     )
-    assert len(turns) == 7
+    assert len(turns) == 8
     assert found == []
     assert handoffs == 0
     for number in ["4111111111111111", "4111 1111 1111 1111"]:

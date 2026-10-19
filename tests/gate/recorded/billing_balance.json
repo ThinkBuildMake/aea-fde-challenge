@@ -1,5 +1,5 @@
 {
-  "question": "What do I owe? Omar Patel, account MHC-10002. Then five card numbers, a pay request and a link for another customer's invoice.",
+  "question": "What do I owe? Omar Patel, account MHC-10002. Then six card numbers, a pay request and a link for another customer's invoice.",
   "note": "Hand-written in OpenRouter's raw assistant-message shape for the S36 gate case.",
   "messages": [
     {
@@ -74,6 +74,21 @@
       "prompt_tokens": 1620,
       "completion_tokens": 58,
       "cost": 0.0001
+    },
+    {
+      "message": {
+        "role": "assistant",
+        "content": "Thanks, noted.",
+        "reasoning_details": [
+          {
+            "type": "reasoning.encrypted",
+            "data": "recorded"
+          }
+        ]
+      },
+      "prompt_tokens": 1620,
+      "completion_tokens": 58,
+      "cost": 0.00034
     },
     {
       "message": {
