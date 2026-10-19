@@ -1,0 +1,39 @@
+{
+  "question": "Can I just talk to a person?",
+  "note": "Hand-written in OpenRouter's raw assistant-message shape for the S32 gate case.",
+  "messages": [
+    {
+      "message": {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "id": "call_status_1",
+            "type": "function",
+            "function": {
+              "name": "report_status",
+              "arguments": "{\"intent\": \"other\", \"resolved\": false}"
+            }
+          },
+          {
+            "id": "call_escalate_1",
+            "type": "function",
+            "function": {
+              "name": "escalate",
+              "arguments": "{\"kind\": \"handoff\", \"reason\": \"caller_asked_for_person\", \"intent\": \"Wants to talk to a person\", \"toldCaller\": \"A person will call you back.\"}"
+            }
+          }
+        ],
+        "reasoning_details": [
+          {
+            "type": "reasoning.encrypted",
+            "data": "recorded"
+          }
+        ]
+      },
+      "prompt_tokens": 1620,
+      "completion_tokens": 58,
+      "cost": 0.00034
+    }
+  ]
+}

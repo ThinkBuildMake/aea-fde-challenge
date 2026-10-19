@@ -18,7 +18,9 @@ from app.followups.service import (
 )
 from app.llm import FakeModelProvider
 from app.main import create_app
+from app.scheduling import store as scheduling_store
 from app.scheduling.service import book_visit, get_appointment
+from app.scheduling.store import SchedulingUnavailable
 from app.scheduling.store import connect as scheduling_connect
 from app.settings import Settings
 from app.types import HandoffRecord, WaitlistRequest
@@ -152,6 +154,10 @@ class Failing:
             raise sqlite3.OperationalError("disk I/O error")
         return self.real.execute(sql, *args)
 
+    @property
+    def in_transaction(self) -> bool:
+        return self.real.in_transaction
+
     def close(self) -> None:
         self.real.close()
 
@@ -201,6 +207,57 @@ def test_fallback_creates_a_by_error_handoff(
     )
     assert view.summary_source == "system" and view.caller.name == "Omar Patel"
     assert conn.execute("SELECT outcome FROM conversations").fetchone()[0] == "handoff"
+
+
+@pytest.mark.parametrize("error", ["promise_withheld", "unsupported_figure"])
+def test_callback_after_a_withheld_reply_creates_a_not_sure_handoff(
+    conn: sqlite3.Connection, ctx: AppContext, error: str
+):
+    add_turn(conn, 1, 0, error)
+    view = set_callback_window(ctx, "c1", "evening")
+    assert (view.reason, view.by_error, view.preferred_window) == (
+        "not_sure",
+        False,
+        "evening",
+    )
+    assert view.summary_source == "system"
+    assert conn.execute("SELECT outcome FROM conversations").fetchone()[0] == "handoff"
+
+
+def test_ended_conversation_gets_no_late_handoff(
+    conn: sqlite3.Connection, ctx: AppContext
+):
+    add_turn(conn, 1, 0, "promise_withheld")
+    conn.execute(
+        "UPDATE conversations SET outcome = 'contained', ended_at = '2026-10-16T12:00:00.000Z'"
+    )
+    with pytest.raises(NoHandoff):
+        set_callback_window(ctx, "c1", "evening")
+    assert count(conn) == 0
+
+
+def test_callback_after_knowledge_unavailable_is_by_error(
+    conn: sqlite3.Connection, ctx: AppContext
+):
+    add_turn(conn, 1, 0, "embedding_unavailable")
+    view = set_callback_window(ctx, "c1", "morning")
+    assert (view.reason, view.by_error) == ("knowledge_unavailable", True)
+
+
+def test_create_handoff_survives_a_scheduling_outage(
+    conn: sqlite3.Connection, ctx: AppContext, monkeypatch: pytest.MonkeyPatch
+):
+    def down(_ctx: AppContext):
+        raise SchedulingUnavailable("down")
+
+    monkeypatch.setattr(scheduling_store, "connect", down)
+    view = make(conn, ctx, record())
+    assert (view.caller.customer_id, view.caller.name, view.caller.phone) == (
+        "MHC-10002",
+        None,
+        None,
+    )
+    assert count(conn) == 1
 
 
 def test_failed_fallback_write_leaves_nothing(

@@ -12,6 +12,7 @@ import openai
 from app import usage
 from app.context import AppContext
 from app.conversation import guards, tools, tracing
+from app.conversation import service as conversation_service
 from app.errors import AppError
 from app.followups import service as followups
 from app.logs import log_event
@@ -82,7 +83,13 @@ INSTRUCTIONS = (
     "Name dates as weekday, month and day (Wednesday October 21) and windows in hours "
     "(8 AM to 12 PM). After book_visit succeeds, confirm once, in one or two sentences: "
     "the date, window and technician it returned, and the diagnostic fee from its result, "
-    "credited toward the repair, or waived when diagnosticFeeWaived is true."
+    "credited toward the repair, or waived when diagnosticFeeWaived is true.\n"
+    "Handing over: call escalate at once, before identifying the caller, when they "
+    "dispute a charge or say they were charged twice (kind supervisor_callback, reason "
+    "billing_dispute), or when they ask for a person at any point (reason "
+    "caller_asked_for_person). Do not explain, argue or look up a disputed charge. Pass "
+    "callerName and callerPhone only if the caller already gave them. The app writes the "
+    "reply about the call back."
 )
 
 
@@ -225,6 +232,28 @@ def _record_stop_alone(
         if db.in_transaction:
             db.execute("ROLLBACK")
         log_event("safety_handoff_failed", level="error", error_type=type(exc).__name__)
+
+
+def _handoff_end(
+    ctx: AppContext,
+    db: sqlite3.Connection,
+    conversation_id: str,
+    record: HandoffRecord,
+) -> Callable[[str], None]:
+    """Write the handoff and end the conversation inside the turn's transaction."""
+
+    def end(told_caller: str) -> None:
+        followups.create_handoff(
+            db, record.model_copy(update={"told_caller": told_caller}), ctx
+        )
+        conversation_service.end_with_handoff(db, conversation_id)
+
+    return end
+
+
+def _fixed_handoff_text(state: tools.ToolState) -> str | None:
+    record = state.handoff
+    return None if record is None else guards.handoff_text(record.reason, record.kind)
 
 
 def _failure_code(exc: Exception, has_history: bool) -> str:
@@ -534,6 +563,8 @@ def run_turn(
             if state.unavailable == "scheduling_unavailable":
                 failure = state.unavailable
                 break
+            if _fixed_handoff_text(state) is not None:
+                break
         else:
             if not failure:
                 failure = "tool_rounds_exhausted"
@@ -584,7 +615,7 @@ def run_turn(
             end = _stop_for(ctx, db, conversation_id, state.customer_id, verdict)
     else:
         final_text = last_said
-        if not failure and not final_text.strip():
+        if not failure and not final_text.strip() and state.handoff is None:
             failure = "empty_reply"
         if failure:
             turn["error"] = failure
@@ -609,7 +640,10 @@ def run_turn(
             if state.write_failed and booking is None:
                 actions = ["request_callback"]
             withheld = False
-            if state.unavailable == "embedding_unavailable":
+            fixed = _fixed_handoff_text(state)
+            if fixed is not None:
+                final_text = fixed
+            elif state.unavailable == "embedding_unavailable":
                 withheld, turn["error"] = True, "embedding_unavailable"
             elif state.booking and guards.confirmation_mismatch(
                 final_text, state.booking
@@ -620,7 +654,19 @@ def run_turn(
                 withheld, turn["error"] = True, "unsupported_figure"
             elif guards.makes_promise(final_text):
                 withheld, turn["error"] = True, "promise_withheld"
-            if withheld:
+            if state.handoff is not None:
+                if withheld or not final_text.strip():
+                    final_text = guards.HANDOFF_TEXT
+                status, banner = "handed_off", "handoff"
+                actions, choices = ["choose_callback_window"], []
+                state.resolved = False
+                if final_text != last_said:
+                    turn["stored"] = [
+                        *stored,
+                        {"role": "assistant", "content": final_text},
+                    ]
+                end = _handoff_end(ctx, db, conversation_id, state.handoff)
+            elif withheld:
                 final_text = " ".join(
                     filter(
                         None,
@@ -656,6 +702,10 @@ def run_turn(
         seq = earlier + 1
         if status == "safety_stop" and end is not None:
             _record_stop_alone(db, end, final_text)
+        elif status == "handed_off":
+            # Nothing was written: the caller gets the fallback, the conversation stays open.
+            final_text = turn["reply_text"] = guards.FALLBACK_TEXT
+            status, banner, actions = "active", "error", ["request_callback"]
     _send_trace(
         ctx,
         db,

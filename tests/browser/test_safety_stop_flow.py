@@ -54,7 +54,7 @@ def test_gas_chip_stops_the_chat(
     row = page.locator(".handoff-row")
     expect(row).to_have_count(1)
     expect(row.locator("[data-mark=safety_stop]")).to_have_text("Safety stop")
-    expect(row.locator(".who")).to_have_text("No account match")
+    expect(row.locator(".who")).to_have_text("Caller not identified")
     expect(row.locator(".summary")).to_contain_text("Told: Please leave the house now")
     print("handoff row:", row.inner_text().splitlines())
     button = row.locator("button")

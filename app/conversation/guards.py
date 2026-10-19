@@ -29,6 +29,26 @@ NOT_SURE_TEXT = (
     "I'm not sure about that, and I did not want to guess. "
     "Would you like me to pass you to a person?"
 )
+SUPERVISOR_DISPUTE_TEXT = (
+    "I am sorry about that. I cannot settle a billing dispute myself, so I am passing "
+    "this to a supervisor. They will call you within 1 business day. I have written down "
+    "what you told me so you will not need to repeat it."
+)
+SUPERVISOR_TEXT = (
+    "I am sorry about that. I cannot settle this myself, so I am passing this to a "
+    "supervisor. They will call you within 1 business day. I have written down what you "
+    "told me so you will not need to repeat it."
+)
+PERSON_TEXT = (
+    "Of course. I am passing you to a person, as you asked. They will have this "
+    "conversation, so you will not need to repeat anything, and they will call you back. "
+    "Please pick the best time below."
+)
+HANDOFF_TEXT = (
+    "I cannot sort this out here, so I am passing you to a person. They will have this "
+    "conversation, so you will not need to repeat anything, and they will call you back. "
+    "Please pick the best time below."
+)
 CANCELLED_TEXT = "Your visit has been cancelled."
 WAITLIST_TEXT = (
     "On the waitlist for an earlier window. The team will call you if one opens."
@@ -48,6 +68,17 @@ _TARGET_KEYS = {
     "move_visit": (("appointmentId", "appointment"), ("newSlotId", "slot")),
     "cancel_visit": (("appointmentId", "appointment"),),
 }
+
+
+def handoff_text(reason: str, kind: str) -> str | None:
+    """The fixed reply for a handoff, or None when the model's checked reply is used."""
+    if reason == "billing_dispute":
+        return SUPERVISOR_DISPUTE_TEXT
+    if kind == "supervisor_callback":
+        return SUPERVISOR_TEXT
+    if reason == "caller_asked_for_person":
+        return PERSON_TEXT
+    return None
 
 
 def emergency_text(matched: bool) -> str:

@@ -343,7 +343,7 @@ class SolvedRequest(Model):
 
 
 class CallbackWindowRequest(Model):
-    window: str
+    window: str | None = None
 
 
 class FollowedUpRequest(Model):

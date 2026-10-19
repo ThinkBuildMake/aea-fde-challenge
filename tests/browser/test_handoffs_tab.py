@@ -179,3 +179,33 @@ def test_safety_stop_text_is_separated(page: Page, live_url: str, overview_stub)
     expect(page.locator(".handoff-row .summary")).to_have_text(
         "Safety stop. Told: A supervisor calls within 1 business day about the double charge."
     )
+
+
+def test_plain_words_intent_leads_the_summary(page: Page, live_url: str, overview_stub):
+    stub_list(page, handoff(intent="Charged twice for the same visit"))
+    page.goto(live_url + "/business?tab=handoffs")
+    expect(page.locator(".handoff-row .summary")).to_have_text(
+        "Charged twice for the same visit. Billing dispute. Told: A supervisor calls "
+        "within 1 business day about the double charge."
+    )
+
+
+def test_unidentified_caller_is_not_called_no_account_match(
+    page: Page, live_url: str, overview_stub
+):
+    nobody = {
+        "customer_id": None,
+        "name": None,
+        "phone": None,
+        "city": None,
+        "zone": None,
+        "stated_by_caller": False,
+    }
+    stub_list(
+        page,
+        handoff(id=7, caller=nobody),
+        handoff(id=8, caller=nobody, reason="no_account_match", kind="handoff"),
+    )
+    page.goto(live_url + "/business?tab=handoffs")
+    who = page.locator(".handoff-row .who")
+    expect(who).to_have_text(["Caller not identified", "No account match"])
