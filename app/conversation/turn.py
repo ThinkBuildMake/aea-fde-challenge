@@ -180,6 +180,7 @@ def _save_turn(
 
 
 def _stop_for(
+    ctx: AppContext,
     db: sqlite3.Connection,
     conversation_id: str,
     customer_id: str | None,
@@ -200,6 +201,7 @@ def _stop_for(
                 told_caller=told_caller,
                 summary_source="system",
             ),
+            ctx,
         )
         db.execute(
             "UPDATE conversations SET outcome = 'safety_stop', outcome_reason = 'emergency', "
@@ -209,6 +211,20 @@ def _stop_for(
         )
 
     return end
+
+
+def _record_stop_alone(
+    db: sqlite3.Connection, end: Callable[[str], None], told_caller: str
+) -> None:
+    """The turn row could not be saved: still record the safety handoff and outcome."""
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        end(told_caller)
+        db.execute("COMMIT")
+    except sqlite3.Error as exc:
+        if db.in_transaction:
+            db.execute("ROLLBACK")
+        log_event("safety_handoff_failed", level="error", error_type=type(exc).__name__)
 
 
 def _failure_code(exc: Exception, has_history: bool) -> str:
@@ -565,7 +581,7 @@ def run_turn(
             if "safety" not in state.intents_seen:
                 state.intents_seen.append("safety")
             state.intent = "safety"
-            end = _stop_for(db, conversation_id, state.customer_id, verdict)
+            end = _stop_for(ctx, db, conversation_id, state.customer_id, verdict)
     else:
         final_text = last_said
         if not failure and not final_text.strip():
@@ -638,6 +654,8 @@ def run_turn(
     except sqlite3.Error as exc:
         log_event("turn_save_failed", table="turns", error_type=type(exc).__name__)
         seq = earlier + 1
+        if status == "safety_stop" and end is not None:
+            _record_stop_alone(db, end, final_text)
     _send_trace(
         ctx,
         db,

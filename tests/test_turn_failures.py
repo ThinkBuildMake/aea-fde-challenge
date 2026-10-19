@@ -12,7 +12,7 @@ from app.context import SystemClock
 from app.conversation import guards
 from app.llm import FakeModelProvider, status_error
 from app.settings import Settings
-from app.types import CancelResult
+from app.types import CancelResult, Verdict
 from tests.test_turn import (
     assistant,
     client_for,
@@ -302,3 +302,83 @@ def test_ob3_a_fallback_is_countable_apart_from_handoffs(started: Settings):
     say(client, new_conversation(client), "fine")
     ok = rows(started, "SELECT fallback_used, error FROM turns ORDER BY id")[-1]
     assert tuple(ok) == (0, None)
+
+
+@pytest.fixture
+def gas_screen(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The danger screen says gas; Follow-ups is the real module."""
+    monkeypatch.setattr(
+        "app.safety.service.screen_safety",
+        lambda ctx, text, recent, pending: Verdict(verdict="emergency", reason="gas"),
+    )
+
+
+def _trigger(settings: Settings, table: str) -> None:
+    conn = sqlite3.connect(settings.APP_DB_PATH)
+    conn.execute(
+        f"CREATE TRIGGER boom_{table} BEFORE INSERT ON {table} "
+        "BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END"
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_a_failed_save_still_records_the_safety_handoff(
+    started: Settings,
+    gas_screen: None,
+):
+    client = client_for(started, FakeModelProvider(replies=["Hi."]))
+    cid = new_conversation(client)
+    _trigger(started, "turns")
+    reply = say(client, cid, "I smell gas")
+    handoffs = rows(started, "SELECT kind, reason, told_caller FROM handoffs")
+    outcome = rows(started, "SELECT outcome FROM conversations")[0][0]
+    print(f"reply status={reply['status']} handoffs={[tuple(h) for h in handoffs]}")
+    print(f"turns={len(rows(started, 'SELECT * FROM turns'))} outcome={outcome}")
+    assert reply["text"] == guards.emergency_text(matched=False)
+    assert reply["status"] == "safety_stop"
+    assert rows(started, "SELECT * FROM turns") == []
+    assert [tuple(h) for h in handoffs] == [
+        ("safety_stop", "gas", guards.emergency_text(matched=False))
+    ]
+    assert outcome == "safety_stop"
+
+
+def test_a_lost_safety_handoff_is_logged(
+    started: Settings,
+    gas_screen: None,
+    capsys: pytest.CaptureFixture[str],
+):
+    client = client_for(started, FakeModelProvider(replies=["Hi."]))
+    cid = new_conversation(client)
+    _trigger(started, "turns")
+    _trigger(started, "handoffs")
+    capsys.readouterr()
+    reply = say(client, cid, "I smell gas")
+    lines = [
+        json.loads(x) for x in capsys.readouterr().out.splitlines() if x.startswith("{")
+    ]
+    lost = [x for x in lines if x["event"] == "safety_handoff_failed"]
+    print(f"reply status={reply['status']} log={lost}")
+    assert reply["text"] == guards.emergency_text(matched=False)
+    assert len(lost) == 1 and lost[0]["level"] == "error"
+    assert rows(started, "SELECT * FROM handoffs") == []
+
+
+def test_a_matched_callers_safety_row_names_them(
+    started: Settings,
+    gas_screen: None,
+):
+    client = client_for(started, FakeModelProvider(replies=["Hi."]))
+    cid = new_conversation(client)
+    match(started, cid, "MHC-10001")
+    say(client, cid, "I smell gas")
+    conn = sqlite3.connect(started.SCHEDULING_DB_PATH)
+    expected = conn.execute(
+        "SELECT name, phone FROM customers WHERE customer_id = 'MHC-10001'"
+    ).fetchone()
+    conn.close()
+    row = rows(started, "SELECT caller_name, caller_phone, kind FROM handoffs")[0]
+    print(f"handoff caller={row['caller_name']} kind={row['kind']}")
+    assert (row["caller_name"], row["caller_phone"]) == tuple(expected)
+    assert row["kind"] == "safety_stop"
