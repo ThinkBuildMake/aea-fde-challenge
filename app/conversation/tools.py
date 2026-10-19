@@ -205,6 +205,7 @@ class ToolState:
         self.write_failed = False
         self.unavailable: str | None = None
         self.waitlisted = False
+        self.waitlist_failed = False
         self.cancelled = False
         self.handoff: HandoffRecord | None = None
         self.cancel_asked: list[int] = []
@@ -410,12 +411,14 @@ def _customer(state: ToolState) -> str:
 def _find_open_windows(
     ctx: AppContext, state: ToolState, args: dict[str, Any]
 ) -> dict[str, Any]:
+    # The earlier button asks for the earliest windows, whatever day the model passes.
+    earlier = state.caller_text.strip() == EARLIER_CHOICE.text
     found = scheduling.find_open_windows(
         ctx,
         _customer(state),
         str(args["serviceType"]),
-        args.get("preferredDate"),
-        args.get("preferredWindow"),
+        None if earlier else args.get("preferredDate"),
+        None if earlier else args.get("preferredWindow"),
     )
     shown = found.model_copy(update={"windows": found.windows[:WINDOW_CHOICES]})
     state.windows = list(shown.windows)
@@ -571,6 +574,24 @@ def _join_waitlist(
         else int(args["appointmentId"])
     )
     held = scheduling.get_appointment(ctx, customer_id, appointment_id)
+    # One earlier-window request per caller and visit type, whichever visit they name.
+    existing = next(
+        (
+            e
+            for e in followups.list_waitlist(ctx)
+            if e.caller.customer_id == customer_id
+            and e.service_type == held.service_type
+        ),
+        None,
+    )
+    if existing is not None:
+        state.waitlisted = True
+        return {
+            "ok": True,
+            "alreadyOnWaitlist": True,
+            "held": _dump(existing.held),
+            "instruction": guards.ALREADY_ON_WAITLIST_INSTRUCTION,
+        }
     entry = WaitlistRequest(
         conversation_id=state.conversation_id,
         customer_id=customer_id,
@@ -704,7 +725,7 @@ def run_tool(
             state.write_failed = True
         elif name == "join_waitlist":
             result["instruction"] = guards.WAITLIST_FAILED_INSTRUCTION
-            state.write_failed = True
+            state.write_failed = state.waitlist_failed = True
     ms = round((ctx.clock.monotonic() - started) * 1000)
     return result, {"name": name, "ok": error is None, "ms": ms, "error": error}
 

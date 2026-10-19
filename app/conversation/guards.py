@@ -63,6 +63,7 @@ CANCEL_CONFIRM_INSTRUCTION = (
     "lateFeeCents when it is true, and end with one question asking them to confirm, "
     "such as 'Do you want me to cancel it?'. Call cancel_visit again only if their next "
     "message is a clear yes."
+)
 WAITLIST_FAILED_INSTRUCTION = (
     "The caller was not added to the waitlist. Do not say they are on it. "
     "Offer to pass them to a person."
@@ -296,10 +297,13 @@ _TIME = (
 # A named day, date or clock time after the contact word ("call you on Friday").
 _WHEN = (
     rf"(?:{'|'.join(_WEEKDAYS)}|(?:{'|'.join(_MONTHS)})[a-z]*\.?\s+\d{{1,2}}"
-    r"|\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}|\d{1,2}(?::\d{2})?\s*[ap]\.?m\b)"
+    r"|\d{4}-\d{2}-\d{2}|\d{1,2}(?::\d{2})?\s*[ap]\.?m\b)"
 )
+# Only contact aimed at the caller: "you can call back Monday to Friday" is office hours.
+_TO_CALLER = r"\b(?:call you(?:\s+back)?|contact you|get back to you|reach out to you)"
 _CALLBACK_PROMISE = re.compile(
-    rf"{_CONTACT}[^.!?]*\b({_TIME}|{_WHEN})|\b({_TIME})[^.!?]*{_CONTACT}",
+    rf"{_CONTACT}[^.!?]*\b({_TIME})|\b({_TIME})[^.!?]*{_CONTACT}"
+    rf"|{_TO_CALLER}[^.!?]*\b({_WHEN})",
     re.IGNORECASE,
 )
 # The knowledge base's own callback window (policies/escalation_and_safety.md).
@@ -325,7 +329,7 @@ def _sentence_promises(sentence: str) -> bool:
                 continue
             return True
     return any(
-        not _POLICY_WINDOW.fullmatch(found.group(1) or found.group(2))
+        not _POLICY_WINDOW.fullmatch(found.group(1) or found.group(2) or found.group(3))
         and not _CONDITION.search(found.group())
         for found in _CALLBACK_PROMISE.finditer(sentence)
     )

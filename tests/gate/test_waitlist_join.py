@@ -5,6 +5,8 @@ the recorded model, the hashing embedder and the conftest danger screen."""
 import json
 from typing import Any
 
+import pytest
+
 from app.conversation import guards
 from app.llm import FakeModelProvider, ModelResult
 from app.scheduling.service import reset_scheduling
@@ -157,9 +159,19 @@ def test_book_and_join_writes_one_row_and_changes_only_119(kb_settings: Settings
     assert_slot_rules(kb_settings, before)
 
 
-def test_asking_again_keeps_one_row(kb_settings: Settings):
+@pytest.mark.parametrize("names", ["the 1-5 visit", "his other 8-12 visit"])
+def test_asking_again_keeps_one_row(kb_settings: Settings, names: str):
     booker, booked = booked_and_joined(kb_settings)
-    appointment_id = booked["booking"]["appointmentId"]
+    appointment_id = (
+        booked["booking"]["appointmentId"]
+        if names == "the 1-5 visit"
+        else schedule_rows(
+            kb_settings,
+            "SELECT appointment_id FROM appointments "
+            "WHERE customer_id = 'MHC-10002' AND slot_id = 115",
+        )[0][0]
+    )
+    print(f"model names {names}: appointmentId={appointment_id}")
     booker.model.results = join_turn(appointment_id, ALREADY_TEXT)
     reply = booker.say("Put me on the waitlist again")
     told = [
