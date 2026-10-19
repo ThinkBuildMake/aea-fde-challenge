@@ -10,6 +10,8 @@ from app import errors
 from app.context import AppContext, Clock, SystemClock
 from app.conversation.routes import router as conversation_router
 from app.followups.routes import router as followups_router
+from app.knowledge.embeddings import Embedder, OpenRouterEmbedder
+from app.knowledge.index import IndexStore
 from app.knowledge.routes import router as knowledge_router
 from app.llm import ModelProvider, StubModelProvider
 from app.monitoring.routes import router as monitoring_router
@@ -24,7 +26,10 @@ def create_app(
     *,
     model: ModelProvider | None = None,
     clock: Clock | None = None,
+    embedder: Embedder | None = None,
 ) -> FastAPI:
+    embedder = embedder or OpenRouterEmbedder(settings)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
@@ -44,6 +49,8 @@ def create_app(
         model=model or StubModelProvider(),
         clock=clock or SystemClock(),
         templates=Jinja2Templates(directory=APP_DIR / "templates"),
+        embedder=embedder,
+        index=IndexStore(settings.INDEX_PATH, embedder.model),
     )
     app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
     errors.install(app)

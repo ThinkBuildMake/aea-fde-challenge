@@ -8,6 +8,8 @@ from fastapi import Request
 from fastapi.templating import Jinja2Templates
 
 from app.db import connect_app_db
+from app.knowledge.embeddings import Embedder
+from app.knowledge.index import IndexStore
 from app.llm import ModelProvider
 from app.settings import Settings
 
@@ -30,6 +32,8 @@ class AppContext:
     model: ModelProvider
     clock: Clock
     templates: Jinja2Templates
+    embedder: Embedder
+    index: IndexStore
     safety: "SafetyClassifier | None" = None
 
     def open_app_db(self) -> sqlite3.Connection:

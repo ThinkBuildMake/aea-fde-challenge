@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 from app import types as t
+from app.knowledge.embeddings import FakeEmbedder
 from app.llm import FakeModelProvider
 from app.main import create_app
 from app.settings import Settings
@@ -14,14 +15,16 @@ ADMIN = {"Authorization": "Bearer test-admin-token"}
 
 
 @pytest.fixture
-def client(started: Settings) -> TestClient:
-    return TestClient(create_app(started, model=FakeModelProvider()))
+def client(kb_settings: Settings) -> TestClient:
+    return TestClient(
+        create_app(kb_settings, model=FakeModelProvider(), embedder=FakeEmbedder())
+    )
 
 
 @pytest.fixture
-def ids(client: TestClient, started: Settings) -> dict[str, str]:
+def ids(client: TestClient, kb_settings: Settings) -> dict[str, str]:
     conversation_id = client.post("/conversations").json()["conversationId"]
-    conn = sqlite3.connect(started.APP_DB_PATH)
+    conn = sqlite3.connect(kb_settings.APP_DB_PATH)
     public_id = conn.execute(
         "SELECT public_id FROM conversations WHERE id = ?", (conversation_id,)
     ).fetchone()[0]
