@@ -18,7 +18,8 @@ INSTRUCTIONS = (
     "returns. Call report_status with the caller's intent (book_visit, change_visit, "
     "policy_question, warranty_question, membership_question, billing_lookup, billing_dispute, "
     "membership_change, complaint_or_refund, safety, new_system_quote, technician_late, "
-    "out_of_scope or other) and whether their need is resolved."
+    "out_of_scope or other) and whether their need is resolved, in the same step as your first "
+    "tool call. Write the caller's answer once, after the tools have returned."
 )
 
 TOOLS: dict[str, dict[str, Any]] = {
@@ -143,7 +144,7 @@ def run_turn(
     cost = 0.0
     all_reported = True
     prompt_tokens = completion_tokens = 0
-    final_text = ""
+    said: list[str] = []
 
     for _ in range(MAX_TOOL_ROUNDS):
         remaining = ctx.settings.TURN_DEADLINE - (ctx.clock.monotonic() - started)
@@ -164,7 +165,8 @@ def run_turn(
                 (result.prompt_tokens or 0) * price.get("input", 0.0)
                 + (result.completion_tokens or 0) * price.get("output", 0.0)
             ) / 1e6
-        final_text = str(result.message.get("content") or "")
+        if result.message.get("content"):
+            said.append(str(result.message["content"]).strip())
         calls = result.message.get("tool_calls") or []
         if not calls:
             break
@@ -179,6 +181,7 @@ def run_turn(
                 }
             )
 
+    final_text = "\n\n".join(said)
     latency_ms = round((ctx.clock.monotonic() - started) * 1000)
     db.execute("BEGIN IMMEDIATE")
     try:
