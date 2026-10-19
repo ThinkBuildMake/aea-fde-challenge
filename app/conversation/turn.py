@@ -112,7 +112,11 @@ INSTRUCTIONS = (
     "terms it returns and end with a question asking them to confirm; call it again only "
     "when the caller's next message is a clear yes. If they are unsure, change nothing and ask "
     "what they would like. Never waive, reduce or promise to waive any fee; if asked, say "
-    "you cannot waive fees in this chat and offer to pass them to a person."
+    "you cannot waive fees in this chat and offer to pass them to a person.\n"
+    "Billing: once the caller is matched, call get_my_billing and give the balance with "
+    "each open invoice id; explain a line from its line items. To pay, call "
+    "send_payment_link and give its url. Never ask for card details. Discuss only the "
+    "matched caller's own account; for anyone else's, say you can only discuss theirs."
 )
 
 
@@ -476,7 +480,8 @@ def run_turn(
     def left() -> float:
         return ctx.settings.TURN_DEADLINE - (ctx.clock.monotonic() - started)
 
-    redacted = safety.redact_card_numbers(text).text
+    redaction = safety.redact_card_numbers(text)
+    redacted = redaction.text
 
     history: list[dict[str, Any]] = []
     earlier = 0
@@ -492,6 +497,7 @@ def run_turn(
         (conversation_id,),
     ).fetchone()[0]
     state = tools.ToolState.load(db, conversation_id, redacted, history)
+    state.card_removed = redaction.removed
     recent, follow_up_pending = _recent_turns(db, conversation_id)
 
     user = {"role": "user", "content": redacted}
@@ -680,6 +686,7 @@ def run_turn(
             state.intent = "safety"
             end = _stop_for(ctx, db, conversation_id, state.customer_id, verdict)
     else:
+        amended = False
         final_text = last_said
         if not failure and not final_text.strip() and state.handoff is None:
             failure = "empty_reply"
@@ -779,6 +786,18 @@ def run_turn(
                 ).fetchone()
             ):
                 actions = [*actions, "ask_solved"]
+            if state.handoff is None and not withheld:
+                if state.card_removed and state.payment_link is None:
+                    state.payment_link = tools.card_turn_link(ctx, state)
+                link = state.payment_link
+                if link is not None and link.url not in final_text:
+                    final_text = f"{final_text} {guards.payment_link_text(link)}"
+                    amended = True
+        if state.card_removed and not guards.refuses_card(final_text):
+            final_text = f"{guards.CARD_REFUSAL_TEXT} {final_text}"
+            amended = True
+        if amended:
+            turn["stored"] = [*stored, {"role": "assistant", "content": final_text}]
     # A yes can confirm a cancel only after the model's own reply put the terms.
     state.keep_cancel_asks(
         final_text
@@ -790,6 +809,7 @@ def run_turn(
     turn["reply_text"] = final_text
     turn["latency_ms"] = round((ctx.clock.monotonic() - started) * 1000)
     saved: int | None = None
+    cost = round(cost, 10)
     try:
         seq = saved = _save_turn(ctx, db, conversation_id, state, turn, cost, end)
     except sqlite3.Error as exc:
