@@ -41,9 +41,11 @@ def seed(
     customer_id: str | None = None,
     turns: list[str] | None = None,
     cost: float = 0.0,
+    public: str | None = None,
 ) -> tuple[str, str]:
     n = next(_n)
-    secret, public = f"secret{n:04d}" + "a" * 20, f"public{n:04d}" + "b" * 20
+    secret = f"secret{n:04d}" + "a" * 20
+    public = public or f"public{n:04d}" + "b" * 20
     began = stamp(minutes_ago)
     db.execute(
         "INSERT INTO conversations (id, public_id, started_at, last_activity_at, ended_at,"
@@ -183,3 +185,32 @@ def test_business_routes_never_expose_or_accept_the_secret_id(client: TestClient
         assert response.status_code == 404
         assert response.json()["error"] == "conversation_not_found"
     assert (count(db, "flags"), count(db, "eval_candidates")) == (flags, drafts)
+
+
+def test_card_in_flag_note_is_redacted(client: TestClient, db):
+    _, public = seed(db)
+
+    response = client.post(
+        f"/conversations/{public}/flag", json={"note": "4111 1111 1111 1111 was quoted"}
+    )
+
+    (note,) = db.execute("SELECT note FROM flags").fetchone()
+    print(response.status_code, "| stored note:", note)
+    assert response.status_code == 201
+    assert note == "[card number removed] was quoted"
+    assert not CARD_RUN.search(note)
+
+
+def test_draft_name_clash_is_409(client: TestClient, db):
+    _, first = seed(db, turns=["one"], public="abcdef01" + "1" * 24)
+    _, second = seed(db, turns=["two"], public="abcdef01" + "2" * 24)
+    assert client.post(f"/conversations/{first}/eval-candidate").status_code == 201
+
+    response = client.post(f"/conversations/{second}/eval-candidate")
+
+    print(
+        response.status_code, response.json(), "| drafts:", count(db, "eval_candidates")
+    )
+    assert response.status_code == 409
+    assert response.json()["error"] == "candidate_name_taken"
+    assert count(db, "eval_candidates") == 1

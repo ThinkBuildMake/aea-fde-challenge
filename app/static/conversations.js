@@ -23,19 +23,15 @@
     d.dataset.seq = t.seq;
     if (t.callerText) d.appendChild(B.el("div", null, "Caller: " + t.callerText));
     if (t.replyText) d.appendChild(B.el("div", null, "Agent: " + t.replyText));
-    var names = (t.toolsCalled || []).map(function (c) {
-      return c.name.replace(/_/g, " ");
-    });
-    var tools = B.el("div", "turn-tools", "Tools called: " + (names.length ? names.join(", ") : "none"));
     if (t.traceId) {
-      tools.appendChild(document.createTextNode(" "));
+      var trace = B.el("div", "turn-trace");
       var a = B.el("a", "trace-link", "Open trace");
       a.href = (B.data.traceBase || "") + "/trace/" + encodeURIComponent(t.traceId);
       a.target = "_blank";
       a.rel = "noopener";
-      tools.appendChild(a);
+      trace.appendChild(a);
+      d.appendChild(trace);
     }
-    d.appendChild(tools);
     return d;
   }
 
@@ -46,10 +42,14 @@
     detailEl.textContent = "";
     detailEl.appendChild(B.el("h2", "detail-title", whatOf(s.intent) + " (" + oc[0] + ")"));
 
-    var meta = [id, s.turnCount + " turns"];
-    if (detail.turns.length) meta.push("first reply " + (detail.turns[0].latencyMs / 1000).toFixed(1) + " s");
+    var meta = [id, s.turnCount + (s.turnCount === 1 ? " turn" : " turns")];
+    var timed = detail.turns.filter(function (t) {
+      return t.latencyMs !== null && t.latencyMs !== undefined;
+    })[0];
+    if (timed) meta.push("first reply " + (timed.latencyMs / 1000).toFixed(1) + " s");
     if (s.outcomeReason) meta.push("reason: " + B.label(s.outcomeReason).toLowerCase());
-    meta.push("cost $" + s.costUsd.toFixed(2));
+    var cost = s.costUsd;
+    meta.push("cost $" + cost.toFixed(cost > 0 && cost < 0.01 ? 4 : 2));
     detailEl.appendChild(B.el("div", "meta", meta.join(" · ")));
 
     var tr = B.el("div", "transcript");
@@ -59,6 +59,14 @@
     if (s.solved === "yes") tr.appendChild(B.el("div", null, "Caller tapped: yes, that solved it"));
     else if (s.solved === "no") tr.appendChild(B.el("div", null, "Caller tapped: no"));
     detailEl.appendChild(tr);
+
+    var toolNames = [];
+    detail.turns.forEach(function (t) {
+      (t.toolsCalled || []).forEach(function (c) {
+        if (toolNames.indexOf(c.name) < 0) toolNames.push(c.name);
+      });
+    });
+    detailEl.appendChild(B.el("div", "convo-tools", "Tools called: " + (toolNames.length ? toolNames.join(", ") : "none")));
 
     var flagged = !!(s.flagged || (detail.flags && detail.flags.length));
     var buttons = B.el("div", "btn-row");
@@ -99,14 +107,25 @@
       }
       box.appendChild(lab);
       box.appendChild(input);
+      var ask = null;
       box.addEventListener("submit", function (e) {
         e.preventDefault();
         var note = input.value.trim();
-        if (!note || flagged) return;
+        if (flagged) return;
+        if (!note) {
+          if (!ask) {
+            ask = B.el("p", "flag-note-needed", "A note saying what was wrong is required.");
+            ask.setAttribute("role", "alert");
+            box.appendChild(ask);
+          }
+          return;
+        }
         input.disabled = true;
         B.postJSON("/conversations/" + encodeURIComponent(id) + "/flag", { note: note })
           .then(function () {
             flagged = true;
+            if (ask) ask.remove();
+            ask = null;
             paintFlag();
             B.clearError(flagBtn);
           })
@@ -132,7 +151,9 @@
 
     function showSaved(scenarioId) {
       savedLine.textContent =
-        "Saved as a candidate test scenario: " + scenarioId + ". Review it, then add it to the eval set.";
+        "Saved as a candidate test scenario: eval/candidates/" +
+        scenarioId +
+        ".json. Review it, then add it to the eval set.";
       savedLine.hidden = false;
     }
     evalBtn.addEventListener("click", function () {
@@ -178,6 +199,7 @@
         var oc = outcomeOf(c.outcome);
         var b = B.el("button", "convo-btn");
         b.type = "button";
+        b.dataset.publicId = c.publicId;
         b.appendChild(B.el("span", "when", whenOf(c.startedAt)));
         b.appendChild(B.el("span", "what", whatOf(c.intent)));
         b.appendChild(B.el("span", "outcome " + oc[1], oc[0]));

@@ -21,7 +21,7 @@ def test_chat_and_business_run_under_the_policy(
         assert page.evaluate("typeof window.htmx") == "object"
     stub(page)
     open_tab(page, live_url)
-    link = page.locator(".turn-tools a.trace-link").first
+    link = page.locator(".turn-trace a.trace-link").first
 
     base = started.LANGFUSE_BASE_URL.rstrip("/")
     expect(link).to_have_attribute("href", f"{base}/trace/tr-1")
