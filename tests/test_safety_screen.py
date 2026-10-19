@@ -143,6 +143,10 @@ def test_classifier_never_sees_card_digits(tmp_settings: Settings) -> None:
         ("no clue", True, "safe", "emergency"),
         ("No, I can't tell", True, "safe", "emergency"),
         ("not certain", True, "safe", "emergency"),
+        ("No, nothing like that", True, "burning_followup", "safe"),
+        ("No", True, "burning_followup", "safe"),
+        ("Yes, the breaker tripped", True, "burning_followup", "emergency"),
+        ("No, but now there is smoke", True, "emergency", "emergency"),
     ],
 )
 def test_vr2_followup_rules(

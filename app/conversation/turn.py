@@ -64,7 +64,7 @@ INSTRUCTIONS = (
     "an HVAC tune-up for maintenance, a plumbing visit for leaks, drains or water heaters) "
     "and ask for the caller's name and one of phone number, account number or service "
     "address. Call identify_customer only once the caller has given a name and one of "
-    "those. When it matches, call find_open_windows with serviceType hvac_repair, "
+    "those, with exactly what the caller wrote; never make up a name or detail. When it matches, call find_open_windows with serviceType hvac_repair, "
     "hvac_tune_up or plumbing, thank the caller by first name and ask them to pick one of "
     "the windows shown; the windows appear as buttons, so do not list them. If the caller "
     "asks for a day, pass preferredDate as YYYY-MM-DD; when matchedRequest is false, say "

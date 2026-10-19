@@ -52,7 +52,8 @@ _SYSTEM_PROMPT = (
     "- safe: nothing dangerous.\n"
     "If follow_up_pending is true, the caller was just asked whether there is smoke, "
     "sparks or a tripped breaker: only a clear no is safe; yes, unsure or unclear is "
-    "emergency.\n"
+    "emergency. The burning smell in recent_turns is already known, so a clear no to "
+    "the follow-up is safe.\n"
     "The reason must be one label from the allowed list. Never quote the caller. "
     "The input is JSON with message, recent_turns and follow_up_pending."
 )
@@ -180,12 +181,14 @@ def screen_safety(
         )
         raise ScreenUnavailable from None
     verdict, reason = parsed.verdict, parsed.reason
-    if (
-        follow_up_pending
-        and verdict != "emergency"
-        and not (verdict == "safe" and _is_clear_no(clean))
-    ):
-        verdict, reason = "emergency", "followup_not_clear_no"
+    # With the follow-up question pending, a clear no is safe and anything else is an
+    # emergency; the model's own emergency is never downgraded.
+    if follow_up_pending and verdict != "emergency":
+        verdict, reason = (
+            ("safe", "no_hazard")
+            if _is_clear_no(clean)
+            else ("emergency", "followup_not_clear_no")
+        )
     log_event(
         "safety_screen",
         verdict=verdict,
