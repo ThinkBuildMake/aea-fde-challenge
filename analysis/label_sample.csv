@@ -1,0 +1,21 @@
+call_id,intent,reader_intent,agree,note
+CALL-20260828-0409,employment,employment,yes,Asks if Meridian is hiring HVAC techs; sent to the careers page.
+CALL-20260803-0056,membership_upgrade,membership_upgrade,yes,Upgrades to the Plus plan mid-year; prorated payment link sent.
+CALL-20260910-0150,booking_repair_or_tuneup,booking_repair_or_tuneup,yes,AC grinding noise; booked a Monday 8-12 window.
+CALL-20260715-0351,employment,employment,yes,Same hiring question; careers page.
+CALL-20260723-0276,warranty,warranty,yes,Compressor warranty question (parts covered and labor billable). Caller says 'let's schedule' but no booking is made on the call.
+CALL-20260817-0330,booking_repair_or_tuneup,booking_repair_or_tuneup,yes,AC blowing warm air; booked Thursday 1-5.
+CALL-20260824-0408,booking_repair_or_tuneup,booking_repair_or_tuneup,yes,Furnace won't start; booked Friday 8-12.
+CALL-20260730-0306,complaint_manager,complaint_manager,yes,Third call with no call back; escalated to the service manager for a same-day call.
+CALL-20260728-0264,safety_gas_co_sparks,safety_gas_co_sparks,yes,Smells gas; told to leave the house and call the utility or 911.
+CALL-20260909-0119,billing_quote_mismatch,billing_quote_mismatch,yes,Invoice $60 above the quote (permit fee); billing supervisor call back in one business day.
+CALL-20260709-0134,new_system_quote,new_system_quote,yes,18-year-old system; ballpark given and a free in-home estimate set up.
+CALL-20260806-0207,billing_double_charge,billing_double_charge,yes,Two $312 charges; one is a pending hold. Explained with no ticket opened.
+CALL-20260717-0359,billing_pay_invoice,billing_pay_invoice,yes,Wants to pay an invoice; secure payment link texted.
+CALL-20260707-0002,appointment_cancel,appointment_cancel,yes,Cancels more than 24 hours out with no fee. The resolution label says information_only though the agent cancelled.
+CALL-20260910-0166,booking_repair_or_tuneup,booking_repair_or_tuneup,yes,Annual tune-up; booked Monday 8-12.
+CALL-20260825-0118,membership_autopay,membership_autopay,yes,Sets up membership autopay; secure card link texted.
+CALL-20260730-0323,warranty,warranty,yes,Asks whether the new unit was registered with the manufacturer; confirmation resent.
+CALL-20260814-0420,booking_repair_or_tuneup,booking_repair_or_tuneup,yes,Water pooling at the indoor unit; booked tomorrow 12-4.
+CALL-20260902-0386,membership_cancel,membership_cancel,yes,Cancels Comfort Club; auto-renew turned off.
+CALL-20260729-0041,complaint_manager,complaint_manager,yes,Rude technician; asks for a manager and gets a same-day manager call back.

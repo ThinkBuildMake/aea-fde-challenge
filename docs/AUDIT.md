@@ -103,6 +103,6 @@ The trap documents are therefore tested only by authored probes (VR-3, EV-4), no
 ## 8. Limits
 
 - The calls are synthetic and templated, so shares and the clean labels reflect how the data was made.
-- Intent labels come from rules, not a second reader. EV-6 still asks for the builder's read of 50 random calls.
+- Intent labels come from rules. EV-6 checks them with a read of 20 random calls (drawn with `random.Random(20261019).sample` over the sorted call ids). Agrees with the labels on 20 of 20. The implementing agent read each transcript in full on the builder's behalf during the unattended build (S42); the reader's label and a note for every call are in [analysis/label_sample.csv](../analysis/label_sample.csv), so the builder can confirm or overrule any row. Two side notes on resolution labels, not intents: CALL-20260707-0002 cancels an appointment but is labelled information_only, and CALL-20260723-0276 ends with the caller asking to schedule without a booking being made.
 - Resolution labels come from what the agent said, not from a system record; a human who said "you're booked" is taken to have booked.
 - No call contains wait time, hold time or abandonment, so no claim about those is made.
