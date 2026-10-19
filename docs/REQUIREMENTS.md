@@ -276,7 +276,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 
 | ID | Requirement | Verified by | Trace | Priority |
 |---|---|---|---|---|
-| CO-1 | Model/API cost per conversation and cumulative cost are recorded (cumulative spend is read from the model gateway's key usage, so eval runs and the one-time document read count too); an alert (or visible banner) fires when cumulative spend passes $100 [prop]. The builder set no cap, so this protects against a runaway loop, not a budget. | Query OB-1 cost field; trigger the threshold in a test | GC-3 | Should |
+| CO-1 | Model/API cost per conversation and cumulative cost are recorded (cumulative spend is read from the model gateway's key usage, so eval runs and the one-time document read count too); a visible banner on the business view shows when cumulative spend passes $100 [prop]; no message is sent (builder, 2026-10-19). The builder set no cap in the app; the model gateway key itself has a $250 limit. This protects against a runaway loop, not a budget. | Query OB-1 cost field; trigger the threshold in a test | GC-3 | Should |
 
 ### 3.10 Scalability (SC-)
 
@@ -290,7 +290,7 @@ If a row below names a library, a component, or a way of meeting a threshold, it
 | ID | Requirement | Verified by | Trace | Priority |
 |---|---|---|---|---|
 | DP-1 | The public URL opens in a clean browser with no login and answers a first message within PF-1. | Manual check from a second device | GC-5 | Must |
-| DP-2 | The service is up from deployment through 2026-11-05 (last slot date) with ≥ 99% availability [prop], checked by an external ping every 5 minutes, each ping recorded by the app so the business view can show misses. | Ping log | PRD-6, D-8 | Should |
+| DP-2 | The service is up from deployment through 2026-11-05 (last slot date). No outside uptime monitor and no ping log (builder, 2026-10-19): the host restarts a crashed app, and a slower first reply after the app has been idle (a cold start) is acceptable. | The host's health check passes on every deploy; the URL opens when visited during the review window | PRD-6, D-8 | Should |
 | DP-3 | Secrets live in environment configuration, not the repository. | CP-2 scan | CP-2 | Gate |
 | DP-4 | One documented command restores the scheduling database to its supplied seed state, leaving conversation logs, handoffs and the waitlist untouched, so the reviewer's bookings and the eval runs can be reset. Waitlist entries hold a copy of the slot they wait on, so the reset leaves none dangling. | Run after a booking; VR-7 query and slot counts equal the seed | GC-6 | Must |
 | DP-5 | A new machine goes from clone to running locally in ≤ 15 minutes [prop] following the README alone. | Timed run | PRD deliverable 3 | Should |
@@ -354,7 +354,7 @@ Every **[prop]** and **[tbd]** number. Status is *accepted*, *revised*, or *pend
 | CO-1 | $100 alert | Runaway-loop guard only; no cap given. | proposed |
 | SC-1 | 5 concurrent; 1.5× | Reviewer plus tester plus harness. | proposed |
 | SC-2 | 4 parallel eval conversations | 248 turns × 6 s ÷ 4 ≈ 6 min. | proposed |
-| DP-2 | ≥ 99%, 5-min ping | Up for the review window. | proposed |
+| DP-2 | up through 2026-11-05, not monitored | The builder dropped the uptime monitor; cold starts are acceptable (builder, 2026-10-19). | revised |
 | DP-5 | ≤ 15 min | A reviewer should run it without help. | proposed |
 | CH-1 | ≤ 5 min | Learning loop must be cheap to apply. | proposed |
 

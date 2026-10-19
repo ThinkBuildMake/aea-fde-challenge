@@ -8,7 +8,7 @@
 %%{init: {"layout": "elk", "flowchart": {"nodeSpacing": 40, "rankSpacing": 60}}}%%
 flowchart LR
   client["Web client: caller chat and business view"]
-  uptime["Uptime checker"]
+  host["Railway health check"]
   evalr["Eval runner"]
   cli["Command-line tools"]
   kb["Knowledge base files"]
@@ -25,11 +25,10 @@ flowchart LR
   idx[("Retrieval index: in memory plus a file")]
   llm["Language-model provider: OpenRouter chat and embeddings"]
   lf["Langfuse Cloud, US region: traces"]
-  chatops["Alert webhook: Slack or Discord"]
   client -->|startConversation, sendMessage, recordSolved| conv
   client -->|submitCallbackWindow| fup
   client -->|overview, conversations, flag, eval candidate, handoffs, waitlist| mon
-  uptime -->|GET or HEAD health| mon
+  host -->|GET or HEAD health| mon
   evalr -->|startConversation, sendMessage on a private copy| conv
   cli -->|rebuildIndex| know
   cli -->|resetScheduling| sched
@@ -47,13 +46,12 @@ flowchart LR
   mon -->|key usage| llm
   conv -->|scrubbed trace spans, fire and forget| lf
   evalr -->|experiment results, optional| lf
-  mon -->|spend alert, once| chatops
   sched -->|locked reads and writes| sdb
   sched -->|visit_changes audit rows| adb
   mon -->|reads for agreement check| sdb
   conv -->|conversations, turns| adb
   fup -->|handoffs, waitlist_entries| adb
-  mon -->|flags, eval_candidates, pings| adb
+  mon -->|flags, eval_candidates| adb
 ```
 
 The sign-in check that most designs share does not exist here: callers and staff are anonymous (DP-1, GC-7), so no module guards the others. The only guarded routes are the two admin routes (System-wide contracts).
@@ -65,7 +63,7 @@ The sign-in check that most designs share does not exist here: callers and staff
 | Knowledge | Holds the retrieval index over current knowledge-base files; returns passages and fee amounts; builds the index | the index file | rebuildIndex (admin, command line) | Conversation; command line |
 | Scheduling | Identifies callers, finds windows, books, moves and cancels visits, reads billing, resets the seed | `appointment_slots`, `appointments` (supplied database), `visit_changes` (app database) | resetScheduling (admin, command line) | Conversation; command line |
 | Follow-ups | Keeps the work queues for people: handoffs, supervisor callbacks, the waitlist | `handoffs`, `waitlist_entries` | submitCallbackWindow, listHandoffs, markHandoffFollowedUp, listWaitlist | client; Conversation |
-| Monitoring | Computes the business view, takes flags, makes test-scenario candidates, records uptime pings | `flags`, `eval_candidates`, `pings` | getOverview, listConversations, getConversation, flagConversation, createEvalCandidate, getHealth, admin reads | client; uptime checker; command line |
+| Monitoring | Computes the business view, takes flags, makes test-scenario candidates, answers the health check | `flags`, `eval_candidates` | getOverview, listConversations, getConversation, flagConversation, createEvalCandidate, getHealth, admin reads | client; Railway's health check; command line |
 
 **Key decisions.**
 - **The model never names the customer.** Every customer-scoped tool takes the customer from the conversation's matched account, not from a model argument, so a prompt cannot reach another account (AZ-1, FR-3.4).
@@ -90,7 +88,7 @@ Every PRD goal and deliverable, and where this document meets it. Items that are
 | 5. Test set, containment 60 to 75%, accuracy on handled drivers, escalation rate on the rest | Scenario, result and weights files and the run summary | Offline tools → Eval files |
 | 6. Public web app, interactive | Pages `GET /` and `GET /business`, the caller routes, startup rules for the host | Conversation; System-wide contracts |
 | 7. Monitoring: volume, containment, escalations, failures, latency; feedback loop | `getOverview`, the stored fields behind it, flags, test-scenario candidates and the export command | Monitoring (Feedback loop) |
-| Deliverable 1: deployed URL | Environments table; `/health` and the uptime ping | Environments |
+| Deliverable 1: deployed URL | Environments table; `/health` as Railway's health check | Environments |
 | Deliverable 2: 3 to 4 minute video | Not software. Its four topics map to: drivers → `AUDIT.md`, chunking and retrieval → Knowledge, escalation → Follow-ups, eval numbers → the run summary | — |
 | Deliverable 3: repository, eval set, README with numbers | `eval/` folder (scenarios, weights, retrieval questions, results) and the README, which prints the run summary | Offline tools → Eval files |
 | Extra credit: voice | Excluded by the builder (FR-6.1, GC-5) | — |
@@ -111,7 +109,7 @@ Wireframe states and the contract that draws each:
 | Error ("Simulate an outage" chip) | `banner: error` with action `request_callback`; the chip sets `simulateOutage` on `sendMessage`. The page shows the chip only when `startConversation` returns `demoFaults: true` (open question 2) |
 | Did this solve it? → Thanks / not solved | `recordSolved`; "no" keeps the conversation open and offers a person |
 | New conversation | `startConversation`; identity lives only on the server under the conversation id, so nothing carries over (FR-5.2) |
-| Business view: status strip, success metric with 7-day line and 60 to 75% band, three supporting metrics, what just happened, guarantees table, 24 h first-reply line, 24 h ping strip, spend against $100 | `getOverview` response fields (Monitoring → API) |
+| Business view: status strip, success metric with 7-day line and 60 to 75% band, three supporting metrics, what just happened, guarantees table, 24 h first-reply line, spend against $100. The 24 h ping strip and the "answered in" time on the public-URL tile are dropped with the uptime monitor (builder, 2026-10-19) | `getOverview` response fields (Monitoring → API) |
 | Handoffs tab with "mark followed up" | `listHandoffs`, `markHandoffFollowedUp` |
 | Waitlist tab | `listWaitlist` |
 | Conversations tab: transcript, tools called, cost, flag with note, turn into test scenario | `listConversations`, `getConversation`, `flagConversation`, `createEvalCandidate` |
@@ -129,7 +127,7 @@ The supplied scheduling database was inspected read-only on 2026-10-18 (the SQLi
 | Slot | `appointment_slots` | exists | none; the app updates `status` only |
 | Appointment | `appointments` | exists | none; the app inserts rows and updates `status` and `slot_id` |
 | Invoice | `invoices` | exists | none; read only |
-| Conversation, Turn, Handoff, WaitlistEntry, Flag, Ping | — | new, in the app database | — |
+| Conversation, Turn, Handoff, WaitlistEntry, Flag | — | new, in the app database | — |
 | Scenario and Eval result | — | new, files in the repository | — |
 | (not in HLD) booking audit, test-scenario candidate | — | new, in the app database | `visit_changes`, `eval_candidates` (upstream fixes) |
 
@@ -149,13 +147,13 @@ What the inspection found, and how this design treats it:
 | sendMessage | client → Conversation.sendMessage → Safety.redactCardNumbers → (Safety.screenSafety beside the first model call) → agent tools (Knowledge, Scheduling, Follow-ups) → insert `turns`, update `conversations` → Reply | sync | scheduling and handoff writes commit before the reply says they happened. The turn row is written after; a failed log never undoes a booking |
 | recordSolved | client → Conversation.recordSolved → insert `turns`, update `conversations` | sync | yes |
 | submitCallbackWindow | client → Follow-ups.setCallbackWindow (or createHandoff after a fallback) → update `handoffs` | sync | yes |
-| getOverview | client → Monitoring.getOverview → Conversation.closeIdleConversations → read `conversations`, `turns`, `visit_changes`, `pings`, supplied `appointments` and `appointment_slots`, `handoffs`, `flags` → OpenRouter key usage | sync | n/a (read) |
+| getOverview | client → Monitoring.getOverview → Conversation.closeIdleConversations → read `conversations`, `turns`, `visit_changes`, supplied `appointments` and `appointment_slots`, `handoffs`, `flags` → OpenRouter key usage | sync | n/a (read) |
 | listConversations, getConversation | client → Monitoring (listConversations first runs Conversation.closeIdleConversations) → read `conversations`, `turns`, `handoffs`, `flags`, `eval_candidates`, supplied `customers` | sync | n/a |
 | flagConversation | client → Monitoring → insert `flags` | sync | yes |
 | createEvalCandidate | client → Monitoring → read the conversation → insert `eval_candidates` | sync | yes |
 | listHandoffs, markHandoffFollowedUp | client → Follow-ups → read or update `handoffs` | sync | yes |
 | listWaitlist | client → Follow-ups → read `waitlist_entries` | sync | n/a |
-| getHealth | uptime checker → Monitoring.getHealth → reply, then insert `pings` | sync; ping insert best-effort after the reply | no, by design |
+| getHealth | Railway's health check → Monitoring.getHealth → reply | sync | n/a (read) |
 | admin reset-scheduling | operator → Scheduling.resetScheduling → supplied database | sync | yes |
 | admin rebuild-index | operator → Knowledge.rebuildIndex → embeddings → index file → in-memory swap | sync | yes |
 | admin eval-candidates | command line → Monitoring → read `eval_candidates` | sync | n/a |
@@ -270,7 +268,7 @@ sequenceDiagram
   C->>M: GET /overview
   M->>V: closeIdleConversations()
   V->>A: set outcomes on idle conversations
-  M->>A: read conversations, turns, visit_changes, pings, handoffs, flags
+  M->>A: read conversations, turns, visit_changes, handoffs, flags
   M->>SDB: read appointments and slots named by visit_changes
   M->>L: read key usage
   M-->>C: Overview
@@ -532,7 +530,7 @@ A caller who holds a later visit and wants an earlier window (FR-1.15). Holds a 
 - **Constraints:** unique `(customer_id, service_type, held_date, held_window)` — asking twice for the same request writes one row (VR-10).
 - **Indexes:** `(created_at)` for the list, oldest first.
 
-### Monitoring — `flags`, `eval_candidates`, `pings`, `alerts_sent`
+### Monitoring — `flags`, `eval_candidates`
 
 ```mermaid
 %%{init: {"layout": "elk"}}%%
@@ -548,9 +546,6 @@ erDiagram
     TEXT conversation_id FK "UK"
     TEXT scenario_id "UK"
     TEXT scenario "JSON draft"
-  }
-  pings {
-    TEXT ts PK
   }
   conversations
   conversations ||--o{ flags : receives
@@ -583,24 +578,7 @@ A draft test scenario made from a logged conversation (OB-4).
 
 - **Constraints:** unique `(conversation_id)`; unique `(scenario_id)`.
 
-#### `alerts_sent` — owned by Monitoring
-
-One row per kind of alert already sent, so a threshold alert fires once.
-
-| Column | Type | Null | Default | Meaning |
-|---|---|---|---|---|
-| kind | TEXT | no | | key; `spend_threshold` (more may be added) |
-| sent_at | TEXT | no | now | |
-| detail | TEXT | yes | | e.g. the spend figure that crossed the line |
-
-#### `pings` — owned by Monitoring
-
-One health check the app received (DP-2). Disposable.
-
-| Column | Type | Null | Default | Meaning |
-|---|---|---|---|---|
-| ts | TEXT | no | now (milliseconds) | key; when the ping arrived |
-| ms | INTEGER | yes | | how long the app took to answer it, for the status strip |
+No `pings` or `alerts_sent` table: the uptime monitor and the spend alert message were dropped (builder, 2026-10-19).
 
 ## Shared types
 
@@ -1128,10 +1106,10 @@ None.
 ## Module: Monitoring — the business view
 
 ### What it does
-Computes the numbers the business sees from what the other modules recorded, lets staff flag a conversation or draft a test scenario from it, and records the uptime pings.
+Computes the numbers the business sees from what the other modules recorded, lets staff flag a conversation or draft a test scenario from it, and answers the host's health check.
 
 ### Owns
-Writes `flags`, `eval_candidates`, `pings`. Reads `conversations`, `turns`, `visit_changes`, `handoffs`, `waitlist_entries`, and the supplied `customers`, `appointments`, `appointment_slots`.
+Writes `flags`, `eval_candidates`. Reads `conversations`, `turns`, `visit_changes`, `handoffs`, `waitlist_entries`, and the supplied `customers`, `appointments`, `appointment_slots`.
 
 ### API
 
@@ -1146,9 +1124,7 @@ Notes      Computed on request from the tables; nothing is stored, so lag is zer
 Overview {
   asOf
   status {
-    service            up | down       down when no ping arrived within the expected interval
-    lastPingAt         timestamp | null
-    lastPingMs         integer | null     how long the app took to answer it
+    publicUrl          string          the deployed address, shown on the public-URL tile
     lastConversationAt timestamp | null
     errorsShown24h     integer         turns with fallback_used in the last 24 h
     handoffsWaiting    integer         handoffs with status open
@@ -1170,13 +1146,12 @@ Overview {
     outcomes               { contained, handoff, safety_stop, failed, active }   counts in the window
   }
   recent                   [{ publicId, startedAt, intent, zone | null, outcome, latencyMs }]   newest first
-  guarantees               [{ key, name, now, limit, status: ok | breach | no_data }]   limits quoted from the requirement named in key: PF-1, PF-2, VR-6/7/8, DE-1, DP-2, CO-1
+  guarantees               [{ key, name, now, limit, status: ok | breach | no_data }]   limits quoted from the requirement named in key: PF-1, PF-2, VR-6/7/8, DE-1, CO-1
   latencySeries24h         [{ hour, p95FirstReplyMs }]
-  uptimeSeries24h          [{ from, missed: boolean }]    one entry per expected ping interval
   spend {
     totalUsd               number | null   null when the provider's key usage could not be read
     alertUsd               number          CO-1 threshold
-    alert                  boolean         totalUsd at or above alertUsd
+    alert                  boolean         totalUsd at or above alertUsd; the business view shows the spend banner when true. No message is sent (builder, 2026-10-19)
   }
 }
 ```
@@ -1217,9 +1192,9 @@ Errors     404 conversation_not_found
 
 ```
 {getHealth}   GET or HEAD /health                                        serves DP-2, HLD I-13
-Caller     the uptime checker
+Caller     Railway's health check (on each deploy)
 Response   200 { status: "ok" | "degraded", components: { schedulingDb: ok | error, appDb: ok | error, index: loaded | missing } }   HEAD returns the headers only
-Notes      Always 200 while the app is serving; degraded names what is wrong. The ping is recorded after the reply and a failed insert is ignored. Both methods record a ping.
+Notes      Always 200 while the app is serving; degraded names what is wrong. Nothing is recorded (builder, 2026-10-19).
 ```
 
 ```
@@ -1234,36 +1209,25 @@ Pages `GET /business` (with a `tab` of overview, handoffs, waitlist or conversat
 
 ### Jobs and messages
 
-```
-{checkSpendAlert}   on each startConversation and each getOverview               serves CO-1
-Trigger proof  internal call; no outside trigger
-Payload        none
-Reads          the cached key usage (refreshed at most once a minute), OPENAI_SPEND_USD, alerts_sent
-Writes         alerts_sent (spend_threshold) when the total first reaches the threshold
-Sends          one message to the alert webhook: the total, the threshold, the time
-Twice-safe     yes — alerts_sent stops a second message
-On failure     the row is not written, so the next call retries; the business view's spend banner shows regardless
-```
+None. The spend banner is computed by `getOverview` from the cached key usage (refreshed at most once a minute) and `OPENAI_SPEND_USD`; no alert message is sent (builder, 2026-10-19).
 
-The two other periodic checks (booking agreement, spend display) run whenever the overview is requested, because no scheduler exists (HLD §5).
+The periodic checks (booking agreement, spend display) run whenever the overview is requested, because no scheduler exists (HLD §5).
 
 ### Interface for other modules
-None — only the client, the uptime checker and the command line call this module.
+None — only the client, Railway's health check and the command line call this module.
 
 ### Calls out
 
 | To | Sent | Comes back | Test double |
 |---|---|---|---|
 | OpenRouter key usage | the API key | cumulative spend on the key **[verify]** what it reports for bring-your-own-key calls | a fake returning a fixed number, or an error |
-| Alert webhook (Slack or Discord incoming webhook) | one text message when spend first reaches the threshold | an HTTP status; ignored | a recorder |
 
 Embeddings go through OpenRouter, so their spend is in the key usage; `OPENAI_SPEND_USD` is a manual line used only if the OpenAI fallback is in use (`STACK.md` §7).
 
 ### Must hold
-- Writes only `flags`, `eval_candidates` and `pings`; everything else is read.
+- Writes only `flags` and `eval_candidates`; everything else is read.
 - Every limit shown is the number in the requirement it cites; none is reworded (KEY_METRICS).
 - The booking-agreement check passes when, for every `visit_changes` row not retired, and for every supplied `appointments` row above the seed's highest id that has no such row (a crash between commit and audit insert), the supplied tables agree with it: the appointment exists, its slot is `booked` (book, move) or `open` (cancel), the slot matches the zone, the visit type and the tier, and the confirmed date, window and technician equal the row (VR-6, VR-7, VR-8).
-- The ping insert never delays or fails the `/health` reply (DP-2).
 - A flag needs a note (FR-5.4).
 - A test-scenario draft contains only the stored, redacted caller text, never a card-shaped string (CP-1).
 - Raw model messages and reasoning notes never leave through any route, and no route returns a conversation's secret `id` except the response that created it.
@@ -1405,8 +1369,8 @@ The judge is given the scenario's expected facts and the transcript and returns,
 | Admin routes | `POST /admin/reset-scheduling`, `POST /admin/rebuild-index` and `GET /admin/eval-candidates` require `Authorization: Bearer ADMIN_TOKEN`; anything else is 401 and no work is done. They exist because the jobs must run inside the service (`STACK.md` §13). The preferred way to run them is as commands over the host's shell (`railway ssh`), which needs no open route; the routes are the fallback if shell access fails its day-1 test |
 | Backup | The host's scheduled volume backups are on [verify]. Before every `resetScheduling`, the supplied file is copied aside, and the app database is copied with SQLite's backup function, so a reset or eval run never loses the only copy. Closes the former open question 10 |
 | Security headers and cross-origin | Every response carries a strict content policy (scripts and styles from the app's own files only, so htmx and the chart file are served by the app), no framing, no content sniffing, and a referrer policy. No cross-origin access is allowed: pages and API share one origin, so no CORS middleware is added. The admin token is compared in constant time |
-| Alerts | A missed uptime check emails the builder (the uptime service). A failed deploy and the spend threshold post to the alert webhook (`ALERT_WEBHOOK_URL`). The business view shows the spend banner either way |
-| Settings | One typed settings object reads, by name, and refuses to start if a required one is missing: `SCHEDULING_DB_PATH`, `SEED_DB_PATH`, `APP_DB_PATH`, `INDEX_PATH`, `KB_DIR`, `REFERENCE_DATE`, `REFERENCE_TIME`, `AGENT_MODEL`, `SAFETY_MODEL`, `CALLER_MODEL`, `JUDGE_MODEL`, `EMBEDDING_MODEL`, the model price table used for the cost estimate, `OPENROUTER_API_KEY`, `OPENAI_API_KEY` (only if the embeddings fallback is used), `ADMIN_TOKEN`, `TURN_DEADLINE`, `IDLE_CLOSE_MINUTES`, `SPEND_ALERT_USD` (default 100, CO-1), `OPENAI_SPEND_USD`, `ALERT_WEBHOOK_URL`, `LANGFUSE_BASE_URL` (the US region), `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `DEMO_FAULT_INJECTION`, and the rate and size caps. Secrets are environment variables only (DP-3, CP-2) |
+| Alerts | None are sent (builder, 2026-10-19). The business view shows the spend banner when spend passes the CO-1 line; the OpenRouter key's own $250 limit stops a runaway loop; Railway restarts a crashed app |
+| Settings | One typed settings object reads, by name, and refuses to start if a required one is missing: `SCHEDULING_DB_PATH`, `SEED_DB_PATH`, `APP_DB_PATH`, `INDEX_PATH`, `KB_DIR`, `REFERENCE_DATE`, `REFERENCE_TIME`, `AGENT_MODEL`, `SAFETY_MODEL`, `CALLER_MODEL`, `JUDGE_MODEL`, `EMBEDDING_MODEL`, the model price table used for the cost estimate, `OPENROUTER_API_KEY`, `OPENAI_API_KEY` (only if the embeddings fallback is used), `ADMIN_TOKEN`, `TURN_DEADLINE`, `IDLE_CLOSE_MINUTES`, `SPEND_ALERT_USD` (default 100, CO-1), `PUBLIC_URL` (shown on the business view), `OPENAI_SPEND_USD`, `LANGFUSE_BASE_URL` (the US region), `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `DEMO_FAULT_INJECTION`, and the rate and size caps. Secrets are environment variables only (DP-3, CP-2) |
 
 ### Where each stack need is met
 
@@ -1424,9 +1388,8 @@ The judge is given the scenario's expected facts and the transcript and returns,
 | §11 Explicit timeout, no retries, turn deadline; structured output with tools | Conversation → Calls out, Must hold; open question 8 |
 | §12 One scheduling copy per worker; separate app database; run locally | Offline tools → runEval |
 | §13 Seed only if missing; commands run inside the service; deploy freeze | System-wide → Startup, Admin routes |
-| §14 Ping write best-effort | Monitoring → getHealth |
 | §17 No message bodies at INFO; traces carry scrubbed text only; Langfuse failure never affects a turn | System-wide → Scrubbing and logs; Conversation → Calls out, Must hold |
-| §14 Alerts reach a person | System-wide → Alerts; Monitoring → checkSpendAlert |
+| §14 No uptime monitor or alerts; banner only | System-wide → Alerts; Monitoring → getOverview (spend) |
 | §4 Migrations, lock-wait timeout, backups | Database schema → Migrations; System-wide → Backup |
 | §15, §16 Typed settings; pinned dependencies; scans | System-wide → Settings; Environments |
 | §18 Rate limits, turn cap, length cap | System-wide → Rate and size limits |
@@ -1443,7 +1406,6 @@ The judge is given the scenario's expected facts and the transcript and returns,
 | Time for a turn that books, moves or cancels (PF-2) | `turns.latency_ms` where `has_write = 1` | yes — `has_write` |
 | Booking mismatches (VR-6, VR-7, VR-8, DE-2) | `visit_changes` joined to the supplied `appointments` and `appointment_slots` | yes — `visit_changes` |
 | Errors shown to callers (DE-1) | `turns.fallback_used`, `error`, `latency_ms`; `conversations.outcome = 'failed'` | yes |
-| Uptime of the public URL (DP-2) | `pings` | yes |
 | Total model spend (CO-1) | OpenRouter key usage plus `OPENAI_SPEND_USD`; per conversation `turns.cost_usd` | yes — `cost_usd`, `cost_source` |
 | OB-1 fields on every conversation | `conversations`, `turns` | yes — no nulls: outcome is set by the idle close, intent defaults to `unknown`, cost is never null (conversations with no message are not counted) |
 | OB-3 failures apart from deliberate handoffs | `handoffs.by_error`, `turns.error` | yes — `by_error` |
@@ -1478,7 +1440,7 @@ The regression gate is the CI run on every push: lint, tests (including the sche
 | 11 | A warranty caller who books a diagnostic: should `is_warranty_visit` be 1 (no diagnostic fee)? No requirement says | **A (assumed):** the app always writes 0; any fee waiver is a person's decision (A7). **B:** set 1 when a retrieved warranty document says no fee applies | `bookVisit` | the builder |
 | 13 | The wireframe's first booking exchange asks "Is there any burning smell, smoke, sparks or a tripped breaker?" after "My AC is blowing warm air", but FR-1.2 asks it only when the caller mentions a burning smell | **A (assumed):** the agent's instructions say to ask it once before offering any HVAC repair window; no contract changes. **B:** ask only on a burning smell and change the wireframe | the agent's instructions | the builder |
 | 14 | Langfuse Cloud: does the free tier's 50,000 units a month hold, and does it ever receive a card-shaped string? | check units after the first 50 conversations; run CP-1's five card-shaped messages and search Langfuse. If it leaks, tracing is turned off and logs remain | Conversation → Calls out | day-1 test |
-| 15 | Where the alert webhook points: a Slack or Discord workspace is needed | the builder names one; without it, alerts stay as the business view banner and the uptime email | alerts | the builder |
+| 15 | Where the alert webhook points | **Decided builder, 2026-10-19:** no webhook and no alerts; the spend banner and the key's $250 limit remain | alerts | done |
 | 12 | The eval's caller is played by a model, which varies run to run (DE-3 allows 2 scenarios of drift) and adds a small cost not in `STACK.md`'s estimate | scripted caller turns are deterministic but cannot answer the agent's questions | runEval | day-2 prototype |
 
 **Assumptions.**
@@ -1506,7 +1468,7 @@ The regression gate is the CI run on every push: lint, tests (including the sche
 
 | Document | Change | Behind it |
 |---|---|---|
-| `HIGH_LEVEL_DESIGN.md` §2 and §5 | Add Langfuse Cloud as an external service the Conversation module sends scrubbed traces to, and the alert webhook as an external service Monitoring posts to | Summary diagram |
+| `HIGH_LEVEL_DESIGN.md` §2 and §5 | Add Langfuse Cloud as an external service the Conversation module sends scrubbed traces to, and the alert webhook as an external service Monitoring posts to (the webhook was later dropped (builder, 2026-10-19)) | Summary diagram |
 | `HIGH_LEVEL_DESIGN.md` §3 | Handoff: at most one per conversation (ER line `CONVERSATION ||--o{ HANDOFF` becomes `||--o|`); the handoff record is separate fields; Flag has no author (nobody signs in); add entities for the booking audit (`visit_changes`) and the test-scenario candidate (`eval_candidates`) | schema |
 | `HIGH_LEVEL_DESIGN.md` §4.1 | `sendMessage` takes `simulateOutage` and returns `choices`, `booking` and `actions` (not only "window options"); add the admin routes and `GET /admin/eval-candidates`; `createEvalCandidate` stores a row, and the export command writes the files; add `closeIdleConversations` to the work inside the app | Conversation, Monitoring |
 | `HIGH_LEVEL_DESIGN.md` §5 | Retrieval index: agent-only files are left out of the index rather than marked in it. Language-model provider: the fallback is within 15 s of the turn start (DE-1), not 10 s | Knowledge → Manifest; DE-1 |

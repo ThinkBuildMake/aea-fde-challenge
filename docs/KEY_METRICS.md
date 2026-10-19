@@ -34,8 +34,9 @@ Success means a caller with a routine need gets it settled correctly in one conv
 | **Time for a turn that books, moves or cancels** | PF-2 | p95 ≤ 10 s | Every turn with a database write, rolling 24 h and every eval run | Per-turn latency and tool calls (OB-1) |
 | **Booking mismatches** | VR-6, VR-7, VR-8, DE-2 | 0 | A daily query over all bookings: slot and appointment row agree, no blocked, taken, wrong-zone or non-member slots, and every confirmation matches its row | `appointments`, `appointment_slots`, confirmation tool calls |
 | **Errors shown to callers** | DE-1 | 0 unhandled errors; fallback message and offer of a person within 15 s of the turn starting, with a "still working" note from 10 s | Every conversation with a provider error or timeout, rolling 24 h | Error log and failure outcome (OB-1, OB-3) |
-| **Uptime of the public URL** | DP-2 | ≥ 99% through 2026-11-05 | External ping every 5 minutes | Ping log |
-| **Total model spend** | CO-1 | Alert at $100 cumulative | Running total of per-conversation cost | Cost field (OB-1), provider billing export |
+| **Total model spend** | CO-1 | Banner at $100 cumulative | Running total of per-conversation cost | Cost field (OB-1), provider billing export |
+
+Uptime of the public URL is no longer tracked: the builder dropped the outside uptime monitor and accepts cold starts (builder, 2026-10-19); DP-2 is met by the host's health check and restart.
 
 ## Upstream fixes and open questions
 

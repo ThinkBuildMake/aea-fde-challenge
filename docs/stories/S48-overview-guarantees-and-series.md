@@ -1,20 +1,20 @@
-### S48 — Check the promises and draw the last 24 hours
+### S48 — Check the promises and draw the last 24 hours of replies
 
 **Kind:** module
 **Blocked by:** S17
 **Review gate:** agents
-**Size:** M — the guarantees, the booking-agreement check and three series on S17's route
-**Builds:** Monitoring → the `guarantees`, `recent`, `latencySeries24h` and `uptimeSeries24h` blocks and the `status.service`, `lastPingAt` and `lastPingMs` fields of `Overview`; the booking-agreement check Must hold; the "every limit shown is the requirement's number" Must hold
+**Size:** M — the guarantees, the booking-agreement check, the 24 h reply line and the recent list on S17's route
+**Builds:** Monitoring → the `guarantees`, `recent` and `latencySeries24h` blocks and the `status.publicUrl` field of `Overview`; the booking-agreement check Must hold; the "every limit shown is the requirement's number" Must hold
 **Extends:** `getOverview`, which S17 owns
 **Stubs:** Conversation → `closeIdleConversations` (removed by S30)
-**Requirements:** DP-2 (missed pings shown), VR-6, VR-7, VR-8 (live agreement check)
-**Guards:** DP-2, VR-6
+**Requirements:** VR-6, VR-7, VR-8 (live agreement check)
+**Guards:** VR-6
 
 #### Why
-The business needs to see a broken promise the moment it happens: a slow reply, a booking that disagrees with the database, or a missed uptime check.
+The business needs to see a broken promise the moment it happens: a slow reply, or a booking that disagrees with the database.
 
 #### How it's checked
-Route tests on a temporary app database and scheduling copy seeded with synthetic turns, pings and audit rows.
+Route tests on a temporary app database and scheduling copy seeded with synthetic turns and audit rows.
 
 #### Acceptance criteria
 1. A slow first reply breaches its limit
@@ -32,10 +32,10 @@ Route tests on a temporary app database and scheduling copy seeded with syntheti
    When I call `GET /overview`
    Then the booking-mismatch guarantee counts it
 
-4. Missed pings are shown
-   Given pings every 5 minutes over 24 h with one 10-minute gap, the last answered in 120 ms
+4. The public URL is named
+   Given the app's public URL set in settings
    When I call `GET /overview`
-   Then `uptimeSeries24h` marks the gap as missed, `status.service` is up, and `lastPingMs` is 120
+   Then `status.publicUrl` is that address
 
 5. The 24 h lines and recent list
    Given conversations over the last 24 h

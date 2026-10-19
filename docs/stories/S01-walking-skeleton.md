@@ -40,7 +40,7 @@ Demo:
 4. Every app table exists
    Given a fresh start with an empty volume
    When the gate's schema test reads the app database
-   Then the nine app tables exist with the columns `ARCHITECTURE.md` lists and the schema version is the latest migration
+   Then the seven app tables exist with the columns `ARCHITECTURE.md` lists and the schema version is the latest migration
 
 5. The supplied schema is untouched
    Given the supplied scheduling database after start
@@ -75,7 +75,7 @@ Demo:
 11. `wireframe` The dashboard has its place
     Given the deployed app
     When I open `/business`
-    Then I see the title "Meridian AI agent: business view", the tabs Overview, Handoffs, Waitlist and Conversations, and one empty panel for each of the 10 metrics in `KEY_METRICS.md`, named as there
+    Then I see the title "Meridian AI agent: business view", the tabs Overview, Handoffs, Waitlist and Conversations, and one empty panel for each of the 9 metrics in `KEY_METRICS.md`, named as there
 
 #### Not in this story
 - The real caller chat screens — picked up by S20 and S21

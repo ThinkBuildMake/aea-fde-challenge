@@ -25,7 +25,7 @@
 | 11 | Orchestration | `openai` Python SDK on OpenRouter, hand-written tool loop | Log every turn (OB-1); commit before "booked" (RL-2) |
 | 12 | Eval harness | Custom Python runner, LLM judge, pytest | EV-3 to EV-7, SC-2 |
 | 13 | Hosting | Railway Hobby plan, one service, 1 GB volume | Approved (GC-4); disk survives deploys (HLD §7) |
-| 14 | Uptime checker and alerts | UptimeRobot free tier with email alerts; Railway deploy-failed webhook; a spend alert to a chat webhook | 5-minute external ping (DP-2) at $0 (GC-4); a miss reaches a person |
+| 14 | Uptime checker and alerts | None (builder, 2026-10-19): Railway's health check on deploy and its restart on crash; a spend banner on the business view; the OpenRouter key's own $250 limit | 5-minute external ping (DP-2) at $0 (GC-4); a miss reaches a person |
 | 15 | Secrets and settings | Railway environment variables read by one typed settings class; gitleaks in CI and pre-commit | DP-3, CP-2 |
 | 16 | CI/CD and tooling | GitHub Actions (ruff, pyright, pytest, gitleaks, pip-audit), Dependabot, `uv` lockfile; Railway deploys on push to `main` only after CI passes | Tested deploys; pinned versions |
 | 17 | Observability | The app's own business view, JSON logs on stdout, and Langfuse Cloud (US region, Hobby free tier) for traces | FR-5.3, OB-1; trace inspection for a reviewer |
@@ -40,7 +40,7 @@
 | Langfuse Cloud Hobby (50,000 units a month, 30-day retention, 2 users) | $0 [verify] |
 | OpenRouter fee on credits | 5.5% on a purchase if credits are used; reduced under BYOK [verify] |
 | Hosting (Railway Hobby, about 3 weeks) | $5 to $10 |
-| Uptime checker, CI | $0 |
+| CI | $0 |
 | **Typical** | **about $30 to $55** |
 | **Worst case** | **about $100 to $150** — only with many long eval runs or a bot hitting the public URL; touches the $100 CO-1 alert |
 
@@ -227,18 +227,13 @@ At these prices the high-level design's cost envelope (§6) is about 1.5 to 2 ti
 
 **Choice: Railway Hobby.** The least setup before 2026-10-21 (GC-1).
 
-**Needs from the design.** Freeze deploys from the evening of 2026-10-20 through 2026-11-05 except for fixes; 99% over about 15 days allows about 3.5 hours down (DP-2). Turn on "Wait for CI" so a failing commit never deploys, set a health-check path, and write down the rollback steps (Railway restores the previous image; whether the volume is untouched is [verify]). Keep CI fast, because a CI wait can slow a fix during the freeze. Seed the volume only when the file is missing, never on deploy. Run the reset (DP-4) and index rebuild (CH-1) inside the service with `railway ssh` (register an SSH key first and test it before the freeze), with a bearer-token admin route as the fallback, never an open one (GC-5). Plain `railway run` does not see the volume.
+**Needs from the design.** Freeze deploys from the evening of 2026-10-20 through 2026-11-05 except for fixes. No uptime monitor; a cold start after idle is acceptable, so Railway's app sleeping may be left on (builder, 2026-10-19) (DP-2). Turn on "Wait for CI" so a failing commit never deploys, set a health-check path, and write down the rollback steps (Railway restores the previous image; whether the volume is untouched is [verify]). Keep CI fast, because a CI wait can slow a fix during the freeze. Seed the volume only when the file is missing, never on deploy. Run the reset (DP-4) and index rebuild (CH-1) inside the service with `railway ssh` (register an SSH key first and test it before the freeze), with a bearer-token admin route as the fallback, never an open one (GC-5). Plain `railway run` does not see the volume.
 
-## 14. Uptime checker
+## 14. Uptime checker and alerts
 
-| Option | Pros | Cons |
-|---|---|---|
-| **UptimeRobot free** ✅ | 5-minute checks, 50 monitors, $0 (official pricing page). | Terms differ between pages: "hobby and non-profit" versus "any use"; a synthetic internal demo fits either [verify]. |
-| GitHub Actions cron | Already in use. | Schedules are delayed and disabled after 60 days idle; 5 minutes is its floor. |
+**Choice: none (builder, 2026-10-19).** UptimeRobot was chosen first, to log an outside ping every 5 minutes as evidence for DP-2's 99%. The builder dropped it: Railway restarts a crashed app, its health check guards each deploy, and a cold start after idle is acceptable. Spend alerts by chat webhook and Railway's deploy-failed webhook were dropped too. The business view shows a banner when spend passes the CO-1 line, and the OpenRouter key has its own $250 limit.
 
-**Choice: UptimeRobot free.** DP-2 asks for exactly this at $0 (GC-4).
-
-**Needs from the design.** The ping write must be best-effort so the response never waits on the database; the app's own ping log is the evidence for DP-2. A monitor nobody hears about is not monitoring: UptimeRobot emails on a miss; Railway posts a failed deploy to a chat webhook; the app posts once to the same webhook when cumulative spend passes the CO-1 threshold (Slack and Discord webhooks are free; UptimeRobot's own webhook alerts look paid [verify]).
+**Needs from the design.** `/health` stays as Railway's health-check path. No ping log, no webhook, no alert table. If app sleeping is on, the first reply after idle can exceed PF-1's 6 s; PF-1 is measured on eval runs, which run locally and are unaffected.
 
 ## 15. Secrets
 
@@ -281,9 +276,7 @@ At these prices the high-level design's cost envelope (§6) is about 1.5 to 2 ti
 | OpenRouter account; your Google key added under BYOK; about $50 of credit if any traffic is billed there | minutes to an hour | Every model call |
 | OpenRouter credit of about $50 covers chat fallbacks and embeddings; an OpenAI account with $5 only if the embeddings test fails | minutes | Embeddings |
 | Railway account on the Hobby plan, volume created | minutes | Deployment |
-| UptimeRobot account, one HTTP monitor on `/health`, email alerts on | minutes | DP-2 evidence and alerts |
 | Langfuse Cloud account in the US region (us.cloud.langfuse.com), a project, and its public and secret keys in Railway variables | minutes | Traces |
-| A Slack or Discord incoming webhook for alerts (deploy failed, spend threshold) | minutes | Alerts |
 | Railway: volume backups on, "Wait for CI" on, an SSH key registered for `railway ssh` | minutes | Backups, tested deploys, admin jobs |
 | GitHub repository secrets for deploy | minutes | CI |
 
@@ -322,6 +315,5 @@ None. The conflicts between requirements that the stack check found (fallback ti
 - [Google Gemini API deprecations](https://ai.google.dev/gemini-api/docs/deprecations)
 - [OpenAI text-embedding-3-small](https://developers.openai.com/api/docs/models/text-embedding-3-small)
 - [Cohere API pricing (secondary)](https://developer.puter.com/tutorials/cohere-api-pricing/)
-- [UptimeRobot pricing](https://uptimerobot.com/pricing/?rd=1)
 - [DigitalOcean volume pricing](https://docs.digitalocean.com/products/volumes/details/pricing/)
 - Claude model prices: Anthropic model list, cached 2026-10-06

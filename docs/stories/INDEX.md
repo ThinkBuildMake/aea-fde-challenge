@@ -78,7 +78,6 @@ flowchart LR
     S01 --> S16
     S01 --> S17
     S17 --> S48
-    S12 --> S18
     S17 --> S18
     S01 --> S22
     S07 --> S08
@@ -169,7 +168,7 @@ flowchart LR
     classDef held stroke-dasharray:5 4
     class S01,S29,S30,S31,S32,S33,S38,S34,S35,S36,S37,S39,S49,S40,S41 demo
     class S02,S03,S12,S13,S20,S47,S04,S14,S50,S43,S45,S44,S05,S06,S07,S21,S10,S46,S23,S16,S17,S48,S18,S22,S08,S09,S11,S15,S19,S24,S25,S26,S27,S28,S42 module
-    class S18 held
+    class S01 held
 ```
 
 Arrows point from a story to the stories it unblocks. Red = human demo (story 1 and wiring stories); grey = module story checked by agents. Dashed border = planning waits on a blocker below.
@@ -207,12 +206,13 @@ Additions approved by the builder:
 ## Blockers
 | # | Blocks stories | What is needed | Who decides | Source |
 |---|---|---|---|---|
-| 1 | S18 (criteria 4, 6, 7), S30 (criterion 5) | The Slack or Discord incoming webhook the alerts post to | the builder | `ARCHITECTURE.md` open question 15 |
-| 2 | S01, S02, S15, S30 | The external accounts and keys in "External wait" below, before each story starts | the builder | `STACK.md` → Prerequisites |
+| 1 | S01 | Railway: the account, a volume, backups on, "Wait for CI" on, and an SSH key for `railway ssh`. The builder says it is set up; it could not be checked from the build container, which has no Railway token and cannot reach Railway's API | the builder | `STACK.md` → Prerequisites |
 
 Decided on 2026-10-19 by the builder:
 - **The seven wireframe additions** are approved: volume block, waitlist zone, "after an error", safety-stop mark, spend banner, member fee line, and the turn-cap text "This conversation has reached its limit. Please start a new conversation, or ask for a call back." They are now in `ARCHITECTURE.md` (Design tradeoffs, row 2).
 - **Eval runs are reported to Langfuse as experiments** (S27-8, S41-11; Design tradeoffs, row 3).
+- **No uptime monitor and no alert messages.** UptimeRobot, the spend-alert webhook and Railway's deploy-failed webhook are dropped; cold starts are acceptable. The spend banner stays (CO-1 allows a banner), and the OpenRouter key has its own $250 limit (Design tradeoffs, row 4).
+- **OpenRouter and Langfuse are ready**, checked 2026-10-18: the OpenRouter key authenticates (limit $250, about $19.63 used) and the Langfuse keys authenticate against the US region.
 - **FR-2.6's "two documents disagree" case is an accepted gap.** No two current documents disagree, so no demo can show it; the "documents do not settle it" half is S49-2.
 
 No deadline is at risk or missed.
@@ -240,10 +240,10 @@ No deadline is at risk or missed.
 | S10 | [Record a handoff and take the caller's call-back window](S10-handoffs-and-callback-windows.md) | module | S01 | agents | M | Route and interface tests against a temporary app database, with `endWithHandoff` stubbed. |
 | S46 | [Let staff list open handoffs and mark them followed up](S46-staff-handoff-queue.md) | module | S10 | agents | M | Route tests against a temporary app database seeded with handoffs. |
 | S23 | [The business view's Handoffs, Waitlist and Conversations tabs](S23-handoffs-waitlist-conversations-tabs.md) | module | S22 | agents | M | Browser tests (Playwright) of each tab against stubbed lists. |
-| S16 | [Answer the uptime check and record each ping](S16-health-and-pings.md) | module | S01 | agents | M | Route tests against a temporary app database with the status interfaces stubbed. |
+| S16 | [Answer the host's health check](S16-health-check.md) | module | S01 | agents | S | Route tests with the status interfaces stubbed. |
 | S17 | [Compute the business view's success and supporting numbers](S17-overview-numbers.md) | module | S01 | agents | M | Route tests on a temporary app database seeded with synthetic conversations, turns, handoffs, flags and audit rows. |
-| S48 | [Check the promises and draw the last 24 hours](S48-overview-guarantees-and-series.md) | module | S17 | agents | M | Route tests on a temporary app database and scheduling copy seeded with synthetic turns, pings and audit rows. |
-| S18 | [Read total spend and alert once when it passes $100](S18-spend-and-alert.md) | module | S12, S17 | agents | L | Tests with a fake key-usage reader and a webhook recorder. One check against the real key usage, and one against a real failed deploy. |
+| S48 | [Check the promises and draw the last 24 hours of replies](S48-overview-guarantees-and-series.md) | module | S17 | agents | M | Route tests on a temporary app database and scheduling copy seeded with synthetic turns and audit rows. |
+| S18 | [Read total spend and flag it when it passes $100](S18-spend-banner.md) | module | S17 | agents | M | Tests with a fake key-usage reader, and one check against the real key usage. |
 | S22 | [The business view's Overview tab](S22-overview-tab.md) | module | S01 | agents | M | Browser tests (Playwright) of the tab against a stubbed overview with fixed numbers. |
 | S08 | [Move or cancel a visit and free the old window](S08-move-and-cancel-a-visit.md) | module | S07 | agents | M | Tests against a temporary copy of the supplied database, one with the reference clock moved to 2026-10-21 12:00. |
 | S09 | [Restore the bookings to the supplied seed, with a backup first](S09-reset-scheduling-to-seed.md) | module | S03 | agents | M | Run the reset command on a copy after a test booking, then compare slot counts and table contents with the seed. |
@@ -256,7 +256,7 @@ No deadline is at risk or missed.
 | S27 | [Run the scenarios four at a time and write the run record](S27-eval-runner.md) | module | S01 | agents | L | Runs on two synthetic scenarios against the app with the fake model, and one run on a known RunResult fixture to check the summary arithmetic. |
 | S28 | [Grade answers with a judge and compare two runs](S28-judge-and-compare.md) | module | S27 | agents | M | The judge on two fixed transcripts with the real judge model; the compare command on two fixture run records. |
 | S29 | [Ask a policy question in the chat and get the current answer](S29-answer-a-policy-question.md) | wiring | S02, S04, S12, S13, S14, S20, S43, S44, S45, S47, S50 | human demo | M | "Is the diagnostic fee $79?" gets $89 on the real screen; Thanksgiving hours, the $149 after-hours fee and a price range follow |
-| S30 | [See the business view on real conversations and real pings](S30-overview-on-real-data.md) | wiring | S29, S06, S16, S17, S18, S22, S47, S48 | human demo | M | The Overview shows real pings, settled calls, a new conversation within a minute, and one spend alert |
+| S30 | [See the business view on real conversations](S30-overview-on-real-data.md) | wiring | S29, S06, S16, S17, S18, S22, S47, S48 | human demo | M | The Overview shows settled calls, volume, a new conversation within a minute, and the spend banner; /health checks the real parts |
 | S31 | [A gas smell stops the chat and shows up in the Handoffs tab](S31-safety-stop.md) | wiring | S29, S10, S46, S21, S23 | human demo | M | "I smell gas" shows the red banner, books nothing and appears in the Handoffs tab |
 | S32 | [Hand a disputed charge to a supervisor with a call-back time](S32-handoff-and-callback.md) | wiring | S29, S10, S46, S21, S23 | human demo | M | "I was charged twice" gets a supervisor call-back for the afternoon, with the full story in the Handoffs tab |
 | S33 | [Identify the caller and book a visit from the chat](S33-identify-and-book.md) | wiring | S29, S05, S06, S07, S21 | human demo | M | Omar Patel by account number books Wed 2026-10-21 8 to 12 with Jun Park; slot 115 is booked in the database; Sunday gets the nearest window |
@@ -272,73 +272,71 @@ No deadline is at risk or missed.
 | S42 | [Write the README and record the walkthrough video](S42-readme-and-video.md) | module | S41 | agents | M | A README check against a list of required sections, a timed clone-to-run on a clean machine, and the video's length read from its file. The builder watches the video before it is submitted. |
 
 ## Timeline
-Capacity: 5 stories built at once (the builder, 2026-10-18). Demos are watched as soon as each is ready (the builder, 2026-10-18), taken here as within 30 minutes between 08:00 and 22:00 Central **[assumed]**. Start: Sun 2026-10-18 18:00 Central, once this set is approved **[assumed]**.
+Capacity: 5 stories built at once (the builder, 2026-10-18). Demos are watched as soon as each is ready (the builder, 2026-10-18), taken here as within 30 minutes between 08:00 and 22:00 Central **[assumed]**. Start: Sun 2026-10-18 19:30 Central **[assumed]**.
 
-Total: 565 – 1,170 agent minutes plus one 6 – 15 minute eval run. Last required demo: Mon 08:20 likely, Mon 13:10 high. Everything built and demoed by Mon 08:30 likely, Mon 13:30 high (S42's video adds about 1 hour of the builder's time after that). There are 15 demos of about 10 minutes each, in 5 rounds. Times come from a schedule that runs at most 5 stories at once, starts each one only after its blockers are done (a wiring blocker: demoed), and holds demos to 08:00 to 22:00.
+Total: 550 – 1,135 agent minutes plus one 6 – 15 minute eval run. Last required demo: Mon 10:16 likely, Mon 13:10 high. Everything built and demoed by Mon 10:26 likely, Mon 13:30 high (S42's video adds about 1 hour of the builder's time after that). There are 15 demos of about 10 minutes each, in 5 rounds. Times come from a schedule that runs at most 5 stories at once, starts each one only after its blockers are done (a wiring blocker: demoed), and holds demos to 08:00 to 22:00.
 
 | # | Story | Agent minutes (likely – high) | Built by (likely – high) | Demo done by (likely – high) | Needed for |
 |---|---|---|---|---|---|
-| S01 | Skeleton | 20 – 45 | Sun 18:20 – Sun 18:45 | Sun 18:30 – Sun 19:25 | GC-1 |
-| S02 | Safety screen | 20 – 45 | Sun 18:50 – Sun 20:10 | — | GC-1 |
-| S03 | Index build | 20 – 45 | Sun 18:50 – Sun 20:10 | — | GC-1 |
-| S12 | Start and solved tap | 10 – 20 | Sun 18:40 – Sun 19:45 | — | GC-1 |
-| S13 | Agent turn | 20 – 45 | Sun 18:50 – Sun 20:10 | — | GC-1 |
-| S20 | Chat basics | 10 – 20 | Sun 18:40 – Sun 19:45 | — | GC-1 |
-| S47 | Idle close | 10 – 20 | Sun 18:50 – Sun 20:05 | — | GC-1 |
-| S04 | Search and fees | 10 – 20 | Sun 19:00 – Sun 20:30 | — | GC-1 |
-| S14 | Reply guards | 10 – 20 | Sun 19:00 – Sun 20:30 | — | GC-1 |
-| S50 | Agent tools | 10 – 20 | Sun 19:00 – Sun 20:30 | — | GC-1 |
-| S43 | Model failures | 10 – 20 | Sun 19:00 – Sun 20:45 | — | GC-1 |
-| S45 | Reply checks | 10 – 20 | Sun 19:00 – Sun 20:45 | — | GC-1 |
-| S44 | Tool failures | 5 – 10 | Sun 19:05 – Sun 20:40 | — | GC-1 |
-| S05 | Identify and bills | 10 – 20 | Sun 18:50 – Sun 20:05 | — | GC-1 |
-| S06 | Windows and visits | 10 – 20 | Sun 19:10 – Sun 20:25 | — | GC-1 |
-| S07 | Book | 10 – 20 | Sun 19:10 – Sun 20:25 | — | GC-1 |
-| S21 | Chat flow states | 10 – 20 | Sun 19:10 – Sun 20:50 | — | GC-1 |
-| S10 | Handoffs | 10 – 20 | Sun 19:10 – Sun 20:50 | — | GC-1 |
-| S46 | Handoff queue | 10 – 20 | Sun 19:20 – Sun 21:10 | — | GC-1 |
-| S23 | Other tabs | 10 – 20 | Sun 19:30 – Sun 21:25 | — | GC-1 |
-| S16 | Health | 10 – 20 | Sun 19:15 – Sun 21:00 | — | GC-1 |
-| S17 | Overview numbers | 10 – 20 | Sun 19:20 – Sun 21:05 | — | GC-1 |
-| S48 | Guarantees and series | 10 – 20 | Sun 19:30 – Sun 21:25 | — | GC-1 |
-| S18 | Spend alert | 20 – 45 | Sun 19:40 – Sun 21:55 | — | GC-1 |
-| S22 | Overview tab | 10 – 20 | Sun 19:20 – Sun 21:05 | — | GC-1 |
-| S08 | Move and cancel | 10 – 20 | Sun 19:20 – Sun 21:10 | — | GC-1 |
-| S09 | Seed reset | 10 – 20 | Sun 19:25 – Sun 21:20 | — | GC-1 |
-| S11 | Waitlist | 10 – 20 | Sun 19:30 – Sun 21:30 | — | GC-1 |
-| S15 | Langfuse traces | 20 – 45 | Sun 19:45 – Sun 22:05 | — | GC-1 |
-| S19 | Conversations and flags | 10 – 20 | Sun 19:40 – Sun 21:45 | — | GC-1 |
-| S24 | Limits and headers | 10 – 20 | Sun 19:50 – Sun 22:05 | — | GC-1 |
-| S25 | Retrieval eval | 10 – 20 | Sun 19:40 – Sun 21:45 | — | GC-1 |
-| S26 | 31 scenarios | 10 – 20 | Sun 19:40 – Sun 21:50 | — | GC-1 |
-| S27 | Eval runner | 20 – 45 | Sun 20:00 – Sun 22:30 | — | GC-1 |
-| S28 | Judge and compare | 10 – 20 | Sun 20:10 – Sun 22:50 | — | GC-1 |
-| S29 | Policy answer | 10 – 20 | Sun 19:50 – Sun 22:10 | Sun 20:00 – Mon 08:10 | GC-1 (answers first) |
-| S30 | Overview live | 10 – 20 | Sun 20:10 – Mon 08:30 | Sun 20:20 – Mon 09:10 | GC-1 |
-| S31 | Safety stop | 10 – 20 | Sun 20:10 – Mon 08:30 | Sun 20:30 – Mon 09:20 | GC-1 |
-| S32 | Dispute handoff | 10 – 20 | Sun 20:10 – Mon 08:30 | Sun 20:40 – Mon 09:30 | GC-1 |
-| S33 | Book a visit | 10 – 20 | Sun 20:10 – Mon 08:30 | Sun 20:50 – Mon 09:40 | GC-1 (booking first) |
-| S38 | Feedback loop | 10 – 20 | Sun 20:30 – Mon 09:30 | Sun 21:00 – Mon 10:10 | GC-1 |
-| S34 | Waitlist | 5 – 10 | Sun 20:55 – Mon 09:50 | Sun 21:10 – Mon 10:30 | GC-1 |
-| S35 | Change a visit | 10 – 20 | Sun 21:00 – Mon 10:00 | Sun 21:20 – Mon 10:40 | GC-1 |
-| S36 | Billing | 10 – 20 | Sun 21:00 – Mon 10:00 | Sun 21:30 – Mon 10:50 | GC-1 |
-| S37 | Failures | 10 – 20 | Sun 21:00 – Mon 10:00 | Sun 21:40 – Mon 11:00 | GC-1 |
-| S39 | Traces live | 5 – 10 | Sun 21:05 – Mon 10:20 | Sun 22:00 – Mon 11:20 | GC-1 |
-| S49 | Other handoffs | 10 – 20 | Sun 21:00 – Mon 10:00 | Sun 21:50 – Mon 11:10 | GC-1 |
-| S40 | Operator jobs | 10 – 20 | Sun 21:20 – Mon 10:50 | Mon 08:10 – Mon 11:30 | GC-1 |
-| S41 | Full eval | 20 – 45, plus a 6 – 15 min eval run and 30 min of the builder's grading | Sun 22:06 – Mon 12:00 | Mon 08:20 – Mon 13:10 | GC-1 (eval numbers first) |
-| S42 | README and video | 10 – 20 | Mon 08:30 – Mon 13:30 | — | GC-1 (deliverables) |
+| S01 | Skeleton | 20 – 45 | Sun 19:50 – Sun 20:15 | Sun 20:00 – Sun 20:55 | GC-1 |
+| S02 | Safety screen | 20 – 45 | Sun 20:20 – Sun 21:40 | — | GC-1 |
+| S03 | Index build | 20 – 45 | Sun 20:20 – Sun 21:40 | — | GC-1 |
+| S12 | Start and solved tap | 10 – 20 | Sun 20:10 – Sun 21:15 | — | GC-1 |
+| S13 | Agent turn | 20 – 45 | Sun 20:20 – Sun 21:40 | — | GC-1 |
+| S20 | Chat basics | 10 – 20 | Sun 20:10 – Sun 21:15 | — | GC-1 |
+| S47 | Idle close | 10 – 20 | Sun 20:20 – Sun 21:35 | — | GC-1 |
+| S04 | Search and fees | 10 – 20 | Sun 20:30 – Sun 22:00 | — | GC-1 |
+| S14 | Reply guards | 10 – 20 | Sun 20:30 – Sun 22:00 | — | GC-1 |
+| S50 | Agent tools | 10 – 20 | Sun 20:30 – Sun 22:00 | — | GC-1 |
+| S43 | Model failures | 10 – 20 | Sun 20:30 – Sun 22:15 | — | GC-1 |
+| S45 | Reply checks | 10 – 20 | Sun 20:30 – Sun 22:15 | — | GC-1 |
+| S44 | Tool failures | 5 – 10 | Sun 20:35 – Sun 22:10 | — | GC-1 |
+| S05 | Identify and bills | 10 – 20 | Sun 20:20 – Sun 21:35 | — | GC-1 |
+| S06 | Windows and visits | 10 – 20 | Sun 20:40 – Sun 21:55 | — | GC-1 |
+| S07 | Book | 10 – 20 | Sun 20:40 – Sun 21:55 | — | GC-1 |
+| S21 | Chat flow states | 10 – 20 | Sun 20:40 – Sun 22:20 | — | GC-1 |
+| S10 | Handoffs | 10 – 20 | Sun 20:40 – Sun 22:20 | — | GC-1 |
+| S46 | Handoff queue | 10 – 20 | Sun 20:50 – Sun 22:40 | — | GC-1 |
+| S23 | Other tabs | 10 – 20 | Sun 21:00 – Sun 22:55 | — | GC-1 |
+| S16 | Health | 5 – 10 | Sun 20:40 – Sun 22:20 | — | GC-1 |
+| S17 | Overview numbers | 10 – 20 | Sun 20:50 – Sun 22:35 | — | GC-1 |
+| S48 | Guarantees and series | 10 – 20 | Sun 21:00 – Sun 22:55 | — | GC-1 |
+| S18 | Spend alert | 10 – 20 | Sun 21:00 – Sun 23:00 | — | GC-1 |
+| S22 | Overview tab | 10 – 20 | Sun 20:50 – Sun 22:35 | — | GC-1 |
+| S08 | Move and cancel | 10 – 20 | Sun 20:50 – Sun 22:40 | — | GC-1 |
+| S09 | Seed reset | 10 – 20 | Sun 20:50 – Sun 22:40 | — | GC-1 |
+| S11 | Waitlist | 10 – 20 | Sun 21:00 – Sun 23:00 | — | GC-1 |
+| S15 | Langfuse traces | 20 – 45 | Sun 21:10 – Sun 23:25 | — | GC-1 |
+| S19 | Conversations and flags | 10 – 20 | Sun 21:10 – Sun 23:15 | — | GC-1 |
+| S24 | Limits and headers | 10 – 20 | Sun 21:20 – Sun 23:35 | — | GC-1 |
+| S25 | Retrieval eval | 10 – 20 | Sun 21:10 – Sun 23:15 | — | GC-1 |
+| S26 | 31 scenarios | 10 – 20 | Sun 21:10 – Sun 23:20 | — | GC-1 |
+| S27 | Eval runner | 20 – 45 | Sun 21:20 – Sun 23:45 | — | GC-1 |
+| S28 | Judge and compare | 10 – 20 | Sun 21:30 – Mon 00:05 | — | GC-1 |
+| S29 | Policy answer | 10 – 20 | Sun 21:20 – Sun 23:35 | Sun 21:30 – Mon 08:10 | GC-1 (answers first) |
+| S30 | Overview live | 10 – 20 | Sun 21:40 – Mon 08:30 | Sun 21:50 – Mon 09:10 | GC-1 |
+| S31 | Safety stop | 10 – 20 | Sun 21:40 – Mon 08:30 | Sun 22:00 – Mon 09:20 | GC-1 |
+| S32 | Dispute handoff | 10 – 20 | Sun 21:40 – Mon 08:30 | Mon 08:10 – Mon 09:30 | GC-1 |
+| S33 | Book a visit | 10 – 20 | Sun 21:40 – Mon 08:30 | Mon 08:20 – Mon 09:40 | GC-1 (booking first) |
+| S38 | Feedback loop | 10 – 20 | Sun 22:00 – Mon 09:30 | Mon 08:30 – Mon 10:10 | GC-1 |
+| S34 | Waitlist | 5 – 10 | Mon 08:25 – Mon 09:50 | Mon 08:40 – Mon 10:30 | GC-1 |
+| S35 | Change a visit | 10 – 20 | Mon 08:30 – Mon 10:00 | Mon 08:50 – Mon 10:40 | GC-1 |
+| S36 | Billing | 10 – 20 | Mon 08:30 – Mon 10:00 | Mon 09:00 – Mon 10:50 | GC-1 |
+| S37 | Failures | 10 – 20 | Mon 08:30 – Mon 10:00 | Mon 09:10 – Mon 11:00 | GC-1 |
+| S39 | Traces live | 5 – 10 | Mon 08:35 – Mon 10:20 | Mon 09:30 – Mon 11:20 | GC-1 |
+| S49 | Other handoffs | 10 – 20 | Mon 08:30 – Mon 10:00 | Mon 09:20 – Mon 11:10 | GC-1 |
+| S40 | Operator jobs | 10 – 20 | Mon 08:50 – Mon 10:50 | Mon 09:40 – Mon 11:30 | GC-1 |
+| S41 | Full eval | 20 – 45, plus a 6 – 15 min eval run and 30 min of the builder's grading | Mon 09:36 – Mon 12:00 | Mon 10:16 – Mon 13:10 | GC-1 (eval numbers first) |
+| S42 | README and video | 10 – 20 | Mon 10:26 – Mon 13:30 | — | GC-1 (deliverables) |
 
 Dates move with the start time and with when each demo is watched. A demo left overnight moves every later round to the next morning; the high column already allows for one.
 
 | External wait | Needed by story | Lead time | Start by |
 |---|---|---|---|
 | Railway Hobby account, a volume, backups on, "Wait for CI" on, an SSH key for `railway ssh`; GitHub Actions on the repository | S01 | minutes | now |
-| OpenRouter account and key with the builder's Google key (BYOK); input and output logging off | S02, S03, S13 | minutes | now |
+| OpenRouter key: ready (checked 2026-10-18). Still to confirm: the Google key under BYOK, and input and output logging off | S02, S03, S13 | minutes | now |
 | The builder reads and corrects the text extracted from the holiday image and the fee PDF, and marks each checked | S03 | about 15 minutes of the builder's time | while S03 builds (Sun evening) |
-| Langfuse Cloud project in the US region, its public and secret keys in Railway | S15 | minutes | before S15 starts (Sun evening) |
-| A Slack or Discord incoming webhook (Blocker 1) | S18 | minutes | before S18 starts (Sun evening) |
-| UptimeRobot monitor on `/health` every 5 minutes, email alerts on | S30 | minutes, then 15 minutes of pings | as soon as S01 is deployed |
+| Langfuse keys: ready in this environment (checked 2026-10-18); copy them into Railway's variables | S15 | minutes | before S15 is deployed |
 | The builder grades the 10 handled-driver transcripts of S41's first run into `eval/human_grades.json` (EV-5) | S41 (criterion 3) | about 30 minutes of the builder's time, included in S41's demo time above | right after S41's first run |
 | The builder reads 20 random calls and records agreement with the labels (EV-6) | S42 | about 30 minutes of the builder's time | any time before S42 |
 | Recording the 3 to 4 minute video (the demo-video skill, ElevenLabs key) and the builder watching it | S42 | about 1 hour | after S41 |
@@ -357,6 +355,8 @@ GC-1's order holds: the policy answer (S29) is the first wiring demo, booking (S
 
 | 2 | Seven additions to the wireframe: the volume block, waitlist zone, "after an error", safety-stop mark, spend banner, member fee line and turn-cap text | `ARCHITECTURE.md` → PRD and wireframe coverage; Conversation → Must hold → Fixed texts | FR-5.3, FR-5.7, FR-5.8, FR-1.10, OB-3, CO-1 each become visible; no row loses | Nothing; it closes presentation gaps | Seven small screen elements | approved by the builder on 2026-10-19 |
 | 3 | Eval runs are also reported to Langfuse as experiments (was optional) | `ARCHITECTURE.md` → Offline tools | DE-3: the run record stays the source of truth; EV-7: reporting is fire-and-forget, so the 15-minute limit holds | Nothing | One more Langfuse use; free-tier units (open question 14) | approved by the builder on 2026-10-19 |
+
+| 4 | No uptime monitor and no alert messages: UptimeRobot, the spend-alert webhook and Railway's deploy-failed webhook dropped; cold starts allowed | `REQUIREMENTS.md` DP-2, CO-1; `KEY_METRICS.md` (uptime metric removed); `HIGH_LEVEL_DESIGN.md` (uptime checker, alert webhook); `STACK.md` §14; `ARCHITECTURE.md` (`pings`, `alerts_sent`, `checkSpendAlert`, Alerts) | CO-1: a banner still shows past $100, and the key's $250 limit stops a loop; DP-2: Railway's health check and restart, at Should priority; PF-1 is measured on local eval runs, which cold starts do not touch | Two external accounts, two tables, one job | A crash or a quiet spend climb is seen only when someone opens the business view; re-adding UptimeRobot is a free monitor on `/health` | approved by the builder on 2026-10-19 |
 
 No tradeoff is needed for the deadlines: both are met on the high estimate.
 
@@ -384,7 +384,6 @@ No tradeoff is needed for the deadlines: both are met on the high estimate.
 | `GET /business` Overview tab, 30-second refresh | screen | Monitoring → API (Pages) | S22 | S22-1 to S22-9 | S23 |
 | Business view Handoffs, Waitlist and Conversations tabs, "Open trace" link | screen | PRD and wireframe coverage | S23 | S23-1 to S23-8 | — |
 | `closeIdleConversations` (job and interface) | job | Conversation → Jobs, Interface | S47 | S47-1 to S47-5 | — |
-| `checkSpendAlert` | job | Monitoring → Jobs | S18 | S18-4, S18-5, S18-7 | — |
 | `rebuildIndex` (command) | job | Knowledge → Jobs | S03 | S03-1, S03-9 | — |
 | `resetScheduling` (command) | job | Scheduling → Jobs | S09 | S09-1 | — |
 | `runEval` | job | Offline tools | S27 | S27-1, S27-2 | S28 |
@@ -400,8 +399,6 @@ No tradeoff is needed for the deadlines: both are met on the high estimate.
 | `waitlist_entries` | table | Database schema → Follow-ups | S11 | S11-1 | — |
 | `flags` | table | Database schema → Monitoring | S19 | S19-4 | — |
 | `eval_candidates` | table | Database schema → Monitoring | S19 | S19-5 | — |
-| `alerts_sent` | table | Database schema → Monitoring | S18 | S18-4 | — |
-| `pings` | table | Database schema → Monitoring | S16 | S16-1, S16-2 | — |
 | Supplied scheduling tables, unchanged | table | Database schema → Supplied | S01 | S01-5 | — |
 | App-database migrations | system-wide | Database schema → Migrations | S01 | S01-4 | — |
 | `redactCardNumbers` | interface | Safety and privacy | S02 | S02-1, S02-2, S02-3 | — |
@@ -434,8 +431,7 @@ No tradeoff is needed for the deadlines: both are met on the high estimate.
 | Caller model (eval) | external | Offline tools → runEval | S27 | S27-1 | — |
 | Langfuse Cloud traces | external | Conversation → Calls out | S15 | S15-1 | — |
 | OpenRouter key usage | external | Monitoring → Calls out | S18 | S18-1, S18-2 | — |
-| Alert webhook | external | Monitoring → Calls out; System-wide → Alerts | S18 | S18-4, S18-6 | — |
-| Uptime checker | external | HLD; Monitoring → getHealth | S16 | S16-2 | — |
+| Railway health check | external | Monitoring → getHealth | S16 | S16-1, S16-2 | S30-6 |
 | Railway production service and volume | external | Environments | S01 | S01-1, S01-6 | — |
 | Index file and in-memory swap | storage | Knowledge → Owns | S03 | S03-1, S03-8 | — |
 | Manifest | storage | Knowledge → Owns | S03 | S03-2, S03-3 | — |
@@ -457,10 +453,10 @@ No tradeoff is needed for the deadlines: both are met on the high estimate.
 | Admin routes (token check) | system-wide | System-wide contracts | S03 | S03-7 | S09, S19, S40-5 (gate) |
 | Backup | system-wide | System-wide contracts | S09 | S09-4 | — |
 | Security headers and cross-origin | system-wide | System-wide contracts | S24 | S24-6, S24-7 | — |
-| Alerts | system-wide | System-wide contracts | S18 | S18-4, S18-6 | — |
+| Alerts (none sent; the spend banner flag) | system-wide | System-wide contracts | S18 | S18-4, S18-5 | — |
 | Settings | system-wide | System-wide contracts | S01 | S01-7 | — |
 | Regression gate | system-wide | Environments and the regression gate | S01 | S01-8, S01-9 | every later story adds cases |
-| Dashboard panels for the 10 metrics | measurement | Measurement | S01 | S01-11 | S22 |
+| Dashboard panels for the 9 metrics | measurement | Measurement | S01 | S01-11 | S22 |
 | Settled calls (`outcome`, `solved`) | measurement | Measurement | S12 | S12-2, S12-3 | S47 |
 | Booking completion, booking mismatches (`visit_changes`) | measurement | Measurement | S07 | S07-1 | S08 |
 | Intent (`intent`, `intents_seen`) | measurement | Measurement | S13 | S13-4 | — |
@@ -504,7 +500,6 @@ No tradeoff is needed for the deadlines: both are met on the high estimate.
 | Must hold: Monitoring writes only its own tables | Must hold | Monitoring | S19 | S19-4 | — |
 | Must hold: every limit shown is the requirement's number | Must hold | Monitoring | S48 | S48-1 | S22-5 |
 | Must hold: the booking-agreement check | Must hold | Monitoring | S48 | S48-2, S48-3 | — |
-| Must hold: the ping insert never delays `/health` | Must hold | Monitoring | S16 | S16-4 | — |
 | Must hold: a flag needs a note | Must hold | Monitoring | S19 | S19-3 | — |
 | Must hold: a draft holds no card-shaped string | Must hold | Monitoring | S19 | S19-8 | — |
 | Must hold: no raw model messages or secret id leave through any route | Must hold | Monitoring | S19 | S19-2 | S38-8 |
@@ -520,13 +515,13 @@ No tradeoff is needed for the deadlines: both are met on the high estimate.
 | Failure: app database write fails during a handoff | failure | Follow-ups → Failure behaviour | S10 | S10-7 | S32-6 (live) |
 | Failure: key usage unreadable | failure | Monitoring → Failure behaviour | S18 | S18-2 | — |
 | Failure: a table query fails | failure | Monitoring → Failure behaviour | S17 | S17-6 | — |
-| Failure: index missing at start | failure | Knowledge → Failure behaviour | S04 | S04-6 | S30-8 (live) |
+| Failure: index missing at start | failure | Knowledge → Failure behaviour | S04 | S04-6 | S30-7 (live) |
 
 ## Flow coverage
 | Data flow (ARCHITECTURE trace) | Wiring story | Stubs it removes | Integration cases added to the gate |
 |---|---|---|---|
 | startConversation (with the idle sweep), sendMessage (a turn: redact, screen, search, getFee), recordSolved | S29 | Safety and Knowledge in S13, S14, S43, S44, S45, S50; the chat stubs in S20 | the $89 answer through the real modules; the embeddings-failure reply (S29-9) |
-| getOverview and getHealth | S30 | `getOverview` in S22; `closeIdleConversations` in S17 and S48; status stubs in S16 | idle close before the numbers; spend unknown on a key-usage failure; `/health` degraded with no index (S30-8) |
+| getOverview and getHealth | S30 | `getOverview` in S22; `closeIdleConversations` in S17 and S48; status stubs in S16 | idle close before the numbers; spend unknown on a key-usage failure; `/health` degraded with no index (S30-7) |
 | sendMessage emergency and burning-smell branches | S31 | Follow-ups on the safety path in S14; the safety stubs in S21, S23 | safety stop and handoff written together; screen failure gives the fallback (S31-7) |
 | A handoff and its callback window; listHandoffs, markHandoffFollowedUp | S32 | Follow-ups in S13, S14, S43, S45, S50; handoff stubs in S21, S23 | handoff and outcome in one transaction; app-database failure mid-handoff (S32-6) |
 | A booking | S33 | Scheduling in S13, S14, S43, S44, S45, S50; booking stubs in S21 | two racing chats get one booking; unwritable file shows no card (S33-7) |
@@ -636,11 +631,11 @@ No tradeoff is needed for the deadlines: both are met on the high estimate.
 | EV-5 | non-functional | "agrees with the builder's own grading on ≥ 9 of 10 scenarios" | S28, S41 | S28-3, S41-3 (grades: External wait) |
 | EV-6 | non-functional | "agrees with the labels on ≥ 17" | S42 | S42-5 |
 | EV-7 | non-functional | "≤ 15 minutes" | S41 | S41-1 |
-| CO-1 | non-functional | "an alert (or visible banner) fires when cumulative spend passes $100" | S18, S30 | S18-4, S30-5 |
+| CO-1 | non-functional | "a visible banner on the business view shows when cumulative spend passes $100" | S18, S30 | S18-4, S30-5 |
 | SC-1 | non-functional | "5 simultaneous conversations ... p95 latency within 1.5× the single-conversation p95 and 0 VR-6/VR-7 violations" | S24, S33 | S24-8 (latency), S33-7 (no double booking) |
 | SC-2 | non-functional | "4 conversations at once ... 0 VR-6 or VR-7 violations" | S27 | S27-7 |
 | DP-1 | non-functional | "opens in a clean browser with no login and answers a first message within PF-1" | S01, S29 | S01-1, S29-1 |
-| DP-2 | non-functional | "≥ 99% availability ... checked by an external ping every 5 minutes, each ping recorded" | S16, S48, S30 | S16-2, S48-4, S30-1, S30-6 |
+| DP-2 | non-functional | "up from deployment through 2026-11-05 ... No outside uptime monitor and no ping log" | S16, S30 | S16-1, S30-6 |
 | DP-3 | non-functional | "Secrets live in environment configuration, not the repository" | S01 | S01-7, S01-10 |
 | DP-4 | non-functional | "One documented command restores the scheduling database to its supplied seed state, leaving conversation logs, handoffs and the waitlist untouched" | S09, S40 | S09-1, S09-2, S40-1, S40-2 |
 | DP-5 | non-functional | "clone to running locally in ≤ 15 minutes" | S42 | S42-2 |
@@ -658,7 +653,6 @@ No tradeoff is needed for the deadlines: both are met on the high estimate.
 | Time for a turn that books, moves or cancels (PF-2) | `turns.latency_ms` where `has_write` | S13 | S01-11 | S35-8 |
 | Booking mismatches | `visit_changes` against the supplied tables | S07 | S01-11 | S35-8 |
 | Errors shown to callers (DE-1) | `turns.fallback_used`, `error` | S43 | S01-11 | S37-3 |
-| Uptime of the public URL (DP-2) | `pings` | S16 | S01-11 | S30-1, S30-6 |
 | Total model spend (CO-1) | key usage, `OPENAI_SPEND_USD`, `turns.cost_usd` | S18, S13 | S01-11 | S30-5 |
 
 ## Assumptions
@@ -726,7 +720,6 @@ No tradeoff is needed for the deadlines: both are met on the high estimate.
   - Langfuse's free tier (open question 14): S15-1, S39.
   - `railway ssh` (open question 6): S40-1.
   - WAL and journal mode on the volume (open questions 4, 9): S07-6.
-  - UptimeRobot: S30-1.
 
   None of these can rule out a story, because the architecture's fallbacks change no contract.
 
