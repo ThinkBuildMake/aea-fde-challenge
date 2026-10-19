@@ -36,7 +36,7 @@
       "status": "current",
       "reason": "The 2026 holiday hours, read from the image.",
       "text": "policies/holiday_hours_2026.png.txt",
-      "checkedOn": null
+      "checkedOn": "2026-10-19"
     },
     "policies/service_area.md": {
       "status": "current",
@@ -46,7 +46,7 @@
       "status": "current",
       "reason": "The 2026 fee schedule, read from the PDF.",
       "text": "pricing/2026_fee_schedule.pdf.txt",
-      "checkedOn": null
+      "checkedOn": "2026-10-19"
     },
     "pricing/repair_price_book_2026.csv": {
       "status": "current",

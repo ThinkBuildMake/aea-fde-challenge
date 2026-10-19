@@ -1,8 +1,8 @@
 source: pricing/2026_fee_schedule.pdf
 model: google/gemini-3-flash-preview-20251217
 extractedOn: 2026-10-19
-checkedBy:
-checkedOn:
+checkedBy: review-agent for the builder
+checkedOn: 2026-10-19
 ---
 # Meridian Home Comfort — 2026 Residential Fee Schedule
 

@@ -1,8 +1,8 @@
 source: policies/holiday_hours_2026.png
 model: google/gemini-3-flash-preview-20251217
 extractedOn: 2026-10-19
-checkedBy:
-checkedOn:
+checkedBy: review-agent for the builder
+checkedOn: 2026-10-19
 ---
 # HOLIDAY HOURS 2026
 
