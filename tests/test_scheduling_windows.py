@@ -176,3 +176,24 @@ def test_vr7_every_window_is_bookable_by_that_customer(
         assert status in (("open", "reserved_members") if member else ("open",))
         assert w.member_only == (status == "reserved_members")
     assert find_open_windows(ctx, customer_id, "estimate").windows == []
+
+
+def test_missing_file_raises_and_is_not_created(ctx: AppContext, started: Settings):
+    from app.scheduling.service import identify_customer
+
+    started.SCHEDULING_DB_PATH.unlink()
+    with pytest.raises(SchedulingUnavailable):
+        find_open_windows(ctx, "MHC-10001", "hvac_repair")
+    with pytest.raises(SchedulingUnavailable):
+        identify_customer(ctx, "Linda Foster", phone="512-555-0101")
+    assert not started.SCHEDULING_DB_PATH.exists()
+
+
+def test_non_iso_preferred_date_is_no_preference(ctx: AppContext):
+    result = find_open_windows(
+        ctx, "MHC-10004", "hvac_repair", preferred_date="next tuesday"
+    )
+    assert result.windows
+    assert result.matched_request is False
+    plain = find_open_windows(ctx, "MHC-10004", "hvac_repair")
+    assert [w.slot_id for w in result.windows] == [w.slot_id for w in plain.windows]

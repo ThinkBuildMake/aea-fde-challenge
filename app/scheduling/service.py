@@ -6,7 +6,7 @@ from contextlib import closing
 from datetime import date, datetime, timedelta
 
 from app.context import AppContext
-from app.scheduling.store import connect, zone_for_city
+from app.scheduling.store import SchedulingUnavailable, connect, zone_for_city
 from app.types import (
     AppointmentView,
     Billing,
@@ -22,10 +22,6 @@ from app.types import (
     SlotCounts,
     Window,
 )
-
-
-class SchedulingUnavailable(Exception):
-    """The supplied scheduling database could not be used."""
 
 
 class SlotUnavailable(Exception):
@@ -107,6 +103,13 @@ def identify_customer(
     )
 
 
+def _iso_date(value: str | None) -> date | None:
+    try:
+        return date.fromisoformat(value) if value else None
+    except ValueError:
+        return None
+
+
 def find_open_windows(
     ctx: AppContext,
     customer_id: str,
@@ -177,8 +180,8 @@ def find_open_windows(
     ]
     if matching:
         return OpenWindows(windows=matching, matched_request=True, reason=None)
-    if preferred_date:
-        wanted = date.fromisoformat(preferred_date)
+    wanted = _iso_date(preferred_date)
+    if wanted:
         windows.sort(
             key=lambda w: (
                 abs((date.fromisoformat(w.date) - wanted).days),
