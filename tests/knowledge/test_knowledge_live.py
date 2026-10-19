@@ -19,14 +19,20 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+_BUILT: list[tuple[AppContext, Settings]] = []
+
+
 @pytest.fixture
 def live(kb_settings: Settings) -> tuple[AppContext, Settings]:
-    settings = kb_settings.model_copy(
-        update={"OPENROUTER_API_KEY": SecretStr(os.environ["OPENROUTER_API_KEY"])}
-    )
-    ctx = create_app(settings, embedder=OpenRouterEmbedder(settings)).state.ctx
-    rebuild_index(ctx)
-    return ctx, settings
+    """One real-embedding build shared by the tests in this module."""
+    if not _BUILT:
+        settings = kb_settings.model_copy(
+            update={"OPENROUTER_API_KEY": SecretStr(os.environ["OPENROUTER_API_KEY"])}
+        )
+        ctx = create_app(settings, embedder=OpenRouterEmbedder(settings)).state.ctx
+        rebuild_index(ctx)
+        _BUILT.append((ctx, settings))
+    return _BUILT[0]
 
 
 def test_live_diagnostic_query_finds_89(live):
