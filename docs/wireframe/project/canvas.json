@@ -1,0 +1,14 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-10-17T15:00:00Z" },
+  "title": "Meridian Agent Wireframe",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 760, "h": 940, "title": "1. Caller chat (public URL)", "expand": "fill", "is_interactive": true },
+    "Dashboard.dc.html": { "x": 840, "y": 0, "w": 1280, "h": 1560, "title": "2. Business view (monitoring, handoffs, flags)", "expand": "fill", "is_interactive": true }
+  },
+  "order": ["Main.dc.html", "Dashboard.dc.html"],
+  "notes": {},
+  "designSystems": []
+}

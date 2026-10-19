@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Caller chat</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',system-ui,sans-serif;background:#EEF1F4;color:#14202B}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="min-height:900px;box-sizing:border-box;padding:16px;display:flex;flex-direction:column;gap:12px;max-width:760px;margin:0 auto">
+
+  <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:#4A5A68">
+    <span style="font-weight:600">Wireframe: preview a state</span>
+    <sc-for list="{{scenes}}" as="s" hint-placeholder-count="8">
+      <button onClick="{{ s.go }}" style="min-height:44px;padding:0 12px;border-radius:8px;border:1px solid {{ s.border }};background:{{ s.bg }};color:{{ s.fg }};font-size:12px;cursor:pointer">{{ s.label }}</button>
+    </sc-for>
+  </div>
+
+  <div style="background:#FFFFFF;border:1px solid #CBD3DA;border-radius:12px;display:flex;flex-direction:column;overflow:hidden">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid #E1E6EB">
+      <div>
+        <div style="font-size:16px;font-weight:600">Meridian Home Comfort</div>
+        <div style="font-size:12px;color:#4A5A68">Virtual assistant. Repairs, visits, fees, membership, warranty, billing.</div>
+      </div>
+      <button onClick="{{ newConversation }}" style="min-height:44px;padding:0 14px;border-radius:8px;border:1px solid #0F5E8C;background:#FFFFFF;color:#0F5E8C;font-size:14px;font-weight:500;cursor:pointer">New conversation</button>
+    </div>
+
+    <sc-if value="{{ showBanner }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:12px 16px;background:{{ bannerBg }};color:{{ bannerFg }};font-size:14px;font-weight:500;border-bottom:1px solid #E1E6EB">{{ bannerText }}</div>
+    </sc-if>
+
+    <div style="padding:16px;display:flex;flex-direction:column;gap:12px;min-height:420px">
+      <sc-for list="{{messages}}" as="m" hint-placeholder-count="4">
+        <div style="display:flex;justify-content:{{ m.align }}">
+          <div style="max-width:84%;padding:10px 14px;border-radius:12px;background:{{ m.bg }};color:{{ m.fg }};font-size:15px;line-height:1.45">{{ m.text }}</div>
+        </div>
+      </sc-for>
+
+      <sc-if value="{{ showSlots }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:8px;margin-left:8px">
+          <div style="font-size:12px;color:#4A5A68">Open windows in your area (example data)</div>
+          <sc-for list="{{slots}}" as="sl" hint-placeholder-count="3">
+            <button onClick="{{ sl.pick }}" style="min-height:44px;text-align:left;padding:8px 14px;border-radius:8px;border:1px solid #0F5E8C;background:#FFFFFF;color:#0F5E8C;font-size:14px;cursor:pointer">{{ sl.label }}</button>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showConfirm }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-left:8px;border:1px solid #1B7F4B;border-radius:12px;padding:12px 14px;background:#F0F8F3;font-size:14px;line-height:1.5">
+          <div style="font-weight:600;color:#14532D">Visit booked (example data)</div>
+          <div>Thursday [date], 8 AM to 12 PM</div>
+          <div>Technician [name]</div>
+          <div>Diagnostic fee $89, credited toward the repair</div>
+          <sc-if value="{{ onWaitlist }}" hint-placeholder-val="{{ false }}"><div style="margin-top:6px;font-weight:500;color:#0F5E8C">On the waitlist for an earlier window. The team will call you if one opens.</div></sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showTyping }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex">
+          <div style="padding:10px 14px;border-radius:12px;background:#E8EDF1;color:#4A5A68;font-size:15px">Looking that up...</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showHandoffForm }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-left:8px;border:1px solid #CBD3DA;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px">
+          <div style="font-size:14px;font-weight:600">When is the best time for the call back?</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <button style="min-height:44px;padding:0 14px;border-radius:8px;border:1px solid #0F5E8C;background:#FFFFFF;color:#0F5E8C;font-size:14px;cursor:pointer">Morning</button>
+            <button style="min-height:44px;padding:0 14px;border-radius:8px;border:1px solid #0F5E8C;background:#FFFFFF;color:#0F5E8C;font-size:14px;cursor:pointer">Afternoon</button>
+            <button style="min-height:44px;padding:0 14px;border-radius:8px;border:1px solid #0F5E8C;background:#FFFFFF;color:#0F5E8C;font-size:14px;cursor:pointer">Evening</button>
+          </div>
+          <div style="font-size:12px;color:#4A5A68">The person who calls will already have this conversation, so you will not need to repeat it.</div>
+        </div>
+      </sc-if>
+    </div>
+
+    <sc-if value="{{ showSolved }}" hint-placeholder-val="{{ false }}">
+      <div style="border-top:1px solid #E1E6EB;padding:12px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:#F7F9FB">
+        <span style="font-size:14px;font-weight:500;flex:1 1 200px">Did this solve it?</span>
+        <button onClick="{{ tapYes }}" style="min-height:44px;padding:0 16px;border-radius:8px;border:none;background:#0F5E8C;color:#FFFFFF;font-size:14px;font-weight:500;cursor:pointer">Yes, that solved it</button>
+        <button onClick="{{ tapNo }}" style="min-height:44px;padding:0 16px;border-radius:8px;border:1px solid #0F5E8C;background:#FFFFFF;color:#0F5E8C;font-size:14px;font-weight:500;cursor:pointer">No</button>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ showChips }}" hint-placeholder-val="{{ true }}">
+      <div style="border-top:1px solid #E1E6EB;padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px;background:#F7F9FB">
+        <sc-for list="{{chips}}" as="c" hint-placeholder-count="4">
+          <button onClick="{{ c.go }}" style="min-height:44px;padding:0 12px;border-radius:999px;border:1px solid #9AA8B5;background:#FFFFFF;color:#14202B;font-size:13px;cursor:pointer">{{ c.label }}</button>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ showInput }}" hint-placeholder-val="{{ true }}">
+      <div style="border-top:1px solid #E1E6EB;padding:12px 16px;display:flex;gap:8px">
+        <label for="msg" style="position:absolute;left:-9999px">Type your message</label>
+        <input id="msg" placeholder="Type your message" style="flex:1;min-height:44px;box-sizing:border-box;padding:0 12px;border-radius:8px;border:1px solid #9AA8B5;font-size:15px;font-family:inherit">
+        <button style="min-height:44px;padding:0 18px;border-radius:8px;border:none;background:#0F5E8C;color:#FFFFFF;font-size:14px;font-weight:500;cursor:pointer">Send</button>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ showEnded }}" hint-placeholder-val="{{ false }}">
+      <div style="border-top:1px solid #E1E6EB;padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:#F7F9FB">
+        <span style="font-size:14px;color:#4A5A68;flex:1 1 220px">{{ endedText }}</span>
+        <button onClick="{{ newConversation }}" style="min-height:44px;padding:0 16px;border-radius:8px;border:none;background:#0F5E8C;color:#FFFFFF;font-size:14px;font-weight:500;cursor:pointer">Start a new conversation</button>
+      </div>
+    </sc-if>
+  </div>
+
+  <div style="font-size:12px;color:#4A5A68;line-height:1.5">Wireframe. Names, dates and technicians are [placeholders]. No login. Card numbers are never requested; payment is by a link.</div>
+</div>
+</x-dc>
+
+<script type="text/x-dc" data-dc-script data-props='{"scene":{"editor":"enum","default":"start","options":["start","booking","confirmed","answer","handoff","safety","error","loading"],"section":"Preview"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const scene = this.state.scene ?? this.props.scene ?? 'start';
+    const go = (s) => () => this.setState({ scene: s });
+    const you = (t) => ({ text: t, align: 'flex-end', bg: '#0F5E8C', fg: '#FFFFFF' });
+    const bot = (t) => ({ text: t, align: 'flex-start', bg: '#E8EDF1', fg: '#14202B' });
+
+    const greet = bot('Hi, I am the Meridian assistant. I can book a visit, check or change one, answer questions about fees, membership and warranty, or look up your bill. What do you need?');
+    const msgs = {
+      start: [greet],
+      loading: [greet, you('My AC is blowing warm air.')],
+      booking: [
+        greet,
+        you('My AC is blowing warm air.'),
+        bot('Sorry to hear that. Is there any burning smell, smoke, sparks or a tripped breaker?'),
+        you('No, it just blows warm.'),
+        bot('Thanks. I will book an HVAC repair visit. Can I have your name and phone number?'),
+        you('[Name], [phone]'),
+        bot('Thank you, [first name]. I found you. Pick a window that suits you:')
+      ],
+      earlier: [
+        you('Can you do anything earlier?'),
+        bot('Thursday [date], 12 to 4 is the earliest I have for a non-emergency. I can book it and also add you to the waitlist for an earlier window. If one opens, the team will call you.')
+      ],
+      waitlisted: [
+        you('Book it and add me to the waitlist.'),
+        bot('Done. You are booked for Thursday [date], 12 to 4, with [technician], and you are on the waitlist for an earlier window. The $89 diagnostic fee is credited toward the repair.')
+      ],
+      confirmed: [
+        you('Thursday 8 to 12 please.'),
+        bot('You are booked for Thursday [date], 8 AM to 12 PM, with [technician]. The $89 diagnostic fee is credited toward the repair. The technician confirms any repair price on site.')
+      ],
+      answer: [
+        you('What does the maintenance plan cover?'),
+        bot('The Comfort Club membership is $[price] a year. It includes [one tune-up a year and priority scheduling]. Members also have the $89 diagnostic fee waived. (Example answer from the current documents.)')
+      ],
+      handoff: [
+        you('I was charged twice for the same visit.'),
+        bot('I am sorry about that. I cannot settle a billing dispute myself, so I am passing this to a supervisor. They will call you within 1 business day. I have written down what you told me so you will not need to repeat it.')
+      ],
+      safety: [
+        you('I smell gas near the furnace.'),
+        bot('Please leave the house now and call 911 from outside, or call the gas utility from outside. Do not use switches or phones inside. I cannot book a visit for this. Your account has been flagged for a safety follow-up.')
+      ],
+      error: [
+        you('Can I move my visit?'),
+        bot('Sorry, I am having trouble right now and did not want to guess. A person can help you with this. Would you like a call back?')
+      ]
+    };
+
+    const banner = {
+      handoff: ['Passed to a person', '#FFF4E0', '#7A4B00'],
+      safety: ['Safety stop. Leave the home and call 911.', '#FDE8E7', '#8C1D18'],
+      error: ['Something went wrong on our side', '#FFF4E0', '#7A4B00']
+    }[scene];
+
+    const solvedScenes = scene === 'confirmed' || scene === 'answer' || scene === 'waitlisted';
+    const inEnded = scene === 'handoff' || scene === 'safety' || scene === 'thanks' || scene === 'notsolved';
+    const endedText = { handoff: 'This conversation has been handed over.', safety: 'This conversation has ended.', thanks: 'Thanks, your answer is saved. This conversation has ended.', notsolved: 'Thanks. We recorded that this did not solve it. Reply below if you want a person.' }[scene] ?? '';
+
+    const thanks = [you('Thursday 8 to 12 please.'), bot('Thanks for letting us know. Have a good day.')];
+    const messages = scene === 'thanks' ? thanks : scene === 'notsolved' ? [bot('Sorry that did not solve it. Would you like me to pass you to a person?')] : msgs[scene];
+
+    const labelFor = { start: 'Start', loading: 'Loading', booking: 'Booking', earlier: 'Wants earlier', waitlisted: 'Waitlisted', confirmed: 'Confirmed', answer: 'Answer', handoff: 'Handoff', safety: 'Safety stop', error: 'Error' };
+    const scenes = Object.keys(labelFor).map((k) => ({
+      label: labelFor[k], go: go(k),
+      bg: k === scene ? '#0F5E8C' : '#FFFFFF', fg: k === scene ? '#FFFFFF' : '#14202B', border: k === scene ? '#0F5E8C' : '#9AA8B5'
+    }));
+
+    return {
+      scenes, messages,
+      showBanner: !!banner, bannerText: banner ? banner[0] : '', bannerBg: banner ? banner[1] : '#fff', bannerFg: banner ? banner[2] : '#000',
+      showSlots: scene === 'booking' || scene === 'earlier',
+      slots: scene === 'earlier'
+        ? [{ label: 'Book Thursday [date], 12 to 4 and join the waitlist for earlier', pick: go('waitlisted') }, { label: 'Book Thursday [date], 12 to 4 only', pick: go('confirmed') }, { label: 'Talk to a person instead', pick: go('handoff') }]
+        : ['Thursday [date], 1 PM to 5 PM, [technician]', 'Friday [date], 8 AM to 12 PM, [technician]', 'Friday [date], 1 PM to 5 PM, [technician]'].map((l) => ({ label: l, pick: go('confirmed') })).concat([{ label: 'Nothing earlier? Ask for an earlier window', pick: go('earlier') }]),
+      showConfirm: scene === 'confirmed' || scene === 'waitlisted',
+      onWaitlist: scene === 'waitlisted',
+      showTyping: scene === 'loading',
+      showHandoffForm: scene === 'handoff',
+      showSolved: solvedScenes,
+      tapYes: go('thanks'), tapNo: go('notsolved'),
+      showChips: scene === 'start',
+      chips: [
+        { label: 'My AC is blowing warm air', go: go('booking') },
+        { label: 'What does the maintenance plan cover?', go: go('answer') },
+        { label: 'I was charged twice', go: go('handoff') },
+        { label: 'I smell gas', go: go('safety') },
+        { label: 'Simulate an outage', go: go('error') }
+      ],
+      showInput: scene === 'start' || scene === 'booking' || scene === 'loading' || scene === 'error' || scene === 'notsolved' || solvedScenes,
+      showEnded: inEnded, endedText,
+      newConversation: go('start')
+    };
+  }
+}
+</script>
+</body>
+</html>
