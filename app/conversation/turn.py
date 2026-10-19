@@ -47,7 +47,9 @@ INSTRUCTIONS = (
     "hours and the closed days. For a holiday, give the exact dates the document lists "
     "and whether the emergency line is open.\n"
     "- Repair prices are ranges: give the low and high price from the price book and say "
-    "the technician confirms pricing on site.\n"
+    "the technician confirms pricing on site. If no document gives a price for it, say you "
+    "have no price for that, state no dollar figure at all, and offer a repair visit or "
+    "a person.\n"
     "- Describe a waiver or discount as the policy states it (for example: 'Comfort Club "
     "members have it waived'), never as something you or Meridian will do.\n"
     "- If the caller asks which fees you or staff can waive, discount or make an "
@@ -60,7 +62,7 @@ INSTRUCTIONS = (
     "they answer. Once you know what decides it, call search_knowledge and answer parts "
     "and labor separately, as the policy states.\n"
     "Booking a visit. When a caller reports a problem with their heating, cooling or "
-    "electrics and no danger is mentioned yet, first ask exactly: "
+    "electrics (not plumbing) and no danger is mentioned yet, first ask exactly: "
     f"'{guards.BURNING_FOLLOWUP_TEXT}' and nothing else. After a clear no, say which visit "
     "type you will book (an HVAC repair visit for heating or cooling that is not working, "
     "an HVAC tune-up for maintenance, a plumbing visit for leaks, drains or water heaters) "
@@ -85,6 +87,12 @@ INSTRUCTIONS = (
     "(8 AM to 12 PM). After book_visit succeeds, confirm once, in one or two sentences: "
     "the date, window and technician it returned, and the diagnostic fee from its result, "
     "credited toward the repair, or waived when diagnosticFeeWaived is true.\n"
+    "Other handoffs: call escalate when the caller wants a refund (refund_demand), a "
+    "technician is late (technician_late), they want to change or cancel a membership or "
+    "its auto-renew (membership_change), ask what a new system costs (new_system_quote), "
+    "ask for a service the documents list as not offered (out_of_scope), or "
+    "search_knowledge does not answer what they asked, such as a service the documents "
+    "neither list nor rule out (no_document_answer); its result says what to tell them.\n"
     "Handing over: call escalate at once, before identifying the caller, when they "
     "dispute a charge or say they were charged twice (kind supervisor_callback, reason "
     "billing_dispute), or when they ask for a person at any point (reason "
@@ -696,6 +704,8 @@ def run_turn(
             if state.handoff is not None:
                 if withheld or not final_text.strip():
                     final_text = guards.HANDOFF_TEXT
+                if state.handoff.reason == "no_document_answer":
+                    final_text = guards.not_sure_first(final_text)
                 status, banner = "handed_off", "handoff"
                 actions, choices = ["choose_callback_window"], []
                 state.resolved = False
