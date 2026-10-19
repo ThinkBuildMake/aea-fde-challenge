@@ -18,7 +18,21 @@ def _ctx(tmp_settings: Settings):
     s = tmp_settings.model_copy(
         update={"OPENROUTER_API_KEY": SecretStr(os.environ["OPENROUTER_API_KEY"])}
     )
-    return create_app(s).state.ctx
+    ctx = create_app(s).state.ctx
+    _open.append(ctx)
+    return ctx
+
+
+_open: list = []
+
+
+@pytest.fixture(autouse=True)
+def _close_clients():
+    yield
+    while _open:
+        c = _open.pop().safety
+        if c is not None:
+            c.close()
 
 
 def test_gas_is_emergency(tmp_settings: Settings) -> None:

@@ -4,7 +4,7 @@ import pytest
 
 from app.safety.service import redact_card_numbers
 
-DIGIT_RUN = re.compile(r"\d(?:[ -]?\d){12,18}")
+DIGIT_RUN = re.compile(r"\d(?:[ \t-]{0,3}\d){12,18}")
 
 
 def test_spaced_card_is_removed() -> None:
@@ -13,7 +13,16 @@ def test_spaced_card_is_removed() -> None:
     assert r.removed is True
 
 
-@pytest.mark.parametrize("text", ["4111-1111-1111-1111", "4111111111111111"])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "4111-1111-1111-1111",
+        "4111111111111111",
+        "4111  1111 1111 1111",
+        "4111 - 1111 - 1111 - 1111",
+        "4111\t1111\t1111\t1111",
+    ],
+)
 def test_other_formats_removed_and_stable(text: str) -> None:
     a = redact_card_numbers(text)
     b = redact_card_numbers(text)

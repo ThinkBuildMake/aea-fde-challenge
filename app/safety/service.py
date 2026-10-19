@@ -11,7 +11,7 @@ from app.context import AppContext
 from app.logs import log_event
 from app.types import RedactResult, Verdict
 
-CARD_RUN = re.compile(r"(?<!\d)\d(?:[ -]?\d){12,}(?!\d)")
+CARD_RUN = re.compile(r"(?<!\d)\d(?:[ \t-]{0,3}\d){12,}(?!\d)")
 CARD_PLACEHOLDER = "[card number removed]"
 SAFETY_TIMEOUT_S = 8.0
 
@@ -81,6 +81,9 @@ class OpenRouterSafetyClassifier:
             http_client=http_client,
         )
 
+    def close(self) -> None:
+        self._client.close()
+
     def classify(self, messages: list[dict[str, str]], timeout_s: float) -> str:
         resp = self._client.chat.completions.create(
             model=self._model,
@@ -115,7 +118,8 @@ def redact_card_numbers(text: str) -> RedactResult:
 
 _NOT_CLEAR = (
     "not sure", "unsure", "maybe", "don't know", "dont know", "idk",
-    "i think", "possibly", "might", "yes",
+    "i think", "possibly", "might", "yes", "no idea", "no clue", "can't tell",
+    "cant tell", "cannot tell", "not certain",
 )  # fmt: skip
 _NO_STARTS = ("no", "nope", "nah", "none", "negative", "not at all")
 
