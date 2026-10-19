@@ -198,3 +198,103 @@ def test_flush_drops_sends_still_queued_after_its_wait():
     exporter.release.set()
     time.sleep(0.3)
     assert exporter.calls == 1
+
+
+class FakeResponse:
+    def __init__(self, status: int, body: dict) -> None:
+        self.status_code = status
+        self._body = body
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise tracing.httpx2.HTTPStatusError(
+                "bad", request=tracing.httpx2.Request("GET", "http://x"), response=None
+            )
+
+    def json(self) -> dict:
+        return self._body
+
+
+def test_fetch_project_id_reads_the_first_project(monkeypatch):
+    calls = []
+
+    def get(url, **kwargs):
+        calls.append((url, kwargs.get("auth")))
+        return FakeResponse(200, {"data": [{"id": "proj-1", "name": "meridian"}]})
+
+    monkeypatch.setattr(tracing.httpx2, "get", get)
+    got = tracing.fetch_project_id("https://lf.test/", "test-public", "test-secret", 5)
+    assert got == "proj-1"
+    assert calls == [
+        ("https://lf.test/api/public/projects", ("test-public", "test-secret"))
+    ]
+
+
+@pytest.mark.parametrize("failure", ["401", "raise"])
+def test_fetch_project_id_failure_is_one_warning_and_none(monkeypatch, capsys, failure):
+    def get(url, **kwargs):
+        if failure == "raise":
+            raise tracing.httpx2.ConnectError("down test-secret")
+        return FakeResponse(401, {"message": "test-secret invalid"})
+
+    monkeypatch.setattr(tracing.httpx2, "get", get)
+    got = tracing.fetch_project_id("https://lf.test", "test-public", "test-secret", 5)
+    out = capsys.readouterr().out
+    lines = [json.loads(line) for line in out.splitlines()]
+    assert got is None
+    assert [(x["event"], x["level"]) for x in lines] == [
+        ("trace_project_lookup_failed", "warning")
+    ]
+    assert "test-secret" not in out and "test-public" not in out
+
+
+def test_tracer_learns_project_after_first_successful_export(monkeypatch):
+    looked_up = []
+
+    def fetch(base_url, public_key, secret_key, timeout_s):
+        looked_up.append(base_url)
+        return "proj-1"
+
+    monkeypatch.setattr(tracing, "fetch_project_id", fetch)
+    tracer = LangfuseTracer("http://127.0.0.1:9", "test-public", "test-secret")
+    assert tracer.project_id is None
+    memory = InMemorySpanExporter()
+    tracer._exporter = memory  # the tracer's own exporter, pointed at memory
+    tracer.send(sample(), lambda _id: None)
+    tracer.send(sample(), lambda _id: None)
+    tracer.flush(5)
+    assert memory.get_finished_spans()
+    assert tracer.project_id == "proj-1"
+    assert looked_up == ["http://127.0.0.1:9"]
+
+
+def test_tracer_skips_project_lookup_after_failed_export(monkeypatch):
+    monkeypatch.setattr(
+        tracing, "fetch_project_id", lambda *a: pytest.fail("looked up")
+    )
+    tracer = LangfuseTracer("http://127.0.0.1:9", "test-public", "test-secret")
+    tracer._exporter = Failing(raise_it=False)
+    tracer.send(sample(), lambda _id: None)
+    tracer.flush(5)
+    assert tracer.project_id is None
+
+
+def test_injected_exporter_never_looks_up_project(monkeypatch):
+    monkeypatch.setattr(
+        tracing, "fetch_project_id", lambda *a: pytest.fail("looked up")
+    )
+    tracer, sent = exported(InMemorySpanExporter())
+    assert len(sent) == 1 and tracer.project_id is None
+
+
+def test_trace_link_base():
+    known = tracing.RecordingTracer(project_id="proj-1")
+    assert (
+        tracing.trace_link_base("https://lf.test/", known)
+        == "https://lf.test/project/proj-1/traces"
+    )
+    assert tracing.trace_link_base("https://lf.test/", None) == "https://lf.test/trace"
+    assert (
+        tracing.trace_link_base("https://lf.test", tracing.RecordingTracer())
+        == "https://lf.test/trace"
+    )

@@ -74,7 +74,7 @@ def kb_settings(started: Settings, kb_copy: Path) -> Settings:
 @pytest.fixture(autouse=True)
 def screen_says_safe(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
     """The real danger screen runs everywhere; only its network call answers safe.
-    Its own tests and S14's choose a verdict; the S29 live test uses the real one."""
+    Its own tests and S14's choose a verdict; the live tests use the real one."""
     name = request.module.__name__
     if name.startswith(
         (
@@ -82,6 +82,7 @@ def screen_says_safe(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyP
             "tests.test_interfaces",
             "tests.test_policy_answers_live",
             "tests.test_other_handoffs_live",
+            "tests.test_turn_trace_live",
         )
     ):
         return

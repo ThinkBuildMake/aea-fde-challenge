@@ -26,7 +26,7 @@
     if (t.traceId) {
       var trace = B.el("div", "turn-trace");
       var a = B.el("a", "trace-link", "Open trace");
-      a.href = (B.data.traceBase || "") + "/trace/" + encodeURIComponent(t.traceId);
+      a.href = (B.data.traceBase || "") + "/" + encodeURIComponent(t.traceId);
       a.target = "_blank";
       a.rel = "noopener";
       trace.appendChild(a);
