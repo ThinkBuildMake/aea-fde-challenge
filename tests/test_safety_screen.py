@@ -147,6 +147,23 @@ def test_classifier_never_sees_card_digits(tmp_settings: Settings) -> None:
         ("No", True, "burning_followup", "safe"),
         ("Yes, the breaker tripped", True, "burning_followup", "emergency"),
         ("No, but now there is smoke", True, "emergency", "emergency"),
+        (
+            "None of those, but it smells stronger",
+            True,
+            "burning_followup",
+            "emergency",
+        ),
+        ("No, but now there is smoke", True, "burning_followup", "emergency"),
+        ("No smoke, but I see sparks", True, "burning_followup", "emergency"),
+        ("No, it's getting hotter", True, "burning_followup", "emergency"),
+        ("No, the breaker tripped", True, "burning_followup", "emergency"),
+        ("No, there's still a smell", True, "safe", "emergency"),
+        ("Nope", True, "burning_followup", "safe"),
+        ("No sir", True, "burning_followup", "safe"),
+        ("Not at all", True, "burning_followup", "safe"),
+        ("Nah", True, "burning_followup", "safe"),
+        ("Nothing like that", True, "burning_followup", "safe"),
+        ("No, no smoke or sparks.", True, "burning_followup", "safe"),
     ],
 )
 def test_vr2_followup_rules(
