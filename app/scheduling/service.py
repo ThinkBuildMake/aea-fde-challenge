@@ -1,10 +1,12 @@
 import json
 import re
+import sqlite3
 import uuid
 from contextlib import closing
+from datetime import date, datetime, timedelta
 
 from app.context import AppContext
-from app.scheduling.store import connect, zone_for_city
+from app.scheduling.store import SchedulingUnavailable, connect, zone_for_city
 from app.types import (
     AppointmentView,
     Billing,
@@ -18,11 +20,8 @@ from app.types import (
     PaymentLink,
     ResetResult,
     SlotCounts,
+    Window,
 )
-
-
-class SchedulingUnavailable(Exception):
-    """The supplied scheduling database could not be used."""
 
 
 class SlotUnavailable(Exception):
@@ -104,6 +103,13 @@ def identify_customer(
     )
 
 
+def _iso_date(value: str | None) -> date | None:
+    try:
+        return date.fromisoformat(value) if value else None
+    except ValueError:
+        return None
+
+
 def find_open_windows(
     ctx: AppContext,
     customer_id: str,
@@ -111,17 +117,125 @@ def find_open_windows(
     preferred_date: str | None = None,
     preferred_window: str | None = None,
 ) -> OpenWindows:
-    return OpenWindows(windows=[], matched_request=False, reason="no_open_windows")
+    def none(reason: str) -> OpenWindows:
+        return OpenWindows(windows=[], matched_request=False, reason=reason)
+
+    try:
+        with closing(connect(ctx)) as conn:
+            customer = conn.execute(
+                "SELECT city, membership_tier FROM customers WHERE customer_id = ?",
+                (customer_id,),
+            ).fetchone()
+            if customer is None:
+                return none("unknown_customer")
+            zone = zone_for_city(customer["city"])
+            if zone is None:
+                return none("city_not_in_zone_map")
+            if service_type not in ("hvac_repair", "hvac_tune_up", "plumbing"):
+                return none("no_open_windows")
+            statuses = (
+                ("open", "reserved_members")
+                if customer["membership_tier"] in ("standard", "plus")
+                else ("open",)
+            )
+            marks = ",".join("?" * len(statuses))
+            rows = conn.execute(
+                "SELECT s.slot_id, s.slot_date, s.window, s.zone, s.service_type, "
+                "s.status, t.name FROM appointment_slots s "
+                "JOIN technicians t ON t.tech_id = s.tech_id "
+                "WHERE s.zone = ? AND s.service_type = ? "
+                f"AND s.status IN ({marks}) AND s.slot_date >= ? "
+                "ORDER BY s.slot_date, s.window, s.slot_id",
+                (zone, service_type, *statuses, ctx.settings.REFERENCE_DATE),
+            ).fetchall()
+            if not rows and service_type == "plumbing":
+                has_plumbing = conn.execute(
+                    "SELECT 1 FROM appointment_slots "
+                    "WHERE zone = ? AND service_type = 'plumbing' LIMIT 1",
+                    (zone,),
+                ).fetchone()
+                if has_plumbing is None:
+                    return none("no_plumber_in_zone")
+    except sqlite3.Error as e:
+        raise SchedulingUnavailable("scheduling database unavailable") from e
+    windows = [
+        Window(
+            slot_id=r["slot_id"],
+            date=r["slot_date"],
+            window=r["window"],
+            service_type=r["service_type"],
+            zone=r["zone"],
+            technician_name=r["name"],
+            member_only=r["status"] == "reserved_members",
+        )
+        for r in rows
+    ]
+    if not windows:
+        return none("no_open_windows")
+    matching = [
+        w
+        for w in windows
+        if (preferred_date is None or w.date == preferred_date)
+        and (preferred_window is None or w.window == preferred_window)
+    ]
+    if matching:
+        return OpenWindows(windows=matching, matched_request=True, reason=None)
+    wanted = _iso_date(preferred_date)
+    if wanted:
+        windows.sort(
+            key=lambda w: (
+                abs((date.fromisoformat(w.date) - wanted).days),
+                w.date,
+                w.window,
+                w.slot_id,
+            )
+        )
+    return OpenWindows(windows=windows, matched_request=False, reason=None)
 
 
 def list_appointments(ctx: AppContext, customer_id: str) -> list[AppointmentView]:
-    return []
+    try:
+        with closing(connect(ctx)) as conn:
+            rows = conn.execute(
+                "SELECT a.appointment_id, a.issue_description, s.slot_date, s.window, "
+                "s.service_type, s.zone, t.name FROM appointments a "
+                "JOIN appointment_slots s ON s.slot_id = a.slot_id "
+                "JOIN technicians t ON t.tech_id = s.tech_id "
+                "WHERE a.customer_id = ? AND a.status = 'scheduled' "
+                "ORDER BY s.slot_date, s.window, a.appointment_id",
+                (customer_id,),
+            ).fetchall()
+    except sqlite3.Error as e:
+        raise SchedulingUnavailable("scheduling database unavailable") from e
+    now = datetime.fromisoformat(
+        f"{ctx.settings.REFERENCE_DATE}T{ctx.settings.REFERENCE_TIME}"
+    )
+    return [
+        AppointmentView(
+            appointment_id=r["appointment_id"],
+            date=r["slot_date"],
+            window=r["window"],
+            technician_name=r["name"],
+            service_type=r["service_type"],
+            zone=r["zone"],
+            issue=r["issue_description"] or "",
+            late_cancel_fee_applies=datetime.fromisoformat(
+                f"{r['slot_date']}T{r['window'][:5]}"
+            )
+            - now
+            < timedelta(hours=24),
+        )
+        for r in rows
+    ]
 
 
 def get_appointment(
     ctx: AppContext, customer_id: str, appointment_id: int
 ) -> AppointmentView:
-    raise SchedulingUnavailable("not implemented")
+    for appointment in list_appointments(ctx, customer_id):
+        if appointment.appointment_id == appointment_id:
+            return appointment
+    raise AppointmentNotFound("appointment not found")
 
 
 def book_visit(ctx: AppContext, customer_id: str, slot_id: int, issue: str) -> Booking:
@@ -190,4 +304,11 @@ def reset_scheduling(ctx: AppContext) -> ResetResult:
 
 
 def scheduling_status(ctx: AppContext) -> str:
+    if not ctx.settings.SCHEDULING_DB_PATH.is_file():
+        return "error"
+    try:
+        with closing(connect(ctx)) as conn:
+            conn.execute("SELECT 1 FROM appointment_slots LIMIT 1").fetchall()
+    except sqlite3.Error:
+        return "error"
     return "ok"
