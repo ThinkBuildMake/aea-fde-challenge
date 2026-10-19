@@ -229,3 +229,21 @@ def test_eval_worker_lift_still_applies(started: Settings, tmp_path: Path):
 
     assert len(set(cids)) == 3
     assert codes == [200] * 3
+
+
+def test_client_address_reads_every_forwarded_header_line():
+    from starlette.requests import Request
+
+    from app.ratelimit import client_address
+
+    scope = {
+        "type": "http",
+        "headers": [
+            (b"x-forwarded-for", b"spoof"),
+            (b"x-forwarded-for", b"9.9.9.9"),
+        ],
+        "client": ("10.0.0.1", 1234),
+    }
+    key = client_address(Request(scope))
+    print("key:", key)
+    assert key == "9.9.9.9"

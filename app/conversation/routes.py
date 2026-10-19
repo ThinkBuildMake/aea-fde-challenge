@@ -92,21 +92,6 @@ def send_message(
     if not payload.text.strip():
         raise AppError(422, "empty_message", "Please type a message first.")
     require_conversation(db, conversation_id)
-    outcome, turn_count = db.execute(
-        "SELECT outcome, turn_count FROM conversations WHERE id = ?",
-        (conversation_id,),
-    ).fetchone()
-    if outcome:
-        raise AppError(409, "conversation_ended", "This conversation has ended.")
-    if turn_count >= ctx.settings.TURN_CAP:
-        db.execute(
-            "UPDATE conversations SET outcome = 'failed', outcome_reason = 'turn_cap', "
-            f"ended_at = {NOW_SQL} WHERE id = ? AND outcome IS NULL",
-            (conversation_id,),
-        )
-        raise AppError(
-            409, "turn_limit_reached", "This conversation has reached its limit."
-        )
     with _in_flight_lock:
         if conversation_id in _in_flight:
             raise AppError(
@@ -116,6 +101,23 @@ def send_message(
             )
         _in_flight.add(conversation_id)
     try:
+        # Checked while holding this conversation's slot, so no second turn races past.
+        outcome, turn_count = db.execute(
+            "SELECT outcome, turn_count FROM conversations WHERE id = ?",
+            (conversation_id,),
+        ).fetchone()
+        if outcome:
+            raise AppError(409, "conversation_ended", "This conversation has ended.")
+        if turn_count >= ctx.settings.TURN_CAP:
+            db.execute(
+                "UPDATE conversations SET outcome = 'failed', "
+                f"outcome_reason = 'turn_cap', ended_at = {NOW_SQL} "
+                "WHERE id = ? AND outcome IS NULL",
+                (conversation_id,),
+            )
+            raise AppError(
+                409, "turn_limit_reached", "This conversation has reached its limit."
+            )
         reply = run_turn(
             ctx,
             db,

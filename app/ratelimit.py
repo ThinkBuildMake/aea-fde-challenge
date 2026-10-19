@@ -12,7 +12,7 @@ def client_address(request: Request) -> str:
     """The rightmost X-Forwarded-For entry: the address the platform's proxy saw."""
     forwarded = [
         part.strip()
-        for part in request.headers.get("x-forwarded-for", "").split(",")
+        for part in ",".join(request.headers.getlist("x-forwarded-for")).split(",")
         if part.strip()
     ]
     if forwarded:
