@@ -3,6 +3,7 @@ from typing import Any
 
 import pytest
 
+from app.knowledge.service import UnknownFee
 from app.llm import FakeModelProvider
 from app.settings import Settings
 from app.types import (
@@ -11,6 +12,7 @@ from app.types import (
     CancelResult,
     CustomerRef,
     Fee,
+    MoveResult,
     OpenWindows,
     Window,
 )
@@ -112,7 +114,7 @@ def tool_results(started: Settings, cid: str) -> list[dict[str, Any]]:
 
 def identify(customer_id: str) -> list[dict[str, Any]]:
     call = tool_call("id", "identify_customer")
-    call["function"]["arguments"] = json.dumps({"name": "Test"})
+    call["function"]["arguments"] = json.dumps({"name": "Test", "phone": "555-0100"})
     return [call]
 
 
@@ -328,3 +330,83 @@ def test_handoff_gets_the_conversations_ids(
     assert record.customer_id == "MHC-10002"
     assert record.summary_source == "agent"
     assert record.stated_name is None and record.stated_phone is None
+
+
+def raise_unknown_fee(*args: Any, **kwargs: Any) -> Fee:
+    raise UnknownFee("FEE-DIAG")
+
+
+def test_book_without_a_price_book_states_no_fee(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    stub(monkeypatch, "app.scheduling.service.identify_customer", customer("MHC-10002"))
+    stub(monkeypatch, "app.scheduling.service.book_visit", booking())
+    monkeypatch.setattr("app.knowledge.service.get_fee", raise_unknown_fee)
+    cid, replies = run(
+        started,
+        identify("MHC-10002"),
+        [tool_call("b", "book_visit", slotId=3, issue="no cooling", callerQuote="yes")],
+    )
+    out = tool_results(started, cid)[-1]
+    assert out["ok"] is True and out["booking"]["diagnosticFeeCents"] is None
+    assert out["diagnosticFeeUnavailable"] is True
+    assert "Do not state a fee" in out["message"]
+    assert replies[1]["booking"]["diagnosticFeeCents"] is None
+
+
+def test_move_without_a_price_book_states_no_fee(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    stub(monkeypatch, "app.scheduling.service.identify_customer", customer("MHC-10002"))
+    stub(
+        monkeypatch,
+        "app.scheduling.service.move_visit",
+        MoveResult(booking=booking(), late_fee_applies=True),
+    )
+    monkeypatch.setattr("app.knowledge.service.get_fee", raise_unknown_fee)
+    cid, _ = run(
+        started,
+        identify("MHC-10002"),
+        [tool_call("m", "move_visit", appointmentId=7, newSlotId=3, callerQuote="yes")],
+    )
+    out = tool_results(started, cid)[-1]
+    assert out["booking"]["diagnosticFeeCents"] is None
+    assert out["diagnosticFeeUnavailable"] is True
+    assert out["lateFeeApplies"] is True and out["lateFeeCents"] is None
+    assert out["lateFeeUnavailable"] is True
+    assert "Do not state a fee" in out["message"]
+
+
+def test_move_late_fee_carries_the_amount(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    stub(monkeypatch, "app.scheduling.service.identify_customer", customer("MHC-10002"))
+    stub(
+        monkeypatch,
+        "app.scheduling.service.move_visit",
+        MoveResult(booking=booking(), late_fee_applies=True),
+    )
+    monkeypatch.setattr(
+        "app.knowledge.service.get_fee",
+        lambda ctx, code: Fee(code=code, cents=4900, source_file="pricing"),
+    )
+    cid, _ = run(
+        started,
+        identify("MHC-10002"),
+        [tool_call("m", "move_visit", appointmentId=7, newSlotId=3, callerQuote="yes")],
+    )
+    out = tool_results(started, cid)[-1]
+    assert out["lateFeeApplies"] is True and out["lateFeeCents"] == 4900
+    assert "lateFeeUnavailable" not in out
+
+
+def test_name_only_identify_is_refused_without_a_try(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    ident = stub(monkeypatch, "app.scheduling.service.identify_customer", None)
+    call = tool_call("id", "identify_customer")
+    call["function"]["arguments"] = json.dumps({"name": "Test"})
+    cid, _ = run(started, [call])
+    assert ident.calls == []
+    assert tool_results(started, cid)[0]["error"] == "missing_details"
+    assert rows(started, "SELECT identify_attempts FROM conversations")[0][0] == 0

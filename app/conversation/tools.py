@@ -280,7 +280,20 @@ def _report_status(
 def _identify_customer(
     ctx: AppContext, state: ToolState, args: dict[str, Any]
 ) -> dict[str, Any]:
-    if state.identify_attempts >= IDENTIFY_ATTEMPT_LIMIT:
+    if not any(args.get(k) for k in ("phone", "accountNumber", "serviceAddress")):
+        return {
+            "ok": False,
+            "error": "missing_details",
+            "message": "Ask for a phone number, account number or service address "
+            "as well as the name. This did not count as a try.",
+        }
+    reserved = state.db.execute(
+        "UPDATE conversations SET identify_attempts = identify_attempts + 1 "
+        "WHERE id = ? AND identify_attempts < ?",
+        (state.conversation_id, IDENTIFY_ATTEMPT_LIMIT),
+    ).rowcount
+    if not reserved:
+        state.identify_attempts = IDENTIFY_ATTEMPT_LIMIT
         return {
             "ok": False,
             "error": "identify_limit_reached",
@@ -296,12 +309,12 @@ def _identify_customer(
     )
     if ref is None:
         state.identify_attempts += 1
-        state.db.execute(
-            "UPDATE conversations SET identify_attempts = identify_attempts + 1 "
-            "WHERE id = ?",
-            (state.conversation_id,),
-        )
         return {"ok": False, "error": "no_match", "message": "No account matched."}
+    state.db.execute(
+        "UPDATE conversations SET identify_attempts = identify_attempts - 1 "
+        "WHERE id = ?",
+        (state.conversation_id,),
+    )
     state.customer_id = ref.customer_id
     state.customer_tier = ref.membership_tier
     state.db.execute(
@@ -351,12 +364,31 @@ def _stamp(ctx: AppContext, state: ToolState, booking: Booking) -> Booking:
     cents = _fee_cents(ctx, "FEE-DIAG")
     stamped = booking.model_copy(
         update={
-            "diagnostic_fee_cents": 0 if cents is None else cents,
+            "diagnostic_fee_cents": cents,
             "diagnostic_fee_waived": state.customer_tier in MEMBER_TIERS,
         }
     )
     state.commit(stamped)
     return stamped
+
+
+NO_FEE_NOTE = "The price book is unavailable. Do not state a fee amount."
+
+
+def _booking_result(booking: Booking) -> dict[str, Any]:
+    out: dict[str, Any] = {"ok": True, "booking": _dump(booking)}
+    if booking.diagnostic_fee_cents is None:
+        out["diagnosticFeeUnavailable"] = True
+        out["message"] = NO_FEE_NOTE
+    return out
+
+
+def _add_late_fee(ctx: AppContext, out: dict[str, Any]) -> None:
+    cents = _fee_cents(ctx, "FEE-LATE")
+    out["lateFeeCents"] = cents
+    if cents is None:
+        out["lateFeeUnavailable"] = True
+        out["message"] = NO_FEE_NOTE
 
 
 def _book_visit(
@@ -365,7 +397,7 @@ def _book_visit(
     booking = scheduling.book_visit(
         ctx, _customer(state), int(args["slotId"]), str(args["issue"])
     )
-    return {"ok": True, "booking": _dump(_stamp(ctx, state, booking))}
+    return _booking_result(_stamp(ctx, state, booking))
 
 
 def _move_visit(
@@ -374,13 +406,10 @@ def _move_visit(
     moved = scheduling.move_visit(
         ctx, _customer(state), int(args["appointmentId"]), int(args["newSlotId"])
     )
-    out: dict[str, Any] = {
-        "ok": True,
-        "booking": _dump(_stamp(ctx, state, moved.booking)),
-        "lateFeeApplies": moved.late_fee_applies,
-    }
+    out = _booking_result(_stamp(ctx, state, moved.booking))
+    out["lateFeeApplies"] = moved.late_fee_applies
     if moved.late_fee_applies:
-        out["lateFeeCents"] = _fee_cents(ctx, "FEE-LATE")
+        _add_late_fee(ctx, out)
     return out
 
 
@@ -394,7 +423,7 @@ def _cancel_visit(
     out = _dump(cancelled)
     out["ok"] = True
     if cancelled.late_fee_applies:
-        out["lateFeeCents"] = _fee_cents(ctx, "FEE-LATE")
+        _add_late_fee(ctx, out)
     return out
 
 
