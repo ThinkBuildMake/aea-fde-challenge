@@ -80,6 +80,29 @@ def has(text: str, pattern: str) -> bool:
     return re.search(pattern, text, re.IGNORECASE) is not None
 
 
+def emergency_line_open(text: str) -> bool:
+    return has(text, r"emergency line[^.]*\b(open|available)") and not has(
+        text, r"emergency line[^.]*\b(not open|not available|closed)"
+    )
+
+
+def members_have_it_waived(text: str) -> bool:
+    return has(text, r"members?\b[^.]*\bwaived|waived for[^.]*members") and not has(
+        text, r"\b(not|isn't|is not|aren't) (be )?waived"
+    )
+
+
+def gives_coverage_verdict(text: str) -> bool:
+    """A yes/no or 'it is covered' stated outside a question, before any detail is known."""
+    for sentence in re.split(r"(?<=[.!?])\s+", text.strip()):
+        if sentence.endswith("?"):
+            continue
+        plain = re.sub(r"\b(if|whether)\b[^,.]*", "", sentence, flags=re.IGNORECASE)
+        if has(plain, r"^(yes|no)\b|\bcovered\b"):
+            return True
+    return False
+
+
 def test_retired_fee_is_corrected(live):
     text, reply, turn = ask(live, "Is the diagnostic fee $79?")
     assert "$89" in text
@@ -93,14 +116,14 @@ def test_holiday_hours_from_the_image(live):
     assert has(text, r"\bnov(ember|\.)?\s+26")
     assert "27" in text
     assert has(text, r"\bclosed\b")
-    assert has(text, r"emergency line[^.]*\bopen|emergency line is (available|open)")
+    assert emergency_line_open(text)
 
 
 def test_after_hours_fee_from_the_pdf(live):
     text, _, _ = ask(live, "What does an after-hours emergency visit cost?")
     assert "$149" in text
     assert has(text, r"comfort club")
-    assert has(text, r"waive")
+    assert members_have_it_waived(text)
 
 
 def test_repair_price_is_a_range(live):
@@ -121,6 +144,10 @@ def test_staff_only_notes_stay_hidden(live):
         r"30 minutes",
         r"once per",
         r"courtesy",
+        r"%",
+        r"comfort club",
+        r"member",
+        r"\boff\b",
     ):
         assert not has(text, named), named
     retrieved = {r["sourceFile"] for r in json.loads(turn["retrieved"])}
@@ -132,6 +159,19 @@ def test_warranty_asks_for_the_deciding_detail(live):
     assert "?" in text
     assert has(text, r"brand|make|manufacturer|how old|age|installed|parts or labor")
     assert not has(text, r"\b\d+[- ]years?\b"), "states a coverage term"
+    assert not gives_coverage_verdict(text), "gives a coverage verdict before asking"
+
+
+def test_warranty_with_brand_and_age_is_answered(live):
+    text, _, turn = ask(
+        live,
+        "My American Standard compressor died and the system is only three years old. "
+        "Is that under warranty?",
+    )
+    retrieved = {r["sourceFile"] for r in json.loads(turn["retrieved"])}
+    assert "warranty/warranty_policy.md" in retrieved
+    assert has(text, r"\b10[- ]years?\b")
+    assert has(text, r"\bparts?\b") and has(text, r"\blabor\b")
 
 
 def test_regular_hours_from_the_faq(live):
