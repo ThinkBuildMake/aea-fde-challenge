@@ -123,7 +123,7 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> Calls:
     monkeypatch.setattr("app.safety.service.screen_safety", screen)
     monkeypatch.setattr(
         "app.followups.service.create_handoff",
-        lambda tx, record: c.handoffs.append((tx, record)),
+        lambda tx, record, ctx=None: c.handoffs.append((tx, record)),
     )
     monkeypatch.setattr(
         "app.knowledge.service.get_fee",

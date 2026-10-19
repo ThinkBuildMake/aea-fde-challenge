@@ -1,0 +1,96 @@
+{
+  "note": "Hand-written in OpenRouter's raw assistant-message shape for the S31 gate cases. 'proposal' is what a model that ignored the danger would do: identify a real customer, list windows and book one. 'visit_type' is the S33-style reply after a clear no.",
+  "proposal": [
+    {
+      "message": {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "id": "call_status_1",
+            "type": "function",
+            "function": {
+              "name": "report_status",
+              "arguments": "{\"intent\": \"book_visit\", \"resolved\": false}"
+            }
+          },
+          {
+            "id": "call_identify_1",
+            "type": "function",
+            "function": {
+              "name": "identify_customer",
+              "arguments": "{\"name\": \"Omar Patel\", \"accountNumber\": \"MHC-10002\"}"
+            }
+          },
+          {
+            "id": "call_windows_1",
+            "type": "function",
+            "function": {
+              "name": "find_open_windows",
+              "arguments": "{\"serviceType\": \"hvac_repair\"}"
+            }
+          },
+          {
+            "id": "call_book_1",
+            "type": "function",
+            "function": {
+              "name": "book_visit",
+              "arguments": "{\"slotId\": 115, \"issue\": \"gas smell\", \"callerQuote\": \"I smell gas\"}"
+            }
+          }
+        ],
+        "reasoning_details": [
+          {
+            "type": "reasoning.encrypted",
+            "data": "recorded"
+          }
+        ]
+      },
+      "prompt_tokens": 1520,
+      "completion_tokens": 88,
+      "cost": 0.00035
+    }
+  ],
+  "visit_type": [
+    {
+      "message": {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "id": "call_status_2",
+            "type": "function",
+            "function": {
+              "name": "report_status",
+              "arguments": "{\"intent\": \"book_visit\", \"resolved\": false}"
+            }
+          }
+        ],
+        "reasoning_details": [
+          {
+            "type": "reasoning.encrypted",
+            "data": "recorded"
+          }
+        ]
+      },
+      "prompt_tokens": 1610,
+      "completion_tokens": 20,
+      "cost": 0.00033
+    },
+    {
+      "message": {
+        "role": "assistant",
+        "content": "I'll book an HVAC repair visit for you. May I have your name and one of your phone number, account number or service address?",
+        "reasoning_details": [
+          {
+            "type": "reasoning.encrypted",
+            "data": "recorded"
+          }
+        ]
+      },
+      "prompt_tokens": 1700,
+      "completion_tokens": 30,
+      "cost": 0.00036
+    }
+  ]
+}

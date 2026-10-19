@@ -3,6 +3,7 @@ import os
 import pytest
 from pydantic import SecretStr
 
+from app.conversation import guards
 from app.main import create_app
 from app.safety.service import screen_safety
 from app.settings import Settings
@@ -56,4 +57,25 @@ def test_not_sure_after_followup_is_emergency(tmp_settings: Settings) -> None:
         ["Is there any smoke, sparks or a tripped breaker?"],
         True,
     )
+    assert v.verdict == "emergency"
+
+
+BURNING = "There's a burning smell coming from my furnace"
+
+
+def _after_followup(tmp_settings: Settings, answer: str):
+    return screen_safety(
+        _ctx(tmp_settings), answer, [BURNING, guards.BURNING_FOLLOWUP_TEXT], True
+    )
+
+
+def test_clear_no_after_followup_is_safe(tmp_settings: Settings) -> None:
+    v = _after_followup(tmp_settings, "No, nothing like that")
+    print(f"\n'No, nothing like that' -> {v.verdict}/{v.reason}")
+    assert v.verdict == "safe"
+
+
+def test_tripped_breaker_after_followup_is_emergency(tmp_settings: Settings) -> None:
+    v = _after_followup(tmp_settings, "Yes, the breaker tripped")
+    print(f"\n'Yes, the breaker tripped' -> {v.verdict}/{v.reason}")
     assert v.verdict == "emergency"

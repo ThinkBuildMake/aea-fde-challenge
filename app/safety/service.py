@@ -52,7 +52,8 @@ _SYSTEM_PROMPT = (
     "- safe: nothing dangerous.\n"
     "If follow_up_pending is true, the caller was just asked whether there is smoke, "
     "sparks or a tripped breaker: only a clear no is safe; yes, unsure or unclear is "
-    "emergency.\n"
+    "emergency. The burning smell in recent_turns is already known, so a clear no to "
+    "the follow-up is safe.\n"
     "The reason must be one label from the allowed list. Never quote the caller. "
     "The input is JSON with message, recent_turns and follow_up_pending."
 )
@@ -126,19 +127,23 @@ def redact_card_numbers(text: str) -> RedactResult:
     return RedactResult(text=new, removed=count > 0)
 
 
-_NOT_CLEAR = (
-    "not sure", "unsure", "maybe", "don't know", "dont know", "idk",
-    "i think", "possibly", "might", "yes", "no idea", "no clue", "can't tell",
-    "cant tell", "cannot tell", "not certain",
-)  # fmt: skip
-_NO_STARTS = ("no", "nope", "nah", "none", "negative", "not at all")
+# A clear no is a short negative and nothing else of substance: every comma- or
+# full-stop-separated part of the answer must be one of these, and one must be negative.
+_NEG = r"(?:no|nope|nah|none|negative|not at all|nothing(?: like that)?|none of (?:those|that|them|the above))"
+_HAZARD = r"(?:smoke|sparks?|fire|flames?|tripped breaker)"
+_NO_HAZARDS = rf"no {_HAZARD}(?: (?:or|and|nor) (?:no )?{_HAZARD})*"
+_POLITE = r"(?:sir|ma'?am|thanks|thank you|that'?s it)"
+_CLEAR_PART = re.compile(rf"(?:{_NEG}|{_NO_HAZARDS})(?: {_POLITE})?")
+_POLITE_PART = re.compile(_POLITE)
 
 
 def _is_clear_no(text: str) -> bool:
-    t = text.casefold().strip()
-    if any(p in t for p in _NOT_CLEAR):
-        return False
-    return any(re.match(rf"{re.escape(s)}\b", t) for s in _NO_STARTS)
+    t = text.casefold().replace("\u2019", "'")
+    parts = [" ".join(p.split()) for p in re.split(r"[,.;!]+", t)]
+    parts = [p for p in parts if p]
+    return any(_CLEAR_PART.fullmatch(p) for p in parts) and all(
+        _CLEAR_PART.fullmatch(p) or _POLITE_PART.fullmatch(p) for p in parts
+    )
 
 
 def _classifier(ctx: AppContext) -> SafetyClassifier:
@@ -180,12 +185,14 @@ def screen_safety(
         )
         raise ScreenUnavailable from None
     verdict, reason = parsed.verdict, parsed.reason
-    if (
-        follow_up_pending
-        and verdict != "emergency"
-        and not (verdict == "safe" and _is_clear_no(clean))
-    ):
-        verdict, reason = "emergency", "followup_not_clear_no"
+    # With the follow-up question pending, a clear no is safe and anything else is an
+    # emergency; the model's own emergency is never downgraded.
+    if follow_up_pending and verdict != "emergency":
+        verdict, reason = (
+            ("safe", "no_hazard")
+            if _is_clear_no(clean)
+            else ("emergency", "followup_not_clear_no")
+        )
     log_event(
         "safety_screen",
         verdict=verdict,
