@@ -2,6 +2,7 @@ import json
 import re
 import sqlite3
 import uuid
+from collections.abc import Callable
 from contextlib import closing
 from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
@@ -413,7 +414,7 @@ def _free_slot(conn: sqlite3.Connection, slot_id: int) -> None:
         raise SchedulingUnavailable("slot state is inconsistent")
 
 
-def _locked(ctx: AppContext, work):  # noqa: ANN001, ANN202
+def _locked[T](ctx: AppContext, work: Callable[[sqlite3.Connection], T]) -> T:
     """Run work(conn) in one write-locked transaction."""
     try:
         with closing(connect(ctx)) as conn:
