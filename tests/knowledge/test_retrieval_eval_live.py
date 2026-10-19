@@ -1,6 +1,5 @@
 """Opt-in retrieval eval with the real embeddings (EV-4): MERIDIAN_LIVE_TESTS=1 and OPENROUTER_API_KEY."""
 
-import gc
 import math
 import os
 
@@ -21,9 +20,6 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-# The embedder's per-call OpenAI client leaves its socket to the garbage collector.
-@pytest.mark.filterwarnings("ignore::ResourceWarning")
-@pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 def test_live_hits_and_superseded(kb_settings: Settings):
     settings = kb_settings.model_copy(
         update={"OPENROUTER_API_KEY": SecretStr(os.environ["OPENROUTER_API_KEY"])}
@@ -32,7 +28,6 @@ def test_live_hits_and_superseded(kb_settings: Settings):
     built = rebuild_index(ctx)
     questions = load_questions(REPO / "eval" / "retrieval" / "questions.json")
     report = run_retrieval_eval(ctx, questions, 5)
-    gc.collect()
     print(
         f"index={built.index_version} passages={built.passages} sources={built.sources}"
     )
