@@ -1,14 +1,18 @@
+import json
+import re
 import threading
 import time
 from collections.abc import Iterator
 
 import pytest
 import uvicorn
-from playwright.sync_api import Browser, Locator, Page, sync_playwright
+from playwright.sync_api import Browser, Locator, Page, Route, sync_playwright
 
 from app.llm import FakeModelProvider
 from app.main import create_app
+from app.monitoring import routes
 from app.settings import Settings
+from tests.test_overview_view import make_overview
 
 
 @pytest.fixture(scope="session")
@@ -51,3 +55,34 @@ def edges(item: Locator, container: Locator) -> tuple[float, float]:
     b = container.bounding_box()
     assert a is not None and b is not None
     return a["x"] - b["x"], (b["x"] + b["width"]) - (a["x"] + a["width"])
+
+
+@pytest.fixture
+def overview_stub(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(routes, "get_overview", lambda ctx, *a, **k: make_overview())
+
+
+def json_route(
+    page: Page,
+    pattern: re.Pattern[str],
+    body: object,
+    status: int = 200,
+    calls: list[dict] | None = None,
+) -> None:
+    """Answer requests whose URL matches `pattern` with `body`, recording each call."""
+
+    def handle(route: Route) -> None:
+        req = route.request
+        if calls is not None:
+            calls.append(
+                {
+                    "method": req.method,
+                    "url": req.url,
+                    "body": req.post_data_json if req.post_data else None,
+                }
+            )
+        route.fulfill(
+            status=status, content_type="application/json", body=json.dumps(body)
+        )
+
+    page.route(pattern, handle)

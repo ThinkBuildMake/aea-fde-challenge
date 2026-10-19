@@ -8,7 +8,7 @@ from app.context import AppContext, get_ctx
 from app.errors import AppError
 from app.monitoring import conversations
 from app.monitoring.service import get_health, get_overview
-from app.monitoring.view import overview_view
+from app.monitoring.view import overview_view, page_data
 from app.negotiation import respond
 from app.types import (
     FlagRequest,
@@ -33,8 +33,9 @@ def business_page(
     if tab not in dict(TABS):
         tab = "overview"
     context: dict[str, Any] = {"tabs": TABS, "tab": tab}
-    if tab == "overview":
-        context["view"] = overview_view(get_overview(ctx))
+    context["view"] = overview_view(get_overview(ctx))
+    if tab != "overview":
+        context["data"] = page_data(ctx.settings.LANGFUSE_BASE_URL)
     return ctx.templates.TemplateResponse(request, "business.html", context)
 
 

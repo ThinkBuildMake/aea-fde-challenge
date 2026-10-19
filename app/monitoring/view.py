@@ -262,3 +262,12 @@ def overview_view(o: Overview) -> dict[str, Any]:
         if sp.alert
         else None,
     }
+
+
+def page_data(trace_base: str) -> dict[str, Any]:
+    """Labels and the trace link base the Handoffs, Waitlist and Conversations scripts read."""
+    return {
+        "intents": INTENT_LABELS,
+        "outcomes": {k: list(v) for k, v in OUTCOME_LABELS.items()},
+        "traceBase": trace_base.rstrip("/"),
+    }
