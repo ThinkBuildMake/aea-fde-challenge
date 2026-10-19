@@ -14,6 +14,7 @@ from tests.evals.helpers import (
     sha,
     write_small_index,
 )
+from tests.evals.test_judge import FakeJudgeClient
 
 
 def test_each_scenario_runs_on_a_freshly_seeded_copy(live: Settings, tmp_path: Path):
@@ -171,3 +172,37 @@ def test_app_guard_withholds_the_unsupported_figure(live: Settings, tmp_path: Pa
     print(r.unsupported_figures, [t.text for t in r.transcript])
     assert r.unsupported_figures == 0
     assert "did not want to guess" in r.transcript[-1].text
+
+
+def test_judge_verdict_and_agreement_reach_the_record(live: Settings, tmp_path: Path):
+    scenarios = [s for s in eight_scenarios() if s.id in ("SYN-BOOK-0", "SYN-BOOK-1")]
+    judge = FakeJudgeClient(
+        replies=[
+            ('{"facts": [{"index": 1, "present": true}], "contradictions": []}', 0.25),
+            RuntimeError("judge down"),
+        ]
+    )
+    grades = {"SYN-BOOK-0": "pass", "SYN-BOOK-1": "pass"}
+
+    play(live, tmp_path, scenarios, workers=1, judge=judge, human_grades=grades)
+
+    record = json.loads((tmp_path / "runs" / "run.json").read_text())
+    first, second = record["scenarios"]
+    print(
+        [
+            (r["scenarioId"], r["judge"], r["containedCorrect"], r["costUsd"])
+            for r in (first, second)
+        ],
+        record["summary"]["judgeAgreement"],
+    )
+    assert first["judge"]["verdict"] == "pass"
+    assert first["judge"]["facts"] == [
+        {"fact": "a repair visit is booked", "present": True}
+    ]
+    assert first["containedCorrect"] is True
+    # Same conversation cost on both; only the first judge call cost something.
+    assert first["costUsd"] == pytest.approx(second["costUsd"] + 0.25)
+    assert second["judge"]["verdict"] == "error"
+    assert second["judge"]["notes"] == "RuntimeError"
+    assert second["containedCorrect"] is False
+    assert record["summary"]["judgeAgreement"] == {"agreed": 1, "of": 2}

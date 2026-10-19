@@ -27,6 +27,8 @@ def _output(result: ScenarioResult) -> dict[str, Any]:
         "turns": result.turns,
         "costUsd": result.cost_usd,
         "error": result.error.split(":")[0] if result.error else None,
+        # The verdict word only: notes, contradictions and facts quote the transcript.
+        "judgeVerdict": result.judge.verdict,
     }
 
 
@@ -60,6 +62,13 @@ def report_to_langfuse(
                 data_type="CATEGORICAL",
             )
 
+        def judge_verdict(*, output: Any, **_: Any) -> Any:
+            return Evaluation(
+                name="judge_verdict",
+                value=output["judgeVerdict"],
+                data_type="CATEGORICAL",
+            )
+
         def contained_correct(*, output: Any, **_: Any) -> Any:
             return Evaluation(
                 name="contained_correct", value=1 if output["containedCorrect"] else 0
@@ -79,7 +88,7 @@ def report_to_langfuse(
             description=f"Meridian eval run {run.run_id}",
             data=data,
             task=task,
-            evaluators=[observed_outcome, contained_correct],
+            evaluators=[observed_outcome, contained_correct, judge_verdict],
             max_concurrency=4,
             metadata={
                 "appCommit": run.environment.app_commit,

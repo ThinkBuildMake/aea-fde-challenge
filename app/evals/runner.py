@@ -7,10 +7,9 @@ import secrets
 import shutil
 import sqlite3
 import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -26,8 +25,8 @@ from app.evals.checks import (
     seeded_customer_strings,
     unsupported_figures,
 )
+from app.evals.judge import JudgeClient, grade_answer
 from app.evals.records import (
-    Judge,
     RunEnvironment,
     RunResult,
     Scenario,
@@ -45,17 +44,6 @@ log = logging.getLogger("meridian.evals")
 
 NO_LIMIT = 10**9
 Reporter = Callable[[RunResult, list[Scenario]], None]
-
-
-@dataclass
-class Grade:
-    facts_missing: list[str] = field(default_factory=list)
-    judge: Judge = field(default_factory=Judge)
-
-
-def grade_answer(scenario: Scenario, transcript: Sequence[TranscriptLine]) -> Grade:
-    """Stub until the judge lands (S28/S41): no missing facts, not graded."""
-    return Grade()
 
 
 def make_run_id() -> str:
@@ -246,7 +234,11 @@ def _handoff_complete(handoff: dict[str, Any] | None) -> bool | None:
 
 
 def _play(
-    worker: Worker, scenario: Scenario, model: ModelProvider, caller: CallerModel
+    worker: Worker,
+    scenario: Scenario,
+    model: ModelProvider,
+    caller: CallerModel,
+    judge: JudgeClient | None,
 ) -> ScenarioResult:
     worker.reseed()
     worker.app.state.ctx.model = model
@@ -281,7 +273,7 @@ def _play(
     hits = forbidden_hits(
         [t.text for t in transcript if t.role == "agent"], scenario.expected.forbidden
     )
-    grade = grade_answer(scenario, transcript)
+    grade = grade_answer(scenario, transcript, judge)
     counts = db_change_counts(diff, int(read["handoff"] is not None), read["waitlist"])
     mismatches = _mismatches(scenario, counts)
     return ScenarioResult(
@@ -291,6 +283,7 @@ def _play(
             observed == scenario.expected.outcome
             and not grade.facts_missing
             and not grade.judge.contradictions
+            and grade.judge.verdict != "error"
             and not hits
             and figures == 0
             and not notes
@@ -304,7 +297,7 @@ def _play(
         invariant_notes=notes,
         turns=len(latencies),
         latencies_ms=latencies,
-        cost_usd=round(float(read["cost_usd"]) + caller_cost, 6),
+        cost_usd=round(float(read["cost_usd"]) + caller_cost + grade.cost_usd, 6),
         judge=grade.judge,
         handoff_record_complete=_handoff_complete(read["handoff"]),
         transcript=transcript,
@@ -319,11 +312,14 @@ def _run_worker(
     batch: list[Scenario],
     agent_model: Callable[[Scenario], ModelProvider],
     caller: CallerModel,
+    judge: JudgeClient | None,
 ) -> list[ScenarioResult]:
     results: list[ScenarioResult] = []
     for scenario in batch:
         try:
-            results.append(_play(worker, scenario, agent_model(scenario), caller))
+            results.append(
+                _play(worker, scenario, agent_model(scenario), caller, judge)
+            )
         except Exception as error:  # noqa: BLE001 - a failing scenario is reported, not skipped
             log.warning("scenario %s failed: %s", scenario.id, type(error).__name__)
             results.append(
@@ -375,10 +371,13 @@ def run_eval(
     reporter_timeout_s: float = 60,
     run_id: str | None = None,
     keep_work_dir: bool = False,
+    judge: JudgeClient | None = None,
+    human_grades: Mapping[str, str] | None = None,
 ) -> RunResult:
     """Play every scenario, `workers` at a time, each worker on its own copies; write the record.
 
     The caller's own scheduling file is never opened: workers copy settings.SEED_DB_PATH.
+    `judge` grades each transcript (None: not graded); `human_grades` gives judgeAgreement.
     """
     started_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
     scenario_list = list(scenarios)
@@ -391,7 +390,7 @@ def run_eval(
     try:
         with ThreadPoolExecutor(max_workers=count) as pool:
             futures = [
-                pool.submit(_run_worker, w, batch, agent_model, caller)
+                pool.submit(_run_worker, w, batch, agent_model, caller, judge)
                 for w, batch in zip(pool_workers, batches, strict=True)
             ]
             by_id = {r.scenario_id: r for f in futures for r in f.result()}
@@ -413,6 +412,7 @@ def run_eval(
             results,
             weights,
             seeded_customer_strings(settings.SEED_DB_PATH, sorted(customers)),
+            human_grades=human_grades,
         ),
     )
     _write(out_path, run)
