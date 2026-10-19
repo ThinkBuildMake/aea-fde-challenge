@@ -32,8 +32,8 @@ def make_overview(**changes) -> Overview:
         ),
         success=OverviewSuccess(
             settled_pct=62,
-            settled_count=171,
-            total_count=276,
+            settled_count=143,
+            total_count=231,
             target_band_pct=[60, 75],
             series=[
                 SeriesPoint(date=f"2026-10-{10 + i}", settled_pct=v)
@@ -65,6 +65,14 @@ def make_overview(**changes) -> Overview:
                 latency_ms=2100,
             ),
             RecentConversation(
+                public_id="c",
+                started_at=at(12),
+                intent="billing_dispute",
+                zone=None,
+                outcome="handoff",
+                latency_ms=3300,
+            ),
+            RecentConversation(
                 public_id="b",
                 started_at=at(3),
                 intent="book_visit",
@@ -78,12 +86,12 @@ def make_overview(**changes) -> Overview:
             Guarantee(key="PF-2", name="x", now=7900, limit=10000, status="ok"),
             Guarantee(key="VR-6", name="x", now=0, limit=0, status="ok"),
             Guarantee(key="DE-1", name="x", now=0, limit=0, status="ok"),
-            Guarantee(key="CO-1", name="x", now=104, limit=100, status="ok"),
+            Guarantee(key="CO-1", name="x", now=38, limit=100, status="ok"),
         ],
         latency_series_24h=[
             LatencyPoint(hour=f"{i:02d}", p95_first_reply_ms=3000) for i in range(24)
         ],
-        spend=OverviewSpend(total_usd=104.0, alert_usd=100.0, alert=True),
+        spend=OverviewSpend(total_usd=38.0, alert_usd=100.0, alert=False),
     )
     return base.model_copy(update=changes)
 
@@ -101,6 +109,10 @@ def test_formatting():
     assert view.money(104.0) == "$104"
     assert view.money(38.5) == "$38.50"
     assert view.money(None) == "unknown"
+    assert view.money(99.999) == "$100"
+    assert view.money(99.994) == "$99.99"
+    assert view.pct(None) == "No data yet"
+    assert view.seconds(None) == "No data yet"
     assert view.pct(62.0) == "62%"
     assert view.seconds(4100) == "4.1 s"
 
@@ -120,9 +132,9 @@ def test_guarantee_rows_in_wireframe_order():
 
 def test_recent_newest_first():
     rows = view.overview_view(make_overview())["recent"]
-    assert [r["when"] for r in rows] == ["3 min", "21 min"]
+    assert [r["when"] for r in rows] == ["3 min", "12 min", "21 min"]
     assert rows[0]["what"] == "Book a visit, central zone"
-    assert rows[1]["outcome"] == "Safety stop"
+    assert [r["outcome"] for r in rows] == ["Contained", "Handoff", "Safety stop"]
 
 
 def test_chart_geometry():
@@ -131,7 +143,37 @@ def test_chart_geometry():
     assert view.band(60, 75) == (42.5, 19.5, 53.5)
 
 
+def over_spend() -> Overview:
+    base = make_overview()
+    guarantees = [
+        g.model_copy(update={"now": 104, "status": "breach"}) if g.key == "CO-1" else g
+        for g in base.guarantees
+    ]
+    return make_overview(
+        guarantees=guarantees,
+        spend=OverviewSpend(total_usd=104.0, alert_usd=100.0, alert=True),
+    )
+
+
 def test_spend_line_and_banner():
-    v = view.overview_view(make_overview())
+    v = view.overview_view(over_spend())
     assert v["spend_line"] == "Total model spend: $104 of the $100 alert."
     assert v["banner"]
+    assert v["guarantees"][-1]["status"] == "Over limit"
+    assert view.overview_view(make_overview())["banner"] is None
+
+
+def test_all_vr_guarantees_fold_into_one_row():
+    gs = [
+        Guarantee(key="PF-1", name="x", now=1000, limit=6000, status="ok"),
+        Guarantee(key="PF-2", name="x", now=1000, limit=10000, status="ok"),
+        Guarantee(key="VR-6", name="x", now=1, limit=0, status="breach"),
+        Guarantee(key="VR-7", name="x", now=2, limit=0, status="breach"),
+        Guarantee(key="VR-8", name="x", now=0, limit=0, status="ok"),
+        Guarantee(key="DE-1", name="x", now=0, limit=0, status="ok"),
+        Guarantee(key="CO-1", name="x", now=38, limit=100, status="ok"),
+    ]
+    rows = view.guarantee_rows(gs)
+    assert len(rows) == 5
+    assert rows[2]["name"] == "Booking mismatches (daily check)"
+    assert rows[2]["now"] == "3" and rows[2]["status"] == "Over limit"

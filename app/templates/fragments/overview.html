@@ -2,7 +2,7 @@
   {% if view.banner %}<div class="banner banner-warn" data-banner="spend" role="status">{{ view.banner }}</div>{% endif %}
 
   <div class="tiles">
-    <div class="tile" data-tile="public-url"><div class="tile-label">Public URL</div><div class="tile-value ok">{{ view.status.public_url }}</div></div>
+    <div class="tile" data-tile="public-url"><div class="tile-label">Public URL</div><div class="tile-value {{ view.status.public_url_tone }}">{{ view.status.public_url }}</div></div>
     <div class="tile" data-tile="last-conversation"><div class="tile-label">Last conversation</div><div class="tile-value">{{ view.status.last }}</div></div>
     <div class="tile" data-tile="errors"><div class="tile-label">Errors shown to callers, last 24 h</div><div class="tile-value">{{ view.status.errors }}</div></div>
     <div class="tile" data-tile="handoffs-waiting"><div class="tile-label">Handoffs waiting for follow-up</div><div class="tile-value warn">{{ view.status.waiting }}</div></div>
@@ -65,6 +65,8 @@
       <span class="outcome {{ r.tone }}">{{ r.outcome }}</span>
       <span class="latency">{{ r.latency }}</span>
     </div>
+    {% else %}
+    <p class="note">No conversations yet</p>
     {% endfor %}
   </section>
 

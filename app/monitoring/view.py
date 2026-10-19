@@ -10,7 +10,7 @@ from typing import Any
 
 from app.types import Guarantee, Overview
 
-DASH = "—"
+NO_DATA = "No data yet"
 
 INTENT_LABELS = {
     "book_visit": "Book a visit",
@@ -79,17 +79,18 @@ def short_ago(as_of: str, at: str) -> str:
 
 
 def pct(v: float | None) -> str:
-    return DASH if v is None else f"{v:g}%"
+    return NO_DATA if v is None else f"{v:g}%"
 
 
 def money(v: float | None) -> str:
     if v is None:
         return "unknown"
+    v = round(v, 2)
     return f"${v:.0f}" if v == int(v) else f"${v:.2f}"
 
 
 def seconds(ms: float | None) -> str:
-    return DASH if ms is None else f"{ms / 1000:.1f} s"
+    return NO_DATA if ms is None else f"{ms / 1000:.1f} s"
 
 
 def line_points(
@@ -119,13 +120,31 @@ def _guarantee_cells(g: Guarantee, kind: str) -> tuple[str, str]:
     if kind == "seconds":
         return seconds(g.now), f"at most {g.limit / 1000:g} s"
     if kind == "money":
-        return money(g.now) if g.now is not None else DASH, f"alert at {money(g.limit)}"
-    return DASH if g.now is None else f"{g.now:g}", f"{g.limit:g}"
+        return money(
+            g.now
+        ) if g.now is not None else NO_DATA, f"alert at {money(g.limit)}"
+    return NO_DATA if g.now is None else f"{g.now:g}", f"{g.limit:g}"
+
+
+def _fold_vr(guarantees: list[Guarantee]) -> list[Guarantee]:
+    """Every VR-* guarantee becomes one: summed now, worst status."""
+    vr = [g for g in guarantees if g.key.startswith("VR-")]
+    if len(vr) < 2:
+        return guarantees
+    nows = [g.now for g in vr if g.now is not None]
+    statuses = {g.status for g in vr}
+    status = (
+        "breach" if "breach" in statuses else "ok" if "ok" in statuses else "no_data"
+    )
+    merged = vr[0].model_copy(
+        update={"now": sum(nows) if nows else None, "status": status}
+    )
+    return [merged if g is vr[0] else g for g in guarantees if g not in vr[1:]]
 
 
 def guarantee_rows(guarantees: list[Guarantee]) -> list[dict[str, str]]:
+    rest = _fold_vr(list(guarantees))
     rows: list[dict[str, str]] = []
-    rest = list(guarantees)
     for match, name, kind in GUARANTEE_ROWS:
         g = next(
             (x for x in rest if x.key == match or x.key.startswith(match + "-")), None
@@ -186,6 +205,7 @@ def overview_view(o: Overview) -> dict[str, Any]:
     return {
         "status": {
             "public_url": o.status.public_url or "Not set",
+            "public_url_tone": "ok" if o.status.public_url else "muted",
             "last": ago(o.as_of, o.status.last_conversation_at),
             "errors": o.status.errors_shown_24h,
             "waiting": o.status.handoffs_waiting,

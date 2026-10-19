@@ -3,7 +3,7 @@ from playwright.sync_api import Page, expect
 
 from app.monitoring import routes
 from app.types import Overview
-from tests.test_overview_view import make_overview
+from tests.test_overview_view import make_overview, over_spend
 
 
 @pytest.fixture
@@ -38,7 +38,7 @@ def test_success_metric(page: Page, live_url: str, stub):
     expect(block).to_contain_text("Calls settled by the agent (rolling 7 days)")
     expect(block.locator(".metric-big")).to_have_text("62%")
     expect(block.locator(".count-line")).to_have_text(
-        '171 of 276 conversations: no handoff and the caller tapped "yes, that solved it"'
+        '143 of 231 conversations: no handoff and the caller tapped "yes, that solved it"'
     )
     expect(block).to_contain_text(
         "Target 60% to 75%. Callers who skip the tap count as not settled."
@@ -70,9 +70,29 @@ def test_supporting_metrics(page: Page, live_url: str, stub):
 def test_what_just_happened(page: Page, live_url: str, stub):
     open_tab(page, live_url)
     rows = page.locator(".recent-row")
-    assert rows.locator(".when").all_inner_texts() == ["3 min", "21 min"]
-    assert rows.locator(".outcome").all_inner_texts() == ["Contained", "Safety stop"]
-    assert rows.locator(".latency").all_inner_texts() == ["4.1 s", "2.1 s"]
+    assert rows.locator(".when").all_inner_texts() == ["3 min", "12 min", "21 min"]
+    assert rows.locator(".outcome").all_inner_texts() == [
+        "Contained",
+        "Handoff",
+        "Safety stop",
+    ]
+    assert rows.locator(".latency").all_inner_texts() == ["4.1 s", "3.3 s", "2.1 s"]
+
+
+def test_what_just_happened_empty(page: Page, live_url: str, stub):
+    stub["o"] = make_overview(recent=[])
+    open_tab(page, live_url)
+    expect(page.locator("[data-block=recent]")).to_contain_text("No conversations yet")
+    assert page.locator(".recent-row").count() == 0
+
+
+def test_unset_public_url_is_muted(page: Page, live_url: str, stub):
+    status = stub["o"].status.model_copy(update={"public_url": None})
+    stub["o"] = make_overview(status=status)
+    open_tab(page, live_url)
+    tile = page.locator("[data-tile=public-url] .tile-value")
+    expect(tile).to_have_text("Not set")
+    expect(tile).to_have_class("tile-value muted")
 
 
 def test_promises_table(page: Page, live_url: str, stub):
@@ -94,7 +114,11 @@ def test_promises_table(page: Page, live_url: str, stub):
 
 
 def test_spend_line_and_banner(page: Page, live_url: str, stub):
+    stub["o"] = over_spend()
     open_tab(page, live_url)
+    expect(page.locator(".promises tbody tr").last.locator("td").nth(3)).to_have_text(
+        "Over limit"
+    )
     expect(page.locator("[data-spend-line]")).to_have_text(
         "Total model spend: $104 of the $100 alert."
     )
@@ -102,9 +126,6 @@ def test_spend_line_and_banner(page: Page, live_url: str, stub):
 
 
 def test_no_banner_without_alert(page: Page, live_url: str, stub):
-    stub["o"] = make_overview(
-        spend=stub["o"].spend.model_copy(update={"alert": False, "total_usd": 38.0})
-    )
     open_tab(page, live_url)
     expect(page.locator("[data-banner=spend]")).to_have_count(0)
 
