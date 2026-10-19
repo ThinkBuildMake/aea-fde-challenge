@@ -760,6 +760,15 @@ def run_turn(
             ):
                 final_text = guards.confirmation_text(state.booking)
                 turn["error"] = "confirmation_mismatch"
+            elif (
+                not state.cancelled
+                and any(c["name"] == "cancel_visit" for c in tools_called)
+                and guards.claims_cancelled(final_text)
+            ):
+                # Never confirm a cancel that did not happen; restate the terms instead.
+                fees = [state.cancel_fee_cents.get(i) for i in state.cancel_asked]
+                final_text = guards.cancel_pending_text(next(filter(None, fees), None))
+                turn["error"] = "cancel_claim_withheld"
             elif guards.unsupported_figures(final_text, [*history, *stored]):
                 withheld, turn["error"] = True, "unsupported_figure"
             elif guards.makes_promise(final_text):
@@ -821,9 +830,10 @@ def run_turn(
             turn["stored"] = [*stored, {"role": "assistant", "content": final_text}]
     # A yes can confirm a cancel only after the model's own reply put the terms.
     model_said = final_text == last_said or (amended and unamended == last_said)
-    state.keep_cancel_asks(
-        last_said if status == "active" and model_said and not turn["error"] else None
-    )
+    shown = last_said if model_said and not turn["error"] else None
+    if turn["error"] == "cancel_claim_withheld":
+        shown = final_text  # the fixed text restates the terms and asks to confirm
+    state.keep_cancel_asks(shown if status == "active" else None)
     if status == "active" and earlier + 1 >= ctx.settings.TURN_CAP:
         final_text = f"{final_text} {guards.TURN_CAP_TEXT}".strip()
     turn["reply_text"] = final_text

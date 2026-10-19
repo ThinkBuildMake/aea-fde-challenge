@@ -602,3 +602,54 @@ def test_waiver_question_never_cancels(kb_settings: Settings):
     assert appointment(kb_settings, appt) == (35, "scheduled")
     assert slot(kb_settings, 35) == "booked"
     assert [c[0] for c in changes(kb_settings)] == ["book"]
+
+
+def test_a_false_cancel_claim_is_never_shown(kb_settings: Settings):
+    """AF-5: the model says "cancelled" on a turn whose cancel_visit only re-asked."""
+    appt = next_appointment(kb_settings)
+    model = FakeModelProvider(
+        results=[
+            *grace_up_to_ask(),
+            *cancel(appt, CANCEL, LATE_ASK),
+            *cancel(
+                appt,
+                "Hmm, what does it cost again",
+                "I've cancelled your appointment and a $49 fee has been applied.",
+            ),
+        ]
+    )
+    booker = Booker(kb_settings, model)
+    booker.say(GRACE_BOOK)
+    booker.say(GRACE_SATURDAY)
+    new_conversation(booker)
+    booker.say(GRACE)
+    booker.say(CANCEL)
+    reply = booker.say("Hmm, what does it cost again")
+    print(f"reply={reply['text']!r} appointment={appointment(kb_settings, appt)}")
+    assert reply["text"] == guards.cancel_pending_text(4900)
+    assert "$49.00" in reply["text"] and "not cancelled yet" in reply["text"]
+    assert appointment(kb_settings, appt) == (35, "scheduled")
+    assert slot(kb_settings, 35) == "booked"
+
+
+def test_accepting_the_fee_confirms_the_late_cancel(kb_settings: Settings):
+    """AF-5: eval AP-2's caller accepts the stated fee; that is a clear yes."""
+    appt = next_appointment(kb_settings)
+    yes = "I accept the fee. Please go ahead and cancel it."
+    model = FakeModelProvider(
+        results=[
+            *grace_up_to_ask(),
+            *cancel(appt, CANCEL, LATE_ASK),
+            *cancel(appt, yes, "Your visit is cancelled and the $49 fee applies."),
+        ]
+    )
+    booker = Booker(kb_settings, model)
+    booker.say(GRACE_BOOK)
+    booker.say(GRACE_SATURDAY)
+    new_conversation(booker)
+    booker.say(GRACE)
+    booker.say(CANCEL)
+    reply = booker.say(yes)
+    print(f"reply={reply['text']!r} appointment={appointment(kb_settings, appt)}")
+    assert appointment(kb_settings, appt) == (35, "cancelled")
+    assert "cancelled" in reply["text"]
