@@ -43,6 +43,7 @@ body{margin:0;font-family:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',san
 .callback-options{display:flex;flex-wrap:wrap;gap:8px}
 .callback-options .btn{padding:0 14px;font-weight:400}
 .callback-note{font-size:12px;color:var(--muted)}
+.send-error{font-size:13px;color:#8C1D18}
 .visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .page-note{font-size:12px;color:var(--muted);line-height:1.5;margin:0}
 .biz-shell{max-width:1240px;margin:0 auto;padding:20px 16px;display:flex;flex-direction:column;gap:16px}

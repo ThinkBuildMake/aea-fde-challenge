@@ -31,6 +31,8 @@
   const WINDOWS = [['morning', 'Morning'], ['afternoon', 'Afternoon'], ['evening', 'Evening']];
   const OUTAGE_LABEL = 'Simulate an outage';
   const OUTAGE_TEXT = 'Can I move my visit?';
+  const SEND_FAILED = 'That did not go through. Please try again.';
+  const PICK_FAILED = 'That did not go through. Please pick a time again.';
   const banner = $('chat-banner');
   const GREETING = messages.querySelector('.bubble.bot').textContent;
 
@@ -79,10 +81,11 @@
   }
 
   async function currentConversation() {
+    const current = conversation;
     try {
-      return await conversation;
+      return await current;
     } catch {
-      conversation = begin();
+      if (conversation === current) conversation = begin();
       return conversation;
     }
   }
@@ -173,7 +176,12 @@
     ended.hidden = false;
   }
 
+  function removeAll(selector) {
+    messages.querySelectorAll(selector).forEach((node) => node.remove());
+  }
+
   function renderReply(result) {
+    removeAll('.choices, .callback-picker');
     setBanner(result.banner);
     addBubble('bot', result.text);
     if (result.choices.length) addChoices(result.choices);
@@ -192,12 +200,16 @@
     buttons.forEach((b) => { b.disabled = true; });
     try {
       const { conversationId } = await currentConversation();
+      if (mine !== generation) return;
       const result = await submitCallbackWindow(conversationId, window);
       if (mine !== generation) return;
       addBubble('bot', result.text);
       showEnded(HANDED_OVER);
     } catch {
-      if (mine === generation) buttons.forEach((b) => { b.disabled = false; });
+      if (mine !== generation) return;
+      buttons.forEach((b) => { b.disabled = false; });
+      picker.querySelector('.send-error')?.remove();
+      picker.appendChild(el('div', 'send-error', PICK_FAILED));
     }
   }
 
@@ -228,7 +240,7 @@
 
   async function send(text, simulateOutage = false) {
     if (!text || pending) return;
-    messages.querySelectorAll('.choices').forEach((block) => block.remove());
+    removeAll('.send-error');
     const mine = generation;
     setBusy(true);
     chips.hidden = true;
@@ -239,6 +251,7 @@
     const typing = addTyping();
     try {
       const { conversationId } = await currentConversation();
+      if (mine !== generation) return;
       const result = await sendMessage(conversationId, text, simulateOutage);
       if (mine !== generation) return;
       stopTyping(typing);
@@ -246,6 +259,7 @@
     } catch {
       if (mine !== generation) return;
       stopTyping(typing);
+      messages.appendChild(el('div', 'send-error', SEND_FAILED));
     } finally {
       if (mine === generation) setBusy(false);
     }
@@ -256,6 +270,7 @@
     solvedBar.querySelectorAll('button').forEach((b) => { b.disabled = true; });
     try {
       const { conversationId } = await currentConversation();
+      if (mine !== generation) return;
       const result = await recordSolved(conversationId, answer);
       if (mine !== generation) return;
       solvedBar.hidden = true;

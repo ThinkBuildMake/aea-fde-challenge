@@ -58,6 +58,8 @@ class StateStub(Stub):
         self.body: dict | None = None
         self.callbacks: list[tuple[str, object]] = []
         self.solved_status = 200
+        self.message_status = 200
+        self.callback_status = 200
         super().__init__(page)
         page.route("**/conversations/*/callback-window", self.callback)
 
@@ -80,7 +82,9 @@ class StateStub(Stub):
         )
 
     def answer(self, route: Route):
-        if self.body is None:
+        if self.message_status != 200:
+            route.fulfill(status=self.message_status, json={"error": {"code": "x"}})
+        elif self.body is None:
             super().answer(route)
         else:
             route.fulfill(json=self.body)
@@ -96,6 +100,9 @@ class StateStub(Stub):
 
     def callback(self, route: Route):
         self.callbacks.append((route.request.url, route.request.post_data_json))
+        if self.callback_status != 200:
+            route.fulfill(status=self.callback_status, json={"error": {"code": "x"}})
+            return
         route.fulfill(json={"handoff": {"id": 1}, "text": CALLBACK_TEXT})
 
 
@@ -180,6 +187,14 @@ def test_confirmed_card(page: Page, live_url: str, stub: StateStub):
     title = card.locator(".booking-title")
     expect(title).to_have_text("Visit booked")
     expect(title).to_have_css("color", "rgb(20, 83, 45)")
+    print(
+        "card colours:",
+        card.evaluate(
+            "(e) => [getComputedStyle(e).backgroundColor, getComputedStyle(e).borderTopColor]"
+        ),
+        "title:",
+        title.evaluate("(e) => getComputedStyle(e).color"),
+    )
     lines = card_lines(page)
     print("card:", lines)
     assert lines == [
@@ -284,6 +299,12 @@ def test_safety_stop(page: Page, live_url: str, stub: StateStub):
     expect(page.locator("#composer")).to_be_hidden()
     expect(page.locator("#chips")).to_be_hidden()
     expect(page.locator("#solved-bar")).to_be_hidden()
+    print(
+        "text box visible:",
+        page.get_by_role("textbox", name="Type your message").is_visible(),
+        "composer visible:",
+        page.locator("#composer").is_visible(),
+    )
     expect(page.locator("#ended-text")).to_have_text("This conversation has ended.")
     print("footer:", page.locator("#ended").inner_text().splitlines())
     page.get_by_role("button", name="Start a new conversation").click()
@@ -420,3 +441,81 @@ def test_failed_start_is_retried(page: Page, live_url: str, stub: StateStub):
     expect(page.locator(".msg-row.bot .bubble").last).to_have_text(stub.reply_text)
     assert stub.started == 2
     assert stub.message_urls()[-1].endswith("/conv-2/messages")
+
+
+SEND_FAILED = "That did not go through. Please try again."
+PICK_FAILED = "That did not go through. Please pick a time again."
+
+
+def test_abandoned_send_not_posted_after_new_conversation(
+    page: Page, live_url: str, stub: StateStub
+):
+    held: list[Route] = []
+
+    def hold_first(route: Route) -> None:
+        if not held:
+            stub.started += 1
+            held.append(route)
+        else:
+            stub.start(route)
+
+    page.unroute("**/conversations", stub.start)
+    page.route("**/conversations", hold_first)
+    page.goto(live_url + "/")
+    send(page, "OLD message")
+    page.get_by_role("button", name="New conversation").click()
+    expect(page.locator("#messages .bubble")).to_have_count(1)
+    held[0].fulfill(status=500, json={"error": {"code": "internal"}})
+    page.wait_for_timeout(300)
+    assert stub.message_urls() == []
+    send(page, "NEW message")
+    expect(page.locator(".msg-row.bot .bubble").last).to_have_text(stub.reply_text)
+    posted = [
+        (u.split("/")[-2], b) for u, b in stub.requests if u.endswith("/messages")
+    ]
+    print("starts:", stub.started, "posts:", posted)
+    assert posted == [("conv-2", {"text": "NEW message"})]
+    assert stub.started == 2
+
+
+def test_failed_send_shows_retry_line_and_keeps_choices(
+    page: Page, live_url: str, stub: StateStub
+):
+    choices(page, live_url, stub, [*WINDOWS, EARLIER], [*WINDOWS, EARLIER_TEXT])
+    stub.message_status = 500
+    page.locator("button.choice").first.click()
+    line = page.locator(".send-error")
+    expect(line).to_have_text(SEND_FAILED)
+    expect(page.locator(".bubble.typing")).to_have_count(0)
+    expect(page.locator("button.choice")).to_have_count(4)
+    stub.message_status = 200
+    send(page, "again")
+    expect(page.locator(".send-error")).to_have_count(0)
+
+
+def test_new_reply_removes_old_picker(page: Page, live_url: str, stub: StateStub):
+    arrive(
+        page,
+        live_url,
+        stub,
+        reply_with(banner="error", text=FALLBACK, actions=["request_callback"]),
+    )
+    expect(page.locator(".callback-picker")).to_have_count(1)
+    stub.body = reply_with(text="Something else.")
+    send(page, "never mind")
+    expect(page.locator(".msg-row.bot .bubble").last).to_have_text("Something else.")
+    expect(page.locator(".callback-picker")).to_have_count(0)
+
+
+def test_failed_pick_shows_error_line(page: Page, live_url: str, stub: StateStub):
+    stub.callback_status = 500
+    arrive(
+        page,
+        live_url,
+        stub,
+        reply_with(banner="error", text=FALLBACK, actions=["request_callback"]),
+    )
+    page.get_by_role("button", name="Morning").click()
+    expect(page.locator(".callback-picker .send-error")).to_have_text(PICK_FAILED)
+    expect(page.get_by_role("button", name="Morning")).to_be_enabled()
+    expect(page.locator("#ended")).to_be_hidden()
