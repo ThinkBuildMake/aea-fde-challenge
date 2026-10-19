@@ -50,8 +50,8 @@ body{margin:0;font-family:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',san
 .biz-head{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
 h1{font-size:20px;font-weight:600;margin:0}
 .tabs{display:flex;gap:6px;flex-wrap:wrap}
-.tab{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border-radius:8px;border:1px solid var(--accent);background:var(--card);color:var(--accent);font-size:14px;font-weight:500;text-decoration:none}
-.tab.active{background:var(--accent);color:#fff}
+.tab{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border-radius:8px;border:1px solid #9AA8B5;background:var(--card);color:var(--text);font-size:14px;font-weight:500;text-decoration:none}
+.tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
 .panel{flex:1 1 280px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
 .panel h2{font-size:13px;font-weight:500;color:var(--muted);margin:0 0 8px}
 .empty{margin:0;color:var(--muted);font-size:14px}

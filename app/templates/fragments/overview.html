@@ -19,6 +19,7 @@
         <text x="14" y="143" font-size="11" fill="#4A5A68">0%</text>
         <text x="46" y="{{ view.settled.band_label_y }}" font-size="11" fill="#0F5E8C">target band {{ view.settled.band_lo }} to {{ view.settled.band_hi }}%</text>
         <polyline points="{{ view.settled.line }}" fill="none" stroke="#0F5E8C" stroke-width="2.5"/>
+        {% for x, y in view.settled.dots %}<circle cx="{{ x }}" cy="{{ y }}" r="3" fill="#0F5E8C"/>{% endfor %}
         <text x="40" y="160" font-size="11" fill="#4A5A68">7 days ago</text>
         <text x="470" y="160" font-size="11" fill="#4A5A68">today</text>
       </svg>
@@ -85,6 +86,7 @@
           <line x1="30" y1="{{ view.latency.limit_y }}" x2="395" y2="{{ view.latency.limit_y }}" stroke="#B3261E" stroke-dasharray="4 3"/>
           <text x="34" y="{{ view.latency.limit_label_y }}" font-size="10" fill="#B3261E">limit 6 s</text>
           <polyline points="{{ view.latency.line }}" fill="none" stroke="#0F5E8C" stroke-width="2"/>
+          {% for x, y in view.latency.dots %}<circle cx="{{ x }}" cy="{{ y }}" r="3" fill="#0F5E8C"/>{% endfor %}
         </svg>
       </div>
       <div class="chart-col">

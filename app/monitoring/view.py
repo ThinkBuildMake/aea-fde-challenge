@@ -93,6 +93,23 @@ def seconds(ms: float | None) -> str:
     return NO_DATA if ms is None else f"{ms / 1000:.1f} s"
 
 
+def line_dots(
+    values: list[float | None],
+    x0: float,
+    x1: float,
+    y0: float,
+    y1: float,
+    vmax: float,
+) -> list[tuple[float, float]]:
+    """SVG coordinates of each value, as the wireframe's pts(); None values are skipped."""
+    last = max(len(values) - 1, 1)
+    return [
+        (round(x0 + (x1 - x0) * i / last, 1), round(y1 - (y1 - y0) * v / vmax, 1))
+        for i, v in enumerate(values)
+        if v is not None
+    ]
+
+
 def line_points(
     values: list[float | None],
     x0: float,
@@ -101,12 +118,9 @@ def line_points(
     y1: float,
     vmax: float,
 ) -> str:
-    """SVG polyline points, as the wireframe's pts(); None values are skipped."""
-    last = max(len(values) - 1, 1)
+    """SVG polyline points for the same values."""
     return " ".join(
-        f"{x0 + (x1 - x0) * i / last:.1f},{y1 - (y1 - y0) * v / vmax:.1f}"
-        for i, v in enumerate(values)
-        if v is not None
+        f"{x:.1f},{y:.1f}" for x, y in line_dots(values, x0, x1, y0, y1, vmax)
     )
 
 
@@ -190,6 +204,9 @@ def volume_bars(days: list[tuple[str, int]]) -> list[Bar]:
     return bars
 
 
+SETTLED_BOX = (40, 500, 10, 140, 100)
+
+
 def overview_view(o: Overview) -> dict[str, Any]:
     lo, hi = (o.success.target_band_pct + [60, 75])[:2]
     band_top, band_h, band_label_y = band(lo, hi)
@@ -199,6 +216,7 @@ def overview_view(o: Overview) -> dict[str, Any]:
     ]
     vmax = max([8.0, *[v for v in lat if v is not None]])
     limit_y = 100 - 100 * 6 / vmax
+    settled = [p.settled_pct for p in o.success.series]
     out = o.volume.outcomes
     recent = sorted(o.recent, key=lambda r: r.started_at, reverse=True)
     sp = o.spend
@@ -219,9 +237,8 @@ def overview_view(o: Overview) -> dict[str, Any]:
             "band_top": band_top,
             "band_h": band_h,
             "band_label_y": band_label_y,
-            "line": line_points(
-                [p.settled_pct for p in o.success.series], 40, 500, 10, 140, 100
-            ),
+            "line": line_points(settled, *SETTLED_BOX),
+            "dots": line_dots(settled, *SETTLED_BOX),
         },
         "supporting": {
             "booking": pct(o.supporting.booking_completion_pct),
@@ -242,6 +259,7 @@ def overview_view(o: Overview) -> dict[str, Any]:
         "guarantees": guarantee_rows(o.guarantees),
         "latency": {
             "line": line_points(lat, 30, 390, 0, 100, vmax),
+            "dots": line_dots(lat, 30, 390, 0, 100, vmax),
             "limit_y": round(limit_y, 1),
             "limit_label_y": round(limit_y - 4, 1),
         },
