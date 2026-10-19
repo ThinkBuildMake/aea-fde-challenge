@@ -172,3 +172,29 @@ def test_tracer_for_is_off_without_keys(tmp_settings: Settings):
 
 def test_gate_env_has_no_langfuse_keys():
     assert not {"LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"} & set(os.environ)
+
+
+def test_flush_drops_sends_still_queued_after_its_wait():
+    import threading
+    import time
+
+    class Slow(SpanExporter):
+        def __init__(self) -> None:
+            self.release = threading.Event()
+            self.calls = 0
+
+        def export(self, spans):
+            self.calls += 1
+            self.release.wait(timeout=10)
+            return SpanExportResult.SUCCESS
+
+    exporter = Slow()
+    tracer = LangfuseTracer(
+        "http://127.0.0.1:9", "test-public", "test-secret", exporter=exporter
+    )
+    for _ in range(4):
+        tracer.send(sample(), lambda _id: None)
+    tracer.flush(0.1)
+    exporter.release.set()
+    time.sleep(0.3)
+    assert exporter.calls == 1

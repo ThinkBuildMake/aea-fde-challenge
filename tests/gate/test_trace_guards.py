@@ -45,13 +45,20 @@ def test_gate_cp1_no_card_reaches_a_trace(started: Settings, card: str):
     langfuse = LangfuseTracer(
         "http://127.0.0.1:9", "test-public", "test-secret", exporter=exported
     )
+    # The session id is the random hex public id, never caller text; it is left out.
     play(started, recorder, card)
     play(started, langfuse, card)
     langfuse.flush(5)
 
-    recorded = json.dumps([dataclasses.asdict(t) for t in recorder.traces], default=str)
+    recorded = json.dumps(
+        [{**dataclasses.asdict(t), "session_id": ""} for t in recorder.traces],
+        default=str,
+    )
     spans = [
-        str(v) for s in exported.get_finished_spans() for v in s.attributes.values()
+        str(v)
+        for s in exported.get_finished_spans()
+        for k, v in s.attributes.items()
+        if k != "session.id"
     ]
     assert recorder.traces and spans
     assert LONG_DIGITS.search(recorded) is None

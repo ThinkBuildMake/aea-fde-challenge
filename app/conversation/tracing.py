@@ -5,6 +5,7 @@ messages, reasoning notes and tool arguments never do. The secret conversation i
 """
 
 import base64
+import contextlib
 import dataclasses
 import logging
 import uuid
@@ -107,7 +108,9 @@ class Tracer(Protocol):
         """Hand the trace over without blocking; call on_sent(trace id) once it is stored."""
         ...
 
-    def flush(self, timeout_s: float) -> None: ...
+    def flush(self, timeout_s: float) -> None:
+        """Called at shutdown: wait a bounded time for queued sends; no sends follow it."""
+        ...
 
 
 class RecordingTracer:
@@ -190,10 +193,10 @@ class LangfuseTracer:
         self._worker.submit(self._deliver, trace, on_sent)
 
     def flush(self, timeout_s: float) -> None:
-        try:
+        """Wait up to timeout_s for queued sends, then drop the rest so exit is never held."""
+        with contextlib.suppress(Exception):  # flushing is best effort
             self._worker.submit(lambda: None).result(timeout=timeout_s)
-        except Exception:  # noqa: BLE001 - flushing is best effort
-            return
+        self._worker.shutdown(wait=False, cancel_futures=True)
 
     def _deliver(self, trace: TurnTrace, on_sent: Callable[[str], None]) -> None:
         try:

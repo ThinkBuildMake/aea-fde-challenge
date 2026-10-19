@@ -8,6 +8,7 @@ from typing import Protocol
 import httpx2
 
 from app import usage
+from app.llm import reported_cost
 from app.settings import Settings
 
 
@@ -53,7 +54,7 @@ class OpenRouterEmbedder:
             usage.report(
                 usage.Usage(
                     input_tokens=used.prompt_tokens,
-                    cost_usd=(used.model_extra or {}).get("cost"),
+                    cost_usd=reported_cost(used.model_dump()),
                 )
             )
         return vectors

@@ -62,7 +62,10 @@ def live(started: Settings, monkeypatch: pytest.MonkeyPatch) -> Settings:
     return settings
 
 
-def observations(settings: Settings, trace_id: str, since: datetime) -> list[dict]:
+def observations(
+    settings: Settings, since: datetime, want: int, **match: str
+) -> list[dict]:
+    """Observations matching traceId or sessionId, polled until `want` have arrived."""
     assert settings.LANGFUSE_PUBLIC_KEY and settings.LANGFUSE_SECRET_KEY
     auth = (
         settings.LANGFUSE_PUBLIC_KEY.get_secret_value(),
@@ -72,7 +75,7 @@ def observations(settings: Settings, trace_id: str, since: datetime) -> list[dic
         response = httpx2.get(
             f"{settings.LANGFUSE_BASE_URL.rstrip('/')}/api/public/v2/observations",
             params={
-                "traceId": trace_id,
+                **match,
                 "fields": "core,basic,model,usage",
                 "fromStartTime": since.strftime("%Y-%m-%dT%H:%M:%SZ"),
             },
@@ -80,7 +83,7 @@ def observations(settings: Settings, trace_id: str, since: datetime) -> list[dic
             timeout=20,
         )
         data = response.json().get("data") or []
-        if len(data) >= 5:
+        if len(data) >= want:
             return data
         time.sleep(5)
     return data
@@ -117,7 +120,10 @@ def test_turn_lands_in_langfuse(live: Settings):
     conn.close()
     assert trace_id and len(trace_id) == 32
 
-    found = observations(live, trace_id, since)
+    found = observations(live, since, 5, traceId=trace_id)
+    in_session = observations(live, since, 5, sessionId=public_id)
+    session_traces = {o["traceId"] for o in in_session}
+    print(f"\ntraces in session {public_id}: {sorted(session_traces)}")
     print(f"\nturns.trace_id={trace_id} observations in Langfuse={len(found)}")
     for o in sorted(found, key=lambda o: o["startTime"]):
         print(
@@ -126,6 +132,7 @@ def test_turn_lands_in_langfuse(live: Settings):
             f"start={o['startTime']} end={o['endTime']} model={o.get('model')} "
             f"usage={o.get('usageDetails')} cost={o.get('costDetails')}"
         )
+    assert session_traces == {trace_id}
     assert {o["traceId"] for o in found} == {trace_id}
     assert {o["sessionId"] for o in found} == {public_id}
     assert sorted(o["name"] for o in found) == [
@@ -139,4 +146,4 @@ def test_turn_lands_in_langfuse(live: Settings):
         assert o["startTime"] and o["endTime"]
         if o["name"] in ("safety_screen", "model_call", "search_knowledge"):
             assert o["usageDetails"].get("input", 0) > 0
-            assert "total" in o["costDetails"]
+            assert o["costDetails"]["total"] > 0

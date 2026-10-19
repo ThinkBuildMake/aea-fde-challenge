@@ -27,6 +27,16 @@ class ModelResult:
     cost_usd: float | None = None
 
 
+def reported_cost(usage: dict[str, Any]) -> float | None:
+    """The call's price from OpenRouter usage: under BYOK `cost` is only OpenRouter's fee,
+    and the provider's price is in cost_details.upstream_inference_cost."""
+    cost = usage.get("cost")
+    upstream = (usage.get("cost_details") or {}).get("upstream_inference_cost")
+    if usage.get("is_byok") and upstream is not None:
+        return (cost or 0) + upstream
+    return cost
+
+
 class ModelProvider(Protocol):
     def complete(
         self,
@@ -87,7 +97,7 @@ class OpenRouterProvider:
             message=data["choices"][0]["message"],
             prompt_tokens=usage.get("prompt_tokens"),
             completion_tokens=usage.get("completion_tokens"),
-            cost_usd=usage.get("cost"),
+            cost_usd=reported_cost(usage),
         )
 
 

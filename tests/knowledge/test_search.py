@@ -123,7 +123,13 @@ def test_query_embedding_reports_its_tokens_and_cost(kb_settings: Settings):
                 "object": "list",
                 "model": "m",
                 "data": [{"object": "embedding", "index": 0, "embedding": [0.1, 0.2]}],
-                "usage": {"prompt_tokens": 5, "total_tokens": 5, "cost": 0.0000001},
+                "usage": {
+                    "prompt_tokens": 5,
+                    "total_tokens": 5,
+                    "cost": 0,
+                    "is_byok": True,
+                    "cost_details": {"upstream_inference_cost": 0.0000001},
+                },
             },
         )
 

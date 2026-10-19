@@ -5,7 +5,7 @@ import httpx2
 import openai
 import pytest
 
-from app.llm import FakeModelProvider, ModelResult, OpenRouterProvider
+from app.llm import FakeModelProvider, ModelResult, OpenRouterProvider, reported_cost
 from app.settings import Settings
 
 ASSISTANT = {
@@ -70,6 +70,29 @@ def test_openrouter_returns_raw_message_and_cost(tmp_settings: Settings):
     assert result.message == ASSISTANT
     assert (result.prompt_tokens, result.completion_tokens) == (10, 5)
     assert result.cost_usd == 0.0001
+
+
+BYOK_USAGE = {
+    "prompt_tokens": 10,
+    "completion_tokens": 5,
+    "cost": 0,
+    "is_byok": True,
+    "cost_details": {"upstream_inference_cost": 0.00002},
+}
+
+
+def test_reported_cost_adds_the_upstream_price_under_byok():
+    assert reported_cost(BYOK_USAGE) == 0.00002
+    assert reported_cost({"cost": 0.0001, "is_byok": False}) == 0.0001
+    assert reported_cost({"cost": 0.0001}) == 0.0001
+    assert reported_cost({"cost": 0, "is_byok": True}) == 0
+    assert reported_cost({}) is None
+
+
+def test_openrouter_byok_call_costs_its_upstream_price(tmp_settings: Settings):
+    llm = provider(tmp_settings, lambda request: ok_response(ASSISTANT, BYOK_USAGE))
+    result = llm.complete([{"role": "user", "content": "hi"}], timeout_s=5)
+    assert result.cost_usd == 0.00002
 
 
 def test_fake_scripts_tool_calls():

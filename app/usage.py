@@ -25,6 +25,7 @@ def report(usage: Usage) -> None:
 
 def _add[N: (int, float)](values: list[N | None]) -> N | None:
     known = [v for v in values if v is not None]
+    # sum(known) types as int | N for pyright, so start from the first value.
     return sum(known[1:], known[0]) if known else None
 
 

@@ -161,7 +161,9 @@ def test_screen_reports_its_tokens_and_cost(tmp_settings: Settings) -> None:
             "prompt_tokens": 120,
             "completion_tokens": 8,
             "total_tokens": 128,
-            "cost": 0.00002,
+            "cost": 0,
+            "is_byok": True,
+            "cost_details": {"upstream_inference_cost": 0.00002},
         }
         return httpx2.Response(200, json=body)
 

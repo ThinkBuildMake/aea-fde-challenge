@@ -149,10 +149,10 @@ def test_one_trace_per_turn(started: Settings):
     )
     for o in trace.observations:
         ms = (o.end - o.start).total_seconds() * 1000
-    print(
-        f"  {o.name:<17} {o.kind:<10} ms={ms:.1f} tokens_in={o.input_tokens} "
-        f"tokens_out={o.output_tokens} cost_usd={o.cost_usd}"
-    )
+        print(
+            f"  {o.name:<17} {o.kind:<10} ms={ms:.1f} tokens_in={o.input_tokens} "
+            f"tokens_out={o.output_tokens} cost_usd={o.cost_usd}"
+        )
 
 
 def test_card_number_never_in_trace(started: Settings, monkeypatch: pytest.MonkeyPatch):

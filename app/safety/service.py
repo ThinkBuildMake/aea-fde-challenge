@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from app import usage
 from app.context import AppContext
+from app.llm import reported_cost
 from app.logs import log_event
 from app.types import RedactResult, Verdict
 
@@ -106,7 +107,7 @@ class OpenRouterSafetyClassifier:
                 usage.Usage(
                     input_tokens=resp.usage.prompt_tokens,
                     output_tokens=resp.usage.completion_tokens,
-                    cost_usd=(resp.usage.model_extra or {}).get("cost"),
+                    cost_usd=reported_cost(resp.usage.model_dump()),
                 )
             )
         content = resp.choices[0].message.content
