@@ -623,6 +623,14 @@ def _restore(conn: sqlite3.Connection, seed: dict[str, list[tuple]]) -> SlotCoun
     )
 
 
+def _retire_visit_changes(ctx: AppContext) -> None:
+    with closing(ctx.open_app_db()) as app_db:
+        app_db.execute(
+            "UPDATE visit_changes SET retired_at = "
+            "strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE retired_at IS NULL"
+        )
+
+
 def reset_scheduling(ctx: AppContext) -> ResetResult:
     """Put the five supplied tables back to the seed, after a backup of both files."""
     try:
@@ -637,13 +645,8 @@ def reset_scheduling(ctx: AppContext) -> ResetResult:
             except BaseException:
                 conn.rollback()
                 raise
-        with closing(ctx.open_app_db()) as app_db:
-            app_db.execute(
-                "UPDATE visit_changes SET retired_at = "
-                "strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE retired_at IS NULL"
-            )
     except sqlite3.Error as exc:
-        if exc.sqlite_errorcode == sqlite3.SQLITE_BUSY:
+        if (exc.sqlite_errorcode & 0xFF) == sqlite3.SQLITE_BUSY:
             raise AppError(
                 409, "busy", "A booking is in progress. Try again shortly."
             ) from exc
@@ -653,6 +656,15 @@ def reset_scheduling(ctx: AppContext) -> ResetResult:
     except (SchedulingUnavailable, OSError) as exc:
         raise AppError(
             500, "reset_failed", "The reset could not be completed."
+        ) from exc
+    try:
+        _retire_visit_changes(ctx)
+    except sqlite3.Error as exc:
+        raise AppError(
+            500,
+            "reset_failed",
+            "The seed was restored, but the earlier visit changes could not be "
+            "marked retired. Run the reset again.",
         ) from exc
     return ResetResult(snapshot_id=snapshot_id, slot_counts=counts)
 
