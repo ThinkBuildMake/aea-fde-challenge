@@ -60,8 +60,9 @@ FAILED_WRITE_INSTRUCTION = (
 CANCEL_CONFIRM_INSTRUCTION = (
     "Nothing is cancelled yet. Tell the caller the visit's date and window, say there is "
     "no fee when lateFeeApplies is false or state the late-cancellation fee from "
-    "lateFeeCents when it is true, and ask them to confirm. Call cancel_visit again only "
-    "if their next message is a clear yes."
+    "lateFeeCents when it is true, and end with one question asking them to confirm, "
+    "such as 'Do you want me to cancel it?'. Call cancel_visit again only if their next "
+    "message is a clear yes."
 )
 SEARCH_UNAVAILABLE_INSTRUCTION = (
     "The knowledge base is unavailable. Do not answer fees, policy, membership or "
