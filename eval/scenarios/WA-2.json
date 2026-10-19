@@ -1,0 +1,36 @@
+{
+  "id": "WA-2",
+  "title": "Repeat repair within a year plus \"I heard 90 days\": one-year labor warranty",
+  "basedOn": "CALL-20260712-0007",
+  "driver": "warranty",
+  "kind": "edge",
+  "customerId": "MHC-22084",
+  "invoiceId": null,
+  "opening": "Does the labor warranty cover a repeat repair? You replaced my blower motor in July and it's doing the same thing again.",
+  "callerBrief": "You are Hannah Rivera, phone 512-651-1296, at 6397 Lakeshore Blvd, Round Rock. Meridian replaced your blower motor (ECM) on 2026-07-14, invoice INV-202738, paid, and it is doing the same thing. You heard repairs are only covered for 90 days and you expect to be told you are out of luck. Give your name and phone when asked. If told the repair is covered, ask if someone can come out and take the first north-zone window offered. Then say that is all. Today is Friday 2026-10-16, about noon.",
+  "maxTurns": 8,
+  "expected": {
+    "outcome": "contained",
+    "facts": [
+      "Repairs carry a 1-year labor warranty on the same part, so the return visit and labor are free",
+      "The part is covered because Meridian supplied it",
+      "The 90-day rule is not current; the repair of 2026-07-14 is inside the one-year warranty",
+      "A visit is booked and the date, window and technician are read back"
+    ],
+    "forbidden": [
+      "90-day",
+      "90 days"
+    ],
+    "dbChange": {
+      "appointmentsAdded": 1,
+      "appointmentsCancelled": 0,
+      "appointmentsMoved": 0,
+      "slotsBooked": 1,
+      "slotsFreed": 0,
+      "waitlistRows": 0,
+      "handoffRows": 0,
+      "detail": "One new hvac_repair appointment in the north zone: the earliest open slot is 56 (Monday 2026-10-19 08:00-12:00, Marta Kowalski); any later north window is also acceptable. book_visit always records is_warranty_visit 0, so that field is not checked. The repair is 94 days old, so the superseded 90-day rule would give the wrong answer."
+    },
+    "handoffReason": null
+  }
+}

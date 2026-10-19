@@ -1,0 +1,37 @@
+{
+  "id": "ME-1",
+  "title": "What the standard plan includes and costs",
+  "basedOn": "CALL-20260707-0148",
+  "driver": "membership",
+  "kind": "happy",
+  "customerId": "MHC-78738",
+  "invoiceId": null,
+  "opening": "What does the Comfort Club membership actually include?",
+  "callerBrief": "You are Raj Okafor, phone 512-201-1171, at 8906 Windcrest Ave, Kyle. You are not a member. Ask what the Comfort Club includes, then how much it is, then whether it covers plumbing. Give your name and phone only if asked. After the answers say you will think about it and that is all. Today is Friday 2026-10-16, about noon.",
+  "maxTurns": 8,
+  "expected": {
+    "outcome": "contained",
+    "facts": [
+      "The standard plan costs $189 a year or $16.99 a month",
+      "Each additional system is $99 a year",
+      "It includes two tune-ups a year, priority scheduling, the $89 diagnostic fee waived, 15% off repairs, and no after-hours dispatch fee",
+      "The standard plan is HVAC only; Comfort Club Plus is $269 a year and adds a water heater flush, a plumbing inspection and 15% off plumbing repairs"
+    ],
+    "forbidden": [
+      "$12.99",
+      "$219",
+      "10% off"
+    ],
+    "dbChange": {
+      "appointmentsAdded": 0,
+      "appointmentsCancelled": 0,
+      "appointmentsMoved": 0,
+      "slotsBooked": 0,
+      "slotsFreed": 0,
+      "waitlistRows": 0,
+      "handoffRows": 0,
+      "detail": "No database change."
+    },
+    "handoffReason": null
+  }
+}

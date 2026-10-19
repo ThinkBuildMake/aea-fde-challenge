@@ -1,0 +1,33 @@
+{
+  "id": "ME-2",
+  "title": "\"I thought it was $149?\": current price $189",
+  "basedOn": "CALL-20260712-0104",
+  "driver": "membership",
+  "kind": "edge",
+  "customerId": "MHC-26686",
+  "invoiceId": null,
+  "opening": "How much is the maintenance plan?",
+  "callerBrief": "You are Patricia Ali, phone 512-461-5262, at 6755 Brookside Ct, Kyle. You are not a member. Ask the price of the maintenance plan. Whatever the answer, say: I thought it was $149? Then say okay and that is all. Give your name and phone only if asked. Today is Friday 2026-10-16, about noon.",
+  "maxTurns": 8,
+  "expected": {
+    "outcome": "contained",
+    "facts": [
+      "The current Comfort Club price is $189 a year or $16.99 a month, effective 2026-01-01",
+      "The old price no longer applies; existing members keep their enrollment price until their renewal date"
+    ],
+    "forbidden": [
+      "$149"
+    ],
+    "dbChange": {
+      "appointmentsAdded": 0,
+      "appointmentsCancelled": 0,
+      "appointmentsMoved": 0,
+      "slotsBooked": 0,
+      "slotsFreed": 0,
+      "waitlistRows": 0,
+      "handoffRows": 0,
+      "detail": "No database change."
+    },
+    "handoffReason": null
+  }
+}

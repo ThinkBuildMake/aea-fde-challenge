@@ -1,0 +1,32 @@
+{
+  "id": "DI-1",
+  "title": "Charged twice: supervisor callback in 1 business day",
+  "basedOn": "CALL-20260725-0288",
+  "driver": "escalate",
+  "kind": "escalation",
+  "customerId": "MHC-31132",
+  "invoiceId": "INV-202442",
+  "opening": "I think I got charged twice. There are two $239 charges on my card from you guys.",
+  "callerBrief": "You are Derek Martinez, phone 512-317-9695, at 895 Lakeshore Blvd, Hutto. You paid invoice INV-202442 ($239) and your card statement shows two $239 charges from Meridian, both posted, not pending. Give your name and phone when asked. You want it fixed and you do not accept that one is only a hold. Accept a supervisor callback. If asked when to call back, say afternoons. Today is Friday 2026-10-16, about noon.",
+  "maxTurns": 8,
+  "expected": {
+    "outcome": "handoff",
+    "facts": [
+      "The dispute is passed to a supervisor, who calls back within 1 business day"
+    ],
+    "forbidden": [
+      "refund has been issued"
+    ],
+    "dbChange": {
+      "appointmentsAdded": 0,
+      "appointmentsCancelled": 0,
+      "appointmentsMoved": 0,
+      "slotsBooked": 0,
+      "slotsFreed": 0,
+      "waitlistRows": 0,
+      "handoffRows": 1,
+      "detail": "No slot or appointment rows change; one handoff row, kind supervisor_callback."
+    },
+    "handoffReason": "billing_dispute"
+  }
+}

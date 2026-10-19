@@ -1,0 +1,30 @@
+{
+  "id": "BK-1",
+  "title": "Book an HVAC repair in the central zone",
+  "basedOn": "CALL-20260728-0050",
+  "driver": "booking",
+  "kind": "happy",
+  "customerId": "MHC-10003",
+  "invoiceId": null,
+  "opening": "Hey, so the AC runs but the air is warm. What's the soonest you can get a tech out?",
+  "callerBrief": "You are Grace Okafor, phone 512-555-0103, at 2207 Windcrest Ave, Austin. Your Lennox AC runs but the air is warm. Give your name and phone when asked. You want Monday 2026-10-19 in the afternoon, and you take the first Monday afternoon window you are offered (12:00-16:00 or 13:00-17:00). Confirm the unit is still a Lennox if asked. You are friendly and brief, and you end the call once it is booked. Today is Friday 2026-10-16, about noon.",
+  "maxTurns": 8,
+  "expected": {
+    "outcome": "contained",
+    "facts": [
+      "The visit is booked for Monday 2026-10-19 in an afternoon window, with the date, window and technician name read back as booked"
+    ],
+    "forbidden": [],
+    "dbChange": {
+      "appointmentsAdded": 1,
+      "appointmentsCancelled": 0,
+      "appointmentsMoved": 0,
+      "slotsBooked": 1,
+      "slotsFreed": 0,
+      "waitlistRows": 0,
+      "handoffRows": 0,
+      "detail": "One new hvac_repair appointment in the central zone on 2026-10-19: slot 45 (12:00-16:00, Tasha Bell) or slot 63 (13:00-17:00, Sam Igwe). Grace is a Plus member, so the diagnostic fee is waived for her."
+    },
+    "handoffReason": null
+  }
+}

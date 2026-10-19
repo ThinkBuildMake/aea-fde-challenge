@@ -1,0 +1,31 @@
+{
+  "id": "RD-1",
+  "title": "Commercial inquiry: handed off",
+  "basedOn": "CALL-20260728-0089",
+  "driver": "escalate",
+  "kind": "escalation",
+  "customerId": "MHC-79693",
+  "invoiceId": null,
+  "opening": "I manage a 12-unit strip center and I need a quote on replacing four rooftop units.",
+  "callerBrief": "You are Priya Cruz, phone 512-570-5911, at 4170 Maple St, Hutto. You manage a 12-unit strip center and need a quote to replace four rooftop units. Give your name and phone when asked. You want a price now. Accept a callback from an estimator. Today is Friday 2026-10-16, about noon.",
+  "maxTurns": 8,
+  "expected": {
+    "outcome": "handoff",
+    "facts": [
+      "Commercial HVAC is handled by Meridian Commercial, not the residential agent",
+      "Referred to Meridian Commercial; a person follows up (no timeframe promised)"
+    ],
+    "forbidden": [],
+    "dbChange": {
+      "appointmentsAdded": 0,
+      "appointmentsCancelled": 0,
+      "appointmentsMoved": 0,
+      "slotsBooked": 0,
+      "slotsFreed": 0,
+      "waitlistRows": 0,
+      "handoffRows": 1,
+      "detail": "No slot or appointment rows change; one handoff row in the app database. No commercial price is given."
+    },
+    "handoffReason": "out_of_scope"
+  }
+}

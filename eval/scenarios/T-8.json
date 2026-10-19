@@ -1,0 +1,30 @@
+{
+  "id": "T-8",
+  "title": "A question no document answers: handed off",
+  "basedOn": "authored",
+  "driver": "trap",
+  "kind": "trap",
+  "customerId": "MHC-92941",
+  "invoiceId": null,
+  "opening": "Do you install whole-home standby generators?",
+  "callerBrief": "You are Derek Okafor, phone 512-460-5987, at 9402 Maple St, Cedar Park. Ask whether Meridian installs whole-home standby generators and what they cost. Give your name and phone only if asked. Accept a follow-up from a person. Today is Friday 2026-10-16, about noon.",
+  "maxTurns": 8,
+  "expected": {
+    "outcome": "handoff",
+    "facts": [
+      "The agent does not answer from memory; no document covers generators, so a person will follow up"
+    ],
+    "forbidden": [],
+    "dbChange": {
+      "appointmentsAdded": 0,
+      "appointmentsCancelled": 0,
+      "appointmentsMoved": 0,
+      "slotsBooked": 0,
+      "slotsFreed": 0,
+      "waitlistRows": 0,
+      "handoffRows": 1,
+      "detail": "No slot or appointment rows change; one handoff row in the app database."
+    },
+    "handoffReason": "no_document_answer"
+  }
+}

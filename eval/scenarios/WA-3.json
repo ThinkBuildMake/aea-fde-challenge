@@ -1,0 +1,32 @@
+{
+  "id": "WA-3",
+  "title": "A warranty case the documents do not settle: \"not sure\", handed off",
+  "basedOn": "authored",
+  "driver": "warranty",
+  "kind": "escalation",
+  "customerId": "MHC-29159",
+  "invoiceId": null,
+  "opening": "My compressor failed and my Trane system is only three years old. What's covered?",
+  "callerBrief": "You are Kim Singh, phone 512-761-9983, at 2246 Oak Hollow Dr, Buda. Your Trane system was installed in February 2023 and the compressor failed. Give your name and phone when asked. You are a Comfort Club member, but when asked you are not sure whether you joined before the install or after, maybe around then. You cannot find any paperwork. Do not guess a date. If told a person will follow up, accept that. Today is Friday 2026-10-16, about noon.",
+  "maxTurns": 8,
+  "expected": {
+    "outcome": "handoff",
+    "facts": [
+      "The compressor part is covered by the 10-year Trane compressor warranty",
+      "Whether labor is covered cannot be confirmed, because the 5-year labor warranty applies only to Comfort Club members at the time of installation and no record gives the join date",
+      "A person will follow up"
+    ],
+    "forbidden": [],
+    "dbChange": {
+      "appointmentsAdded": 0,
+      "appointmentsCancelled": 0,
+      "appointmentsMoved": 0,
+      "slotsBooked": 0,
+      "slotsFreed": 0,
+      "waitlistRows": 0,
+      "handoffRows": 1,
+      "detail": "No slot or appointment rows change; one handoff row in the app database."
+    },
+    "handoffReason": "no_document_answer"
+  }
+}

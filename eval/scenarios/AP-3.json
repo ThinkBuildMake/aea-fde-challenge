@@ -1,0 +1,34 @@
+{
+  "id": "AP-3",
+  "title": "Asks the agent to waive the fee: refused, handed off",
+  "basedOn": "authored",
+  "driver": "appointment",
+  "kind": "escalation",
+  "customerId": "MHC-36446",
+  "invoiceId": null,
+  "opening": "I need to cancel my appointment tomorrow, and I want the cancellation fee waived.",
+  "callerBrief": "You are Nadia Lee, phone 512-496-8302, at 8293 Maple St, Leander. You have a visit tomorrow, Saturday 2026-10-17, 8 to 12. Give your name and phone when asked. You want the late-cancellation fee waived because your child is sick. If refused, push once more, then ask to speak with a person. Do not accept the fee and do not confirm the cancellation until someone decides. Today is Friday 2026-10-16, about noon.",
+  "maxTurns": 8,
+  "expected": {
+    "outcome": "handoff",
+    "facts": [
+      "The visit is inside 24 hours, so the $49 late-cancellation fee applies",
+      "The agent cannot waive the fee; a person will follow up"
+    ],
+    "forbidden": [
+      "once per customer per year",
+      "documented reason"
+    ],
+    "dbChange": {
+      "appointmentsAdded": 0,
+      "appointmentsCancelled": 0,
+      "appointmentsMoved": 0,
+      "slotsBooked": 0,
+      "slotsFreed": 0,
+      "waitlistRows": 0,
+      "handoffRows": 1,
+      "detail": "Appointment 23 (slot 31, 2026-10-17 08:00-12:00, Ray Mendoza) stays scheduled and slot 31 stays booked; one handoff row in the app database."
+    },
+    "handoffReason": "caller_asked_for_person"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "id": "AP-1",
+  "title": "Move a visit more than 24 hours out",
+  "basedOn": "CALL-20260721-0258",
+  "driver": "appointment",
+  "kind": "happy",
+  "customerId": "MHC-10001",
+  "invoiceId": null,
+  "opening": "I have a tech coming Thursday but something came up. Can I move it?",
+  "callerBrief": "You are Linda Foster, phone 512-555-0101, at 4412 Oak Hollow Dr, Round Rock. You have a visit Thursday 2026-10-22, 8 to 12. Give your name and phone when asked. You want to move it to Friday 2026-10-23 in the afternoon, and you take the first Friday afternoon window offered. Then say that covers it. Today is Friday 2026-10-16, about noon.",
+  "maxTurns": 8,
+  "expected": {
+    "outcome": "contained",
+    "facts": [
+      "There is no fee, because the visit is more than 24 hours away",
+      "The visit is moved to Friday 2026-10-23 in an afternoon window, with the new date, window and technician read back"
+    ],
+    "forbidden": [],
+    "dbChange": {
+      "appointmentsAdded": 0,
+      "appointmentsCancelled": 0,
+      "appointmentsMoved": 1,
+      "slotsBooked": 1,
+      "slotsFreed": 1,
+      "waitlistRows": 0,
+      "handoffRows": 0,
+      "detail": "Appointment 159 moves in place from slot 159 (2026-10-22 08:00-12:00, Marta Kowalski), which becomes open, to slot 193 (2026-10-23 12:00-16:00, Marta Kowalski) or slot 179 (2026-10-23 13:00-17:00, Ray Mendoza), which becomes booked. No appointment is added."
+    },
+    "handoffReason": null
+  }
+}

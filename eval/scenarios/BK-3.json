@@ -1,0 +1,31 @@
+{
+  "id": "BK-3",
+  "title": "North-zone plumbing: told none is available, handed off",
+  "basedOn": "CALL-20260718-0360",
+  "driver": "booking",
+  "kind": "escalation",
+  "customerId": "MHC-53113",
+  "invoiceId": null,
+  "opening": "I'm calling to book a repair, my kitchen sink is backing up.",
+  "callerBrief": "You are Elena Thompson, phone 512-423-6842, at 3097 Oak Hollow Dr, Georgetown. Your kitchen sink is backing up and you want a plumber Monday 2026-10-19, first thing in the morning. Give your name and phone when asked. If the agent says no plumber is available for your area, ask what happens next and accept that someone will follow up. Do not ask for anything else. Today is Friday 2026-10-16, about noon.",
+  "maxTurns": 8,
+  "expected": {
+    "outcome": "handoff",
+    "facts": [
+      "No plumbing technician serves the caller's area, so no plumbing visit can be booked",
+      "A person will follow up with the caller"
+    ],
+    "forbidden": [],
+    "dbChange": {
+      "appointmentsAdded": 0,
+      "appointmentsCancelled": 0,
+      "appointmentsMoved": 0,
+      "slotsBooked": 0,
+      "slotsFreed": 0,
+      "waitlistRows": 0,
+      "handoffRows": 1,
+      "detail": "No slot or appointment rows change. The seed has no north-zone plumbing slots, and scheduling reports no_plumber_in_zone."
+    },
+    "handoffReason": "no_plumber_in_zone"
+  }
+}

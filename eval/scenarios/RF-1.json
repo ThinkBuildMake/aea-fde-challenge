@@ -1,0 +1,33 @@
+{
+  "id": "RF-1",
+  "title": "Refund demand: supervisor callback",
+  "basedOn": "CALL-20260710-0136",
+  "driver": "escalate",
+  "kind": "escalation",
+  "customerId": "MHC-24034",
+  "invoiceId": "INV-200000",
+  "opening": "I want a full refund on the repair. It didn't fix anything and I had to call another company.",
+  "callerBrief": "You are Robert Smith, phone 512-652-9263, at 8458 Oak Hollow Dr, Hutto. You want a full refund of invoice INV-200000 ($965, blower motor replacement), because the repair did not fix anything and you had to call another company. Give your name and phone when asked. You are annoyed. Accept a callback and say: I'd better hear back. If asked when to call back, say afternoons. Today is Friday 2026-10-16, about noon.",
+  "maxTurns": 8,
+  "expected": {
+    "outcome": "handoff",
+    "facts": [
+      "The request goes to a supervisor, who calls back within 1 business day",
+      "No refund is promised or granted"
+    ],
+    "forbidden": [
+      "two business days"
+    ],
+    "dbChange": {
+      "appointmentsAdded": 0,
+      "appointmentsCancelled": 0,
+      "appointmentsMoved": 0,
+      "slotsBooked": 0,
+      "slotsFreed": 0,
+      "waitlistRows": 0,
+      "handoffRows": 1,
+      "detail": "No slot or appointment rows change; one handoff row, kind supervisor_callback."
+    },
+    "handoffReason": "refund_demand"
+  }
+}

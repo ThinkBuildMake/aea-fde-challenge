@@ -1,0 +1,35 @@
+{
+  "id": "ME-3",
+  "title": "Cancel auto-renew: explained, handed off",
+  "basedOn": "CALL-20260710-0364",
+  "driver": "membership",
+  "kind": "escalation",
+  "customerId": "MHC-31337",
+  "invoiceId": null,
+  "opening": "I want to cancel my Comfort Club membership.",
+  "callerBrief": "You are Sofia Brown, phone 512-547-7902, at 3307 Lakeshore Blvd, Pflugerville. You are a standard Comfort Club member and you want to cancel it. Give your name and phone when asked. When told the plan is annual and what that means for a refund, say: that's fine, just make sure it doesn't renew. Accept that someone will turn off auto-renew. Then say that is all. Today is Friday 2026-10-16, about noon.",
+  "maxTurns": 8,
+  "expected": {
+    "outcome": "handoff",
+    "facts": [
+      "Auto-renewal can be cancelled at any time before the renewal date, 2027-07-11",
+      "Annual plans are non-refundable once a tune-up has been performed in the current term",
+      "Staff will turn off auto-renew; the agent does not say it is already off"
+    ],
+    "forbidden": [
+      "auto-renew is off",
+      "full prorated refund"
+    ],
+    "dbChange": {
+      "appointmentsAdded": 0,
+      "appointmentsCancelled": 0,
+      "appointmentsMoved": 0,
+      "slotsBooked": 0,
+      "slotsFreed": 0,
+      "waitlistRows": 0,
+      "handoffRows": 1,
+      "detail": "No slot or appointment rows change; one handoff row in the app database."
+    },
+    "handoffReason": "membership_change"
+  }
+}

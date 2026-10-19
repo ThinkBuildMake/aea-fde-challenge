@@ -1,0 +1,32 @@
+{
+  "id": "BK-2",
+  "title": "Wants an earlier window: books the later one and joins the waitlist",
+  "basedOn": "CALL-20260714-0178",
+  "driver": "booking",
+  "kind": "edge",
+  "customerId": "MHC-10002",
+  "invoiceId": null,
+  "opening": "Hi, I'm calling to book a repair, the AC runs but the air is warm.",
+  "callerBrief": "You are Omar Patel, phone 512-555-0102, at 901 Brookside Ct, Kyle. Your Goodman AC runs but the air is warm. Give your name and phone when asked. You want a visit Monday 2026-10-19 or Tuesday 2026-10-20. When the agent says nothing is open then and offers a later window (Wednesday 2026-10-21), ask if anything earlier is possible. When told the earliest is the later window and the waitlist is offered, say: okay, do that, and book the slot. Accept the first Wednesday window offered. Then say that is all. Today is Friday 2026-10-16, about noon.",
+  "maxTurns": 8,
+  "expected": {
+    "outcome": "contained",
+    "facts": [
+      "No south-zone window is open on Monday 2026-10-19 or Tuesday 2026-10-20; the earliest is Wednesday 2026-10-21",
+      "The visit is booked for Wednesday 2026-10-21 with technician Jun Park, and the date and window are read back",
+      "The caller is put on the waitlist for an earlier window"
+    ],
+    "forbidden": [],
+    "dbChange": {
+      "appointmentsAdded": 1,
+      "appointmentsCancelled": 0,
+      "appointmentsMoved": 0,
+      "slotsBooked": 1,
+      "slotsFreed": 0,
+      "waitlistRows": 1,
+      "handoffRows": 0,
+      "detail": "One new hvac_repair appointment in the south zone on 2026-10-21: slot 115 (08:00-12:00, Jun Park) or slot 119 (13:00-17:00, Jun Park). One waitlist row in the app database holding a copy of the booked window; no other slot changes."
+    },
+    "handoffReason": null
+  }
+}
