@@ -165,7 +165,7 @@ def test_a_slow_screen_after_the_model_returns_takes_the_fallback(
     assert elapsed < 3
     assert_fallback(reply)
     turn = turn_row(started, cid)
-    assert turn["fallback_used"] == 1 and turn["error"] == "provider_timeout"
+    assert turn["fallback_used"] == 1 and turn["error"] == "screen_unavailable"
     assert calls.windows == [] and calls.books == []
 
 

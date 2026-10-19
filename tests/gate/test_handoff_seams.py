@@ -106,7 +106,25 @@ def test_db_failing_mid_handoff_leaves_no_handoff(
     print(f"text={reply['text']!r}\nafter the turn: {after}")
     assert reply["text"] == guards.FALLBACK_TEXT
     assert (reply["status"], reply["banner"]) == ("active", "error")
-    assert after == {"handoffs": 0, "outcome": None, "turns": 0}
+    assert after == {"handoffs": 0, "outcome": None, "turns": 1}
+    turn = rows(
+        kb_settings,
+        "SELECT fallback_used, error FROM turns WHERE conversation_id = ?",
+        cid,
+    )[0]
+    assert (turn[0], turn[1]) == (1, "handoff_save_failed")
+    monkeypatch.undo()
+    picked = client.post(
+        f"/conversations/{cid}/callback-window", json={"window": "morning"}
+    )
+    handoff = picked.json().get("handoff", {})
+    print(
+        f"pick={picked.status_code} reason={handoff.get('reason')} "
+        f"byError={handoff.get('byError')} told={handoff.get('toldCaller')!r}"
+    )
+    assert picked.status_code == 200
+    assert (handoff["reason"], handoff["byError"]) == ("app_db_unavailable", True)
+    assert handoff["toldCaller"] == guards.FALLBACK_TEXT
 
 
 def test_handoff_record_is_complete(kb_settings: Settings):

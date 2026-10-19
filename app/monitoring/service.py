@@ -133,15 +133,18 @@ def _handled_topics(
     db: sqlite3.Connection, since: str
 ) -> tuple[float | None, str | None]:
     marks = ",".join("?" * len(HANDLED_INTENTS))
+    # A conversation handed off after a failure (by_error) is counted with the errors,
+    # not here (OB-3).
     handled, handed = db.execute(
         "SELECT COUNT(*), COALESCE(SUM(outcome = 'handoff'), 0) FROM conversations "
-        f"WHERE {IN_WINDOW} AND intent IN ({marks})",
+        f"WHERE {IN_WINDOW} AND intent IN ({marks}) AND NOT EXISTS (SELECT 1 "
+        "FROM handoffs h WHERE h.conversation_id = conversations.id AND h.by_error = 1)",
         (since, *HANDLED_INTENTS),
     ).fetchone()
     top = db.execute(
         "SELECT h.reason FROM handoffs h JOIN conversations c ON c.id = h.conversation_id "
         f"WHERE {IN_WINDOW} "
-        f"AND c.outcome = 'handoff' AND c.intent IN ({marks}) "
+        f"AND c.outcome = 'handoff' AND h.by_error = 0 AND c.intent IN ({marks}) "
         "GROUP BY h.reason ORDER BY COUNT(*) DESC, h.reason LIMIT 1",
         (since, *HANDLED_INTENTS),
     ).fetchone()

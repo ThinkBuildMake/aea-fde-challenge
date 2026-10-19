@@ -33,6 +33,7 @@
   const OUTAGE_LABEL = 'Simulate an outage';
   const OUTAGE_TEXT = 'Can I move my visit?';
   const SEND_FAILED = 'That did not go through. Please try again.';
+  const TURN_CAP_TEXT = 'This conversation has reached its limit. Please start a new conversation, or ask for a call back.';
   const PICK_FAILED = 'That did not go through. Please pick a time again.';
   const banner = $('chat-banner');
   const GREETING = messages.querySelector('.bubble.bot').textContent;
@@ -46,6 +47,7 @@
     if (!response.ok) {
       const error = new Error(url + ' ' + response.status);
       error.status = response.status;
+      error.code = await response.json().then((body) => body.error, () => undefined);
       throw error;
     }
     return response.json();
@@ -260,10 +262,15 @@
       if (mine !== generation) return;
       stopTyping(typing);
       renderReply(result);
-    } catch {
+    } catch (error) {
       if (mine !== generation) return;
       stopTyping(typing);
-      messages.appendChild(el('div', 'send-error', SEND_FAILED));
+      if (error.code === 'turn_limit_reached') addBubble('bot', TURN_CAP_TEXT);
+      if (error.code === 'turn_limit_reached' || error.code === 'conversation_ended') {
+        showEnded(STATUS_ENDED_TEXT.ended);
+      } else {
+        messages.appendChild(el('div', 'send-error', SEND_FAILED));
+      }
     } finally {
       if (mine === generation) setBusy(false);
     }

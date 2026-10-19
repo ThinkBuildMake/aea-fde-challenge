@@ -3,7 +3,7 @@
 import json
 import sqlite3
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -288,6 +288,34 @@ def _fixed_handoff_text(state: tools.ToolState) -> str | None:
     return None if record is None else guards.handoff_text(record.reason, record.kind)
 
 
+def _call_cost(settings: Settings, result: Any) -> float:
+    """The call's reported cost, else its estimate from MODEL_PRICES."""
+    if result.cost_usd is not None:
+        return result.cost_usd
+    price = settings.MODEL_PRICES.get(settings.AGENT_MODEL, {})
+    return (
+        (result.prompt_tokens or 0) * price.get("input", 0.0)
+        + (result.completion_tokens or 0) * price.get("output", 0.0)
+    ) / 1e6
+
+
+def _add_late_cost(ctx: AppContext, conversation_id: str, late: Future) -> None:
+    """A model call the turn stopped waiting for still costs money: add it when it returns."""
+    if late.cancelled() or late.exception() is not None:
+        return
+    try:
+        conn = ctx.open_app_db()
+        try:
+            conn.execute(
+                "UPDATE conversations SET cost_usd = cost_usd + ? WHERE id = ?",
+                (_call_cost(ctx.settings, late.result()), conversation_id),
+            )
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001 - a late cost never raises in a worker
+        log_event("late_cost_failed", level="warning", error_type=type(exc).__name__)
+
+
 def _failure_code(exc: Exception, has_history: bool) -> str:
     if isinstance(exc, TimeoutError | openai.APITimeoutError):
         return "provider_timeout"
@@ -459,6 +487,10 @@ def run_turn(
     ):
         history.extend(json.loads(row["model_messages"]))
         earlier += 1
+    last_seq = db.execute(
+        "SELECT COALESCE(MAX(seq), 0) FROM turns WHERE conversation_id = ?",
+        (conversation_id,),
+    ).fetchone()[0]
     state = tools.ToolState.load(db, conversation_id, redacted, history)
     recent, follow_up_pending = _recent_turns(db, conversation_id)
 
@@ -485,8 +517,9 @@ def run_turn(
                 failure = "provider_timeout"
                 break
             call_start = datetime.now(UTC)
+            call = None
             try:
-                result = model_pool.submit(
+                call = model_pool.submit(
                     ctx.model.complete,
                     [
                         {
@@ -498,9 +531,14 @@ def run_turn(
                     ],
                     tools=tools.TOOLS,
                     timeout_s=remaining,
-                ).result(timeout=remaining - FALLBACK_RESERVE_S)
+                )
+                result = call.result(timeout=remaining - FALLBACK_RESERVE_S)
             except Exception as exc:  # noqa: BLE001 - any provider failure falls back
                 failure = _failure_code(exc, bool(history))
+                if call is not None and isinstance(exc, TimeoutError):
+                    call.add_done_callback(
+                        lambda late: _add_late_cost(ctx, conversation_id, late)
+                    )
                 observations.append(
                     _observed(
                         "model_call", "generation", call_start, None, [],
@@ -517,11 +555,7 @@ def run_turn(
                         timeout=max(left() - FALLBACK_RESERVE_S, 0.0)
                     )
                 except Exception as exc:  # noqa: BLE001 - an unscreened turn takes the fallback
-                    failure = (
-                        "provider_timeout"
-                        if isinstance(exc, TimeoutError)
-                        else "screen_unavailable"
-                    )
+                    failure = "screen_unavailable"
                     log_event(
                         "screen_failed", error=failure, error_type=type(exc).__name__
                     )
@@ -530,15 +564,8 @@ def run_turn(
                 prompt_tokens = (prompt_tokens or 0) + result.prompt_tokens
             if result.completion_tokens is not None:
                 completion_tokens = (completion_tokens or 0) + result.completion_tokens
-            if result.cost_usd is not None:
-                call_cost = result.cost_usd
-            else:
-                all_reported = False
-                price = ctx.settings.MODEL_PRICES.get(ctx.settings.AGENT_MODEL, {})
-                call_cost = (
-                    (result.prompt_tokens or 0) * price.get("input", 0.0)
-                    + (result.completion_tokens or 0) * price.get("output", 0.0)
-                ) / 1e6
+            all_reported = all_reported and result.cost_usd is not None
+            call_cost = _call_cost(ctx.settings, result)
             cost += call_cost
             observations.append(
                 _observed(
@@ -661,7 +688,19 @@ def run_turn(
             committed = guards.committed_text(
                 state.booking, state.cancelled, state.waitlisted
             )
-            if committed:
+            if state.handoff is not None and failure != "replay_rejected":
+                # The model already handed over: keep the handoff and its reason.
+                final_text = " ".join(
+                    filter(
+                        None,
+                        [committed, _fixed_handoff_text(state) or guards.HANDOFF_TEXT],
+                    )
+                )
+                status, banner = "handed_off", "handoff"
+                actions = ["choose_callback_window"]
+                state.resolved = False
+                end = _handoff_end(ctx, db, conversation_id, state.handoff)
+            elif committed:
                 final_text = committed
             else:
                 final_text = guards.FALLBACK_TEXT
@@ -686,6 +725,7 @@ def run_turn(
                 state.resolved = False
             if state.write_failed and (booking is None or state.waitlist_failed):
                 actions = ["request_callback"]
+                turn["error"] = "write_failed"
             withheld = False
             fixed = _fixed_handoff_text(state)
             if fixed is not None:
@@ -754,13 +794,27 @@ def run_turn(
         seq = saved = _save_turn(ctx, db, conversation_id, state, turn, cost, end)
     except sqlite3.Error as exc:
         log_event("turn_save_failed", table="turns", error_type=type(exc).__name__)
-        seq = earlier + 1
+        seq = last_seq + 1
         if status == "safety_stop" and end is not None:
             _record_stop_alone(db, end, final_text)
-        elif status == "handed_off":
-            # Nothing was written: the caller gets the fallback, the conversation stays open.
-            final_text = turn["reply_text"] = guards.FALLBACK_TEXT
-            status, banner, actions = "active", "error", ["request_callback"]
+        elif status == "handed_off" or (
+            status == "active" and "request_callback" in actions
+        ):
+            if status == "handed_off":
+                # No handoff was written: the caller gets the fallback and the
+                # conversation stays open.
+                final_text = turn["reply_text"] = guards.FALLBACK_TEXT
+                status, banner, actions = "active", "error", ["request_callback"]
+                turn.update(fallback_used=1, error="handoff_save_failed")
+            # The reply offers a call back: a plain row (best effort) lets the pick find it.
+            turn.update(
+                stored=[user, {"role": "assistant", "content": final_text}],
+                tools_called=[],
+            )
+            try:
+                seq = saved = _save_turn(ctx, db, conversation_id, state, turn, cost)
+            except (sqlite3.Error, AppError) as again:
+                log_event("fallback_turn_save_failed", error_type=type(again).__name__)
     _send_trace(
         ctx,
         db,

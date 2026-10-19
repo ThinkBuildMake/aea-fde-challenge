@@ -107,6 +107,7 @@ def test_turn_cap_ends_conversation_failed_turn_cap(
     print("5th:", fifth.status_code, fifth.json())
     assert fifth.status_code == 409
     assert fifth.json()["error"] == "turn_limit_reached"
+    assert fifth.json()["message"] == TURN_CAP_TEXT
     outcome, reason, ended_at = db.execute(
         "SELECT outcome, outcome_reason, ended_at FROM conversations WHERE id = ?",
         (cid,),

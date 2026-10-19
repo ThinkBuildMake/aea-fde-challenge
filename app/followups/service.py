@@ -37,6 +37,13 @@ CALLBACK_REASONS: dict[str | None, tuple[str, bool]] = {
     "unsupported_figure": ("not_sure", False),
     "promise_withheld": ("not_sure", False),
     "embedding_unavailable": ("knowledge_unavailable", True),
+    "write_failed": ("write_failed", True),
+}
+
+# A fallback turn's error -> the reason of the handoff a picked window records.
+FALLBACK_REASONS = {
+    "scheduling_unavailable": "scheduling_unavailable",
+    "handoff_save_failed": "app_db_unavailable",
 }
 
 _COLUMNS = (
@@ -236,18 +243,13 @@ def _handoff_after_fallback(
         "WHERE c.id = ? ORDER BY t.seq DESC LIMIT 1",
         (conversation_id,),
     ).fetchone()
-    if last is None or last[5] is not None:
+    # A refused replay ended the conversation on a fallback that still offered a call back.
+    replay = last is not None and last[1] == "replay_rejected" and last[5] == "failed"
+    if last is None or (last[5] is not None and not replay):
         # Nothing to hand over, or the conversation already ended another way.
         raise NoHandoff(conversation_id)
     if last[0]:
-        reason, by_error = (
-            (
-                "scheduling_unavailable"
-                if last[1] == "scheduling_unavailable"
-                else "provider_failure"
-            ),
-            True,
-        )
+        reason, by_error = FALLBACK_REASONS.get(last[1], "provider_failure"), True
     elif last[1] in CALLBACK_REASONS:
         reason, by_error = CALLBACK_REASONS[last[1]]
     else:
@@ -266,7 +268,13 @@ def _handoff_after_fallback(
         ),
         ctx,
     )
-    end_with_handoff(conn, conversation_id)
+    if replay:
+        conn.execute(
+            "UPDATE conversations SET outcome = 'handoff' WHERE id = ? AND outcome = 'failed'",
+            (conversation_id,),
+        )
+    else:
+        end_with_handoff(conn, conversation_id)
 
 
 _WAITLIST_COLUMNS = (
