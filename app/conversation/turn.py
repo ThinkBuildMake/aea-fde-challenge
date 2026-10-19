@@ -239,7 +239,11 @@ def run_turn(
                         timeout=max(left() - FALLBACK_RESERVE_S, 0.0)
                     )
                 except Exception as exc:  # noqa: BLE001 - an unscreened turn takes the fallback
-                    failure = _failure_code(exc, False)
+                    failure = (
+                        "provider_timeout"
+                        if isinstance(exc, TimeoutError)
+                        else "screen_unavailable"
+                    )
                     log_event(
                         "screen_failed", error=failure, error_type=type(exc).__name__
                     )
@@ -279,6 +283,9 @@ def run_turn(
                         "content": json.dumps(output),
                     }
                 )
+            if state.unavailable == "scheduling_unavailable":
+                failure = state.unavailable
+                break
         else:
             if not failure:
                 failure = "tool_rounds_exhausted"
@@ -300,7 +307,7 @@ def run_turn(
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
         "cost_source": "reported" if all_reported else "estimated",
-        "safety_verdict": verdict.verdict if verdict else "safe",
+        "safety_verdict": verdict.verdict if verdict else "unscreened",
         "error": None,
         "fallback_used": 0,
     }
@@ -354,7 +361,9 @@ def run_turn(
             if state.write_failed and booking is None:
                 actions = ["request_callback"]
             withheld = False
-            if state.booking and guards.confirmation_mismatch(
+            if state.unavailable == "embedding_unavailable":
+                withheld, turn["error"] = True, "embedding_unavailable"
+            elif state.booking and guards.confirmation_mismatch(
                 final_text, state.booking
             ):
                 final_text = guards.confirmation_text(state.booking)
