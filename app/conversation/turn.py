@@ -2,11 +2,10 @@
 
 import json
 import sqlite3
-from collections.abc import Callable
 from typing import Any
 
 from app.context import AppContext
-from app.knowledge import service as knowledge
+from app.conversation import tools
 from app.safety import service as safety
 from app.types import Reply, TurnInfo
 
@@ -22,98 +21,6 @@ INSTRUCTIONS = (
     "tool call. Write the caller's answer once, after the tools have returned."
 )
 
-TOOLS: list[dict[str, Any]] = [
-    {
-        "type": "function",
-        "function": {
-            "name": "search_knowledge",
-            "description": "Search Meridian's knowledge base for fees, policies, membership and warranty.",
-            "parameters": {
-                "type": "object",
-                "properties": {"query": {"type": "string"}},
-                "required": ["query"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "report_status",
-            "description": "Report what the caller wants now and whether it is resolved.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "intent": {"type": "string"},
-                    "resolved": {"type": "boolean"},
-                },
-                "required": ["intent", "resolved"],
-            },
-        },
-    },
-]
-
-
-class _TurnState:
-    def __init__(self, intent: str, intents_seen: list[str]) -> None:
-        self.intent = intent
-        self.intents_seen = intents_seen
-        self.resolved = False
-        self.retrieved: list[dict[str, Any]] = []
-
-
-def _search_knowledge(
-    ctx: AppContext, state: _TurnState, args: dict[str, Any]
-) -> dict[str, Any]:
-    passages = knowledge.search_knowledge(ctx, str(args["query"]), 5)
-    for p in passages:
-        state.retrieved.append(
-            {"passageId": p.passage_id, "sourceFile": p.source_file, "score": p.score}
-        )
-    return {
-        "passages": [
-            {"source": p.source_file, "section": p.section, "text": p.text}
-            for p in passages
-        ]
-    }
-
-
-def _report_status(
-    ctx: AppContext, state: _TurnState, args: dict[str, Any]
-) -> dict[str, Any]:
-    intent = str(args["intent"])
-    state.intent = intent
-    if intent not in state.intents_seen:
-        state.intents_seen.append(intent)
-    if args.get("resolved") is True:
-        state.resolved = True
-    return {"ok": True}
-
-
-HANDLERS: dict[
-    str, Callable[[AppContext, _TurnState, dict[str, Any]], dict[str, Any]]
-] = {
-    "search_knowledge": _search_knowledge,
-    "report_status": _report_status,
-}
-
-
-def _run_tool(
-    ctx: AppContext, state: _TurnState, call: dict[str, Any]
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Run one tool call; return (result for the model, log entry)."""
-    name = call.get("function", {}).get("name", "")
-    started = ctx.clock.monotonic()
-    error: str | None = None
-    result: dict[str, Any]
-    try:
-        args = json.loads(call["function"].get("arguments") or "{}")
-        result = HANDLERS[name](ctx, state, args)
-    except Exception as exc:  # noqa: BLE001 - the model gets the failure back as the tool result
-        error = f"{type(exc).__name__}: {exc}"
-        result = {"ok": False, "error": error}
-    ms = round((ctx.clock.monotonic() - started) * 1000)
-    return result, {"name": name, "ok": error is None, "ms": ms, "error": error}
-
 
 def run_turn(
     ctx: AppContext, db: sqlite3.Connection, conversation_id: str, text: str
@@ -128,11 +35,7 @@ def run_turn(
         (conversation_id,),
     ):
         history.extend(json.loads(row["model_messages"]))
-    conv = db.execute(
-        "SELECT intent, intents_seen FROM conversations WHERE id = ?",
-        (conversation_id,),
-    ).fetchone()
-    state = _TurnState(conv["intent"], json.loads(conv["intents_seen"]))
+    state = tools.ToolState.load(db, conversation_id, redacted, history)
 
     user = {"role": "user", "content": redacted}
     stored: list[dict[str, Any]] = [user]
@@ -146,7 +49,7 @@ def run_turn(
         remaining = ctx.settings.TURN_DEADLINE - (ctx.clock.monotonic() - started)
         result = ctx.model.complete(
             [{"role": "system", "content": INSTRUCTIONS}, *history, *stored],
-            tools=TOOLS,
+            tools=tools.TOOLS,
             timeout_s=max(remaining, 1.0),
         )
         stored.append(result.message)
@@ -167,7 +70,7 @@ def run_turn(
         if not calls:
             break
         for call in calls:
-            output, entry = _run_tool(ctx, state, call)
+            output, entry = tools.run_tool(ctx, state, call)
             tools_called.append(entry)
             stored.append(
                 {
@@ -229,9 +132,9 @@ def run_turn(
         status="active",
         text=final_text,
         banner="none",
-        choices=[],
-        booking=None,
-        waitlisted=False,
+        choices=tools.choices(state),
+        booking=state.booking,
+        waitlisted=state.waitlisted,
         actions=[],
         turn=TurnInfo(seq=seq, latency_ms=latency_ms),
     )

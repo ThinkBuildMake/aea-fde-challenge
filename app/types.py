@@ -33,7 +33,7 @@ class Booking(Model):
     technician_name: str
     service_type: ServiceType
     zone: Zone
-    diagnostic_fee_cents: int
+    diagnostic_fee_cents: int | None
     diagnostic_fee_waived: bool
 
 

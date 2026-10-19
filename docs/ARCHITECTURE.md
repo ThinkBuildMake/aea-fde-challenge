@@ -607,7 +607,7 @@ Booking {                    a committed visit, as the database row says
   technicianName      string
   serviceType         hvac_repair | hvac_tune_up | plumbing   (estimate is not offered in v1)
   zone                north | central | south
-  diagnosticFeeCents  integer   added by Conversation from Knowledge.getFee, said once
+  diagnosticFeeCents  integer | null   added by Conversation from Knowledge.getFee, said once; null when the price book is unavailable (the card omits the fee line)
   diagnosticFeeWaived boolean   added by Conversation: true for standard and plus members
 }
 
