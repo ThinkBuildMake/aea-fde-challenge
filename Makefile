@@ -9,7 +9,7 @@ gate:
 	uv run ruff format --check .
 	uv run pyright
 	uv run pytest -q
-	$(GITLEAKS) git --no-banner --redact --exit-code 1 .
+	GITLEAKS=$(GITLEAKS) scripts/scan_secrets.sh
 	uv export --frozen --no-emit-project --format requirements-txt -o $(REQ_FILE) >/dev/null
 	uv run pip-audit --strict --disable-pip -r $(REQ_FILE)
 

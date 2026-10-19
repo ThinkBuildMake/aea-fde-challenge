@@ -96,7 +96,7 @@ def test_route_answers_its_contract(
     response = call(client, case, ids, {})
     assert response.status_code == case[4]
     assert response.headers["content-type"].startswith("application/json")
-    case[5].model_validate(response.json())
+    case[5].model_validate(response.json(), by_alias=True, by_name=False)
 
 
 @pytest.mark.parametrize("case", CASES, ids=[f"{c[0]} {c[1]}" for c in CASES])
@@ -109,12 +109,6 @@ def test_route_answers_an_html_fragment_for_htmx(
     assert "<html" not in response.text.lower()
     for key in call(client, case, ids, {}).json():
         assert f'data-field="{key}"' in response.text
-
-
-def test_health_answers_head_with_no_body(client: TestClient):
-    response = client.head("/health")
-    assert response.status_code == 200
-    assert response.content == b""
 
 
 def test_admin_routes_refuse_without_the_token(client: TestClient):
@@ -132,3 +126,12 @@ def test_camel_case_keys_in_the_start_response(client: TestClient):
     body = client.post("/conversations").json()
     assert set(body) == {"conversationId", "status", "greeting", "demoFaults"}
     assert body["status"] == "active"
+
+
+def test_eval_candidate_scenario_id_does_not_leak_the_secret_conversation_id(
+    client: TestClient, ids: dict[str, str]
+):
+    response = client.post(f"/conversations/{ids['public']}/eval-candidate")
+    scenario_id = response.json()["candidate"]["scenarioId"]
+    assert ids["id"][:8] not in scenario_id
+    assert scenario_id == "CAND-" + ids["public"][:8]

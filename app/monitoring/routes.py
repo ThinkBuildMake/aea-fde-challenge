@@ -141,9 +141,9 @@ def flag_conversation(
 def create_eval_candidate(
     public_id: str, request: Request, db: sqlite3.Connection = Depends(get_db)
 ) -> Response:
-    conversation_id = require_public(db, public_id)
+    require_public(db, public_id)
     body = CandidateCreated(
-        candidate=EvalCandidateRef(scenario_id="CAND-" + conversation_id[:8])
+        candidate=EvalCandidateRef(scenario_id="CAND-" + public_id[:8])
     )
     return respond(request, body, 201)
 

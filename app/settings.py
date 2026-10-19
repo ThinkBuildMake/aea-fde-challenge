@@ -1,10 +1,12 @@
 """The one typed settings object. Secrets come from the environment only."""
 
+import re
 import sys
 from pathlib import Path
 
-from pydantic import SecretStr, ValidationError
+from pydantic import Field, SecretStr, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings.exceptions import SettingsError
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 _DATASET = REPO_ROOT / "data" / "meridian_dataset"
@@ -17,8 +19,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(case_sensitive=True, extra="ignore")
 
     # Required: the app refuses to start without them.
-    OPENROUTER_API_KEY: SecretStr
-    ADMIN_TOKEN: SecretStr
+    OPENROUTER_API_KEY: SecretStr = Field(min_length=1)
+    ADMIN_TOKEN: SecretStr = Field(min_length=1)
     SCHEDULING_DB_PATH: Path
     APP_DB_PATH: Path
     INDEX_PATH: Path
@@ -67,4 +69,9 @@ def load_settings_or_exit() -> Settings:
             sys.stderr.write(f"Missing required setting(s): {', '.join(missing)}\n")
         if invalid:
             sys.stderr.write(f"Invalid setting(s): {', '.join(invalid)}\n")
+        raise SystemExit(1) from None
+    except SettingsError as error:
+        # The message may quote the value; take only the setting's name.
+        match = re.search(r'"([A-Za-z_][A-Za-z0-9_]*)"', str(error))
+        sys.stderr.write(f"Invalid setting(s): {match.group(1) if match else '?'}\n")
         raise SystemExit(1) from None

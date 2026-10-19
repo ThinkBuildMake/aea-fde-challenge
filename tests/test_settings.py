@@ -49,3 +49,18 @@ def test_missing_admin_token_stops_start_and_names_it():
 def test_message_never_echoes_a_setting_value():
     result = run_app({"OPENROUTER_API_KEY": None})
     assert "dummy-admin" not in result.stderr + result.stdout
+
+
+def test_empty_required_secret_stops_start_like_a_missing_one():
+    result = run_app({"OPENROUTER_API_KEY": ""})
+    assert result.returncode == 1
+    assert "OPENROUTER_API_KEY" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_unparseable_setting_prints_its_name_and_never_the_value():
+    result = run_app({"MODEL_PRICES": "notjson-secret-ish"})
+    assert result.returncode == 1
+    assert "Invalid setting(s): MODEL_PRICES" in result.stderr
+    assert "Traceback" not in result.stderr
+    assert "notjson-secret-ish" not in result.stderr + result.stdout

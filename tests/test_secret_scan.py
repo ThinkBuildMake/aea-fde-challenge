@@ -44,3 +44,15 @@ def test_env_files_are_ignored_by_git():
         ["git", "check-ignore", ".env"], cwd=REPO, check=False, capture_output=True
     )
     assert result.returncode == 0
+
+
+def test_scan_gate_fails_when_gitleaks_could_not_read_the_history():
+    env = {**os.environ, "GIT_DIR": "/nonexistent", "GITLEAKS": gitleaks()}
+    result = subprocess.run(
+        [str(REPO / "scripts" / "scan_secrets.sh")],
+        check=False,
+        cwd=REPO,
+        env=env,
+        capture_output=True,
+    )
+    assert result.returncode != 0

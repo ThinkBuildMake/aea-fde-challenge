@@ -48,3 +48,10 @@ def test_dependabot_watches_python_and_actions():
         "uv",
         "github-actions",
     }
+
+
+def test_railway_token_is_set_only_on_the_railway_up_step():
+    deploy = load()["jobs"]["deploy"]
+    assert "RAILWAY_TOKEN" not in deploy.get("env", {})
+    holders = [s for s in deploy["steps"] if "RAILWAY_TOKEN" in s.get("env", {})]
+    assert [s["run"].split()[0:2] for s in holders] == [["railway", "up"]]

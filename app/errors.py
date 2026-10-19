@@ -2,6 +2,7 @@
 
 import json
 import sys
+from collections.abc import Mapping
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -17,8 +18,12 @@ class AppError(Exception):
         self.message = message
 
 
-def _body(status: int, code: str, message: str) -> JSONResponse:
-    return JSONResponse({"error": code, "message": message}, status_code=status)
+def _body(
+    status: int, code: str, message: str, headers: Mapping[str, str] | None = None
+) -> JSONResponse:
+    return JSONResponse(
+        {"error": code, "message": message}, status_code=status, headers=headers
+    )
 
 
 _HTTP = {
@@ -43,7 +48,7 @@ def install(app: FastAPI) -> None:
         code, message = _HTTP.get(
             exc.status_code, ("http_error", "The request could not be served.")
         )
-        return _body(exc.status_code, code, message)
+        return _body(exc.status_code, code, message, exc.headers)
 
     @app.exception_handler(Exception)
     def unexpected(request: Request, exc: Exception) -> JSONResponse:

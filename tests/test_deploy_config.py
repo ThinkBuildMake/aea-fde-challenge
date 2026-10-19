@@ -22,3 +22,26 @@ def test_dockerfile_runs_the_app_and_ships_the_seed_without_a_volume_line():
 
 def test_dockerignore_excludes_env_files():
     assert ".env*" in (REPO / ".dockerignore").read_text().splitlines()
+
+
+def test_deploy_script_refuses_a_dirty_working_tree(tmp_path):
+    import os
+    import subprocess
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    (tmp_path / "stray.txt").write_text("untracked")
+    env = {
+        "PATH": os.environ["PATH"],
+        "RAILWAY_TOKEN": "t",
+        "PUBLIC_URL": "https://example.invalid",
+    }
+    result = subprocess.run(
+        ["bash", str(REPO / "scripts" / "deploy.sh")],
+        check=False,
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert "dirty" in result.stderr

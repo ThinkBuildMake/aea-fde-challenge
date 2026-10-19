@@ -70,3 +70,9 @@ def test_unexpected_exception_is_a_500_without_a_trace(started: Settings):
     assert response.json()["error"] == "internal_error"
     assert "secret internals" not in response.text
     assert "Traceback" not in response.text
+
+
+def test_http_errors_keep_their_headers(client: TestClient):
+    response = client.delete("/health")
+    assert response.status_code == 405
+    assert "GET" in response.headers["allow"]
