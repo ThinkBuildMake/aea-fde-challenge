@@ -1,5 +1,6 @@
 import json
 import re
+import shutil
 import sqlite3
 import uuid
 from collections.abc import Callable
@@ -8,6 +9,7 @@ from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
 from app.context import AppContext
+from app.errors import AppError
 from app.logs import log_event
 from app.scheduling.store import SchedulingUnavailable, connect, zone_for_city
 from app.types import (
@@ -555,11 +557,95 @@ def create_payment_link(
     )
 
 
-def reset_scheduling(ctx: AppContext) -> ResetResult:
-    return ResetResult(
-        snapshot_id="stub",
-        slot_counts=SlotCounts(open=0, booked=0, reserved_members=0, blocked=0),
+SUPPLIED_TABLES = (
+    "customers",
+    "technicians",
+    "appointment_slots",
+    "appointments",
+    "invoices",
+)
+
+
+def _read_seed(ctx: AppContext) -> dict[str, list[tuple]]:
+    seed = ctx.settings.SEED_DB_PATH
+    if not seed.is_file():
+        raise AppError(500, "reset_failed", "The supplied seed is missing.")
+    with closing(sqlite3.connect(f"file:{seed}?mode=ro", uri=True)) as conn:
+        return {
+            table: conn.execute(f"SELECT * FROM {table} ORDER BY rowid").fetchall()
+            for table in SUPPLIED_TABLES
+        }
+
+
+def _backup(ctx: AppContext) -> str:
+    """Copy the supplied file and the app database aside; returns the folder name."""
+    settings = ctx.settings
+    snapshot_id = f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex[:6]}"
+    folder = settings.SCHEDULING_DB_PATH.parent / "backups" / snapshot_id
+    folder.mkdir(parents=True)
+    shutil.copyfile(
+        settings.SCHEDULING_DB_PATH, folder / settings.SCHEDULING_DB_PATH.name
     )
+    with (
+        closing(ctx.open_app_db()) as source,
+        closing(sqlite3.connect(folder / settings.APP_DB_PATH.name)) as target,
+    ):
+        source.backup(target)
+    return snapshot_id
+
+
+def _restore(conn: sqlite3.Connection, seed: dict[str, list[tuple]]) -> SlotCounts:
+    for table in reversed(SUPPLIED_TABLES):
+        conn.execute(f"DELETE FROM {table}")
+    for table in SUPPLIED_TABLES:
+        for row in seed[table]:
+            marks = ", ".join("?" * len(row))
+            conn.execute(f"INSERT INTO {table} VALUES ({marks})", row)
+    counts = dict(
+        conn.execute(
+            "SELECT status, count(*) FROM appointment_slots GROUP BY status"
+        ).fetchall()
+    )
+    return SlotCounts(
+        open=counts.get("open", 0),
+        booked=counts.get("booked", 0),
+        reserved_members=counts.get("reserved_members", 0),
+        blocked=counts.get("blocked", 0),
+    )
+
+
+def reset_scheduling(ctx: AppContext) -> ResetResult:
+    """Put the five supplied tables back to the seed, after a backup of both files."""
+    try:
+        seed = _read_seed(ctx)
+        with closing(connect(ctx)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute("SELECT count(*) FROM appointment_slots").fetchone()
+                snapshot_id = _backup(ctx)
+                counts = _restore(conn, seed)
+                conn.commit()
+            except BaseException:
+                conn.rollback()
+                raise
+        with closing(ctx.open_app_db()) as app_db:
+            app_db.execute(
+                "UPDATE visit_changes SET retired_at = "
+                "strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE retired_at IS NULL"
+            )
+    except sqlite3.Error as exc:
+        if exc.sqlite_errorcode == sqlite3.SQLITE_BUSY:
+            raise AppError(
+                409, "busy", "A booking is in progress. Try again shortly."
+            ) from exc
+        raise AppError(
+            500, "reset_failed", "The reset could not be completed."
+        ) from exc
+    except (SchedulingUnavailable, OSError) as exc:
+        raise AppError(
+            500, "reset_failed", "The reset could not be completed."
+        ) from exc
+    return ResetResult(snapshot_id=snapshot_id, slot_counts=counts)
 
 
 def scheduling_status(ctx: AppContext) -> str:
