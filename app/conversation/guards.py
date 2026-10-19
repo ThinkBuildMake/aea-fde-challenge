@@ -57,6 +57,13 @@ FAILED_WRITE_INSTRUCTION = (
     "The change did not happen. Do not tell the caller it is booked, moved or cancelled. "
     "Offer other windows or a person."
 )
+CANCEL_CONFIRM_INSTRUCTION = (
+    "Nothing is cancelled yet. Tell the caller the visit's date and window, say there is "
+    "no fee when lateFeeApplies is false or state the late-cancellation fee from "
+    "lateFeeCents when it is true, and end with one question asking them to confirm, "
+    "such as 'Do you want me to cancel it?'. Call cancel_visit again only if their next "
+    "message is a clear yes."
+)
 SEARCH_UNAVAILABLE_INSTRUCTION = (
     "The knowledge base is unavailable. Do not answer fees, policy, membership or "
     "warranty questions from memory. Say it cannot be checked right now and offer a person."
@@ -320,6 +327,46 @@ def earlier_offered(
         slots.update(offered.get("slotIds", []))
         appointments.update(offered.get("appointmentIds", []))
     return slots, appointments
+
+
+def last_cancel_asks(db: sqlite3.Connection, conversation_id: str) -> set[int]:
+    """Appointments whose cancel terms the previous message turn put to the caller."""
+    row = db.execute(
+        "SELECT offered FROM turns WHERE conversation_id = ? AND kind = 'message' "
+        "ORDER BY seq DESC LIMIT 1",
+        (conversation_id,),
+    ).fetchone()
+    return set(json.loads(row[0]).get("cancelAppointmentIds", [])) if row else set()
+
+
+_YES = re.compile(
+    r"^(?:yes|yeah|yep|yup|sure|ok|okay|confirm(?:ed)?|please do|go ahead|do it)\b",
+    re.IGNORECASE,
+)
+_NOT_YES = re.compile(
+    r"\b(?:no|not|never|wait|maybe|unsure|but|if|waive\w*|fees?|refund\w*|discount\w*"
+    r"|charge\w*|cost\w*|price\w*)\b|n't|\$",
+    re.IGNORECASE,
+)
+
+
+def clear_yes(text: str) -> bool:
+    """A short plain yes: no question, no condition and no ask about fees."""
+    text = text.strip().replace("\u2019", "'")
+    return (
+        bool(_YES.match(text))
+        and "?" not in text
+        and len(text.split()) <= 8
+        and not _NOT_YES.search(text)
+    )
+
+
+def states_amount(text: str, cents: int) -> bool:
+    """The reply names this dollar amount ($49 or $49.00 for 4900 cents)."""
+    return any(
+        Decimal(found.replace(",", "")) == Decimal(cents) / 100
+        for found in re.findall(r"\$\s?(\d[\d,]*(?:\.\d+)?)", text)
+    )
 
 
 def _is_id(value: Any) -> bool:

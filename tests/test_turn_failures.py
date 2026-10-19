@@ -211,12 +211,12 @@ def test_a_committed_cancel_survives_a_failed_turn(
         "INSERT INTO turns (conversation_id, seq, kind, caller_text, reply_text, "
         "model_messages, tools_called, retrieved, latency_ms, cost_usd, cost_source, "
         "safety_verdict, offered, has_write) VALUES (?, 1, 'message', 'a', 'b', '[]', "
-        "'[]', '[]', 1, 0, 'reported', 'safe', '{\"appointmentIds\": [7]}', 0)",
+        "'[]', '[]', 1, 0, 'reported', 'safe', '{\"appointmentIds\": [7], \"cancelAppointmentIds\": [7]}', 0)",
         (cid,),
     )
     conn.commit()
     conn.close()
-    reply = say(client, cid, "cancel it")
+    reply = say(client, cid, "Yes, cancel it")
     assert calls.cancels == [7]
     assert reply["text"] == guards.CANCELLED_TEXT and reply["banner"] == "none"
     turn = turn_row(started, cid, 2)

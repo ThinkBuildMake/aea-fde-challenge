@@ -5,7 +5,10 @@ from typing import Any
 
 import pytest
 
-from app.conversation.guards import SEARCH_UNAVAILABLE_INSTRUCTION
+from app.conversation.guards import (
+    CANCEL_CONFIRM_INSTRUCTION,
+    SEARCH_UNAVAILABLE_INSTRUCTION,
+)
 from app.conversation.tools import ToolState, run_tool
 from app.knowledge.service import EmbeddingUnavailable, IndexUnavailable, UnknownFee
 from app.llm import FakeModelProvider
@@ -88,13 +91,18 @@ def booking() -> Booking:
 
 
 def run(
-    started: Settings, *steps: list[dict[str, Any]], texts: list[str] | None = None
+    started: Settings,
+    *steps: list[dict[str, Any]],
+    texts: list[str] | None = None,
+    answers: list[str] | None = None,
 ):
     """One turn per step: the model makes the step's calls, then answers."""
     results = []
     for i, calls in enumerate(steps):
         results.append(result(assistant(calls=calls)))
-        results.append(result(assistant(f"answer {i}")))
+        results.append(
+            result(assistant((answers or [])[i] if answers else f"answer {i}"))
+        )
     client = client_for(started, FakeModelProvider(results=results))
     cid = new_conversation(client)
     replies = [
@@ -268,15 +276,29 @@ def test_member_diagnostic_fee_is_waived_on_the_card(
     assert card["diagnosticFeeWaived"] is waived
 
 
-def test_late_cancel_carries_the_fee(
-    started: Settings, monkeypatch: pytest.MonkeyPatch
-):
+def held(late: bool) -> AppointmentView:
+    return AppointmentView(
+        appointment_id=7,
+        date="2026-10-21",
+        window="08:00-12:00",
+        technician_name="Jun Park",
+        service_type="hvac_repair",
+        zone="south",
+        issue="x",
+        late_cancel_fee_applies=late,
+    )
+
+
+def cancel_stubs(
+    monkeypatch: pytest.MonkeyPatch, late: bool
+) -> tuple[Recorder, Recorder]:
     stub(monkeypatch, "app.scheduling.service.identify_customer", customer("MHC-10002"))
+    stub(monkeypatch, "app.scheduling.service.get_appointment", held(late))
     cancel = stub(
         monkeypatch,
         "app.scheduling.service.cancel_visit",
         CancelResult(
-            appointment_id=7, freed_slot_id=3, late_fee_applies=True, hours_before=5.0
+            appointment_id=7, freed_slot_id=3, late_fee_applies=late, hours_before=5.0
         ),
     )
     fees = stub(
@@ -284,17 +306,101 @@ def test_late_cancel_carries_the_fee(
         "app.knowledge.service.get_fee",
         Fee(code="FEE-LATE", cents=4900, source_file="pricing"),
     )
+    return cancel, fees
+
+
+def cancel_call(quote: str) -> list[dict[str, Any]]:
+    return [tool_call("c", "cancel_visit", appointmentId=7, callerQuote=quote)]
+
+
+def test_first_cancel_only_asks(started: Settings, monkeypatch: pytest.MonkeyPatch):
+    cancel, _ = cancel_stubs(monkeypatch, late=False)
+    cid, replies = run(
+        started,
+        identify_and_offer(monkeypatch, "MHC-10002"),
+        cancel_call("cancel"),
+        texts=["hi", "Maybe I'll cancel, I'm not sure"],
+    )
+    out = tool_results(started, cid)[-1]
+    print("ask result:", out)
+    assert cancel.calls == []
+    assert out["cancelled"] is False and out["needsConfirmation"] is True
+    assert out["lateFeeApplies"] is False and "lateFeeCents" not in out
+    assert out["instruction"] == CANCEL_CONFIRM_INSTRUCTION
+    assert out["appointment"]["appointmentId"] == 7
+    last = rows(
+        started,
+        "SELECT has_write, offered FROM turns WHERE conversation_id = ? ORDER BY seq",
+        cid,
+    )[-1]
+    assert last["has_write"] == 0
+    assert json.loads(last["offered"])["cancelAppointmentIds"] == [7]
+    assert replies[1]["actions"] != ["request_callback"]
+
+
+def test_late_cancel_ask_carries_the_fee(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    cancel, fees = cancel_stubs(monkeypatch, late=True)
     cid, _ = run(
         started,
         identify_and_offer(monkeypatch, "MHC-10002"),
-        [tool_call("c", "cancel_visit", appointmentId=7, callerQuote="yes")],
-        texts=["hi", "yes"],
+        cancel_call("Cancel my visit"),
+        texts=["hi", "Cancel my visit"],
     )
     out = tool_results(started, cid)[-1]
+    print("ask result:", out)
+    assert cancel.calls == []
+    assert out["needsConfirmation"] is True
     assert out["lateFeeApplies"] is True and out["lateFeeCents"] == 4900
     assert fees.calls[-1][1] == "FEE-LATE"
+
+
+def test_late_cancel_carries_the_fee(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    cancel, fees = cancel_stubs(monkeypatch, late=True)
+    cid, _ = run(
+        started,
+        identify_and_offer(monkeypatch, "MHC-10002"),
+        cancel_call("Cancel my visit"),
+        cancel_call("Yes, cancel it"),
+        texts=["hi", "Cancel my visit", "Yes, cancel it"],
+        answers=["hi", "It carries the $49 late fee. Cancel it?", "Cancelled."],
+    )
+    out = tool_results(started, cid)[-1]
+    assert out["ok"] is True and out["appointmentId"] == 7
+    assert out["lateFeeApplies"] is True and out["lateFeeCents"] == 4900
+    assert fees.calls[-1][1] == "FEE-LATE"
+    assert len(cancel.calls) == 1
     assert cancel.calls[0][1] == "MHC-10002"
     assert cancel.calls[0][-1] == cid
+    has_write = [
+        r[0]
+        for r in rows(
+            started,
+            "SELECT has_write FROM turns WHERE conversation_id = ? ORDER BY seq",
+            cid,
+        )
+    ]
+    assert has_write == [0, 0, 1]
+
+
+def test_cancel_confirm_expires_after_one_turn(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    cancel, _ = cancel_stubs(monkeypatch, late=False)
+    cid, _ = run(
+        started,
+        identify_and_offer(monkeypatch, "MHC-10002"),
+        cancel_call("Cancel my visit"),
+        [tool_call("s", "report_status", intent="change_visit", resolved=False)],
+        cancel_call("Yes, cancel it"),
+        texts=["hi", "Cancel my visit", "Hmm, what time is it?", "Yes, cancel it"],
+    )
+    out = tool_results(started, cid)[-1]
+    assert cancel.calls == []
+    assert out["needsConfirmation"] is True and out["cancelled"] is False
 
 
 def test_waitlist_uses_the_held_window_from_the_database(
@@ -587,3 +693,35 @@ def test_find_open_windows_schema_is_closed():
         "16:00-19:00",
     ]
     assert "YYYY-MM-DD" in params["preferredDate"]["description"]
+
+
+def test_cancel_with_a_text_id_never_commits(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    cancel, _ = cancel_stubs(monkeypatch, late=False)
+    text_id = [tool_call("c", "cancel_visit", appointmentId="7", callerQuote="Yes")]
+    run(
+        started,
+        identify_and_offer(monkeypatch, "MHC-10002"),
+        cancel_call("Cancel my visit"),
+        text_id,
+        texts=["hi", "Cancel my visit", "Yes"],
+    )
+    assert cancel.calls == []
+
+
+def test_late_cancel_without_a_price_book_never_commits(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    cancel, _ = cancel_stubs(monkeypatch, late=True)
+    monkeypatch.setattr("app.knowledge.service.get_fee", raise_unknown_fee)
+    cid, _ = run(
+        started,
+        identify_and_offer(monkeypatch, "MHC-10002"),
+        cancel_call("Cancel my visit"),
+        cancel_call("Yes, cancel it"),
+        texts=["hi", "Cancel my visit", "Yes, cancel it"],
+    )
+    out = tool_results(started, cid)[-1]
+    assert cancel.calls == []
+    assert out["needsConfirmation"] is True and out["lateFeeUnavailable"] is True

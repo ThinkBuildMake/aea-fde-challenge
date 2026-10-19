@@ -25,6 +25,7 @@
   };
   const CHOICES_LABEL = 'Open windows in your area';
   const CARD_TITLE = 'Visit booked';
+  const WAIVED_LINE = 'Diagnostic fee waived for members';
   const WAITLIST_LINE = 'On the waitlist for an earlier window. The team will call you if one opens.';
   const PICKER_TITLE = 'When is the best time for the call back?';
   const PICKER_NOTE = 'The person who calls will already have this conversation, so you will not need to repeat it.';
@@ -149,6 +150,8 @@
     if (cents !== null && !booking.diagnosticFeeWaived) {
       const dollars = cents % 100 ? (cents / 100).toFixed(2) : String(cents / 100);
       card.appendChild(el('div', '', 'Diagnostic fee $' + dollars + ', credited toward the repair'));
+    } else if (booking.diagnosticFeeWaived) {
+      card.appendChild(el('div', '', WAIVED_LINE));
     }
     if (waitlisted) card.appendChild(el('div', 'waitlist-line', WAITLIST_LINE));
     messages.appendChild(card);

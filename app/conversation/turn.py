@@ -4,7 +4,7 @@ import json
 import sqlite3
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 import openai
@@ -17,6 +17,7 @@ from app.errors import AppError
 from app.followups import service as followups
 from app.logs import log_event
 from app.safety import service as safety
+from app.settings import Settings
 from app.types import HandoffRecord, Reply, TurnInfo, Verdict
 
 MAX_TOOL_ROUNDS = 6
@@ -89,8 +90,31 @@ INSTRUCTIONS = (
     "billing_dispute), or when they ask for a person at any point (reason "
     "caller_asked_for_person). Do not explain, argue or look up a disputed charge. Pass "
     "callerName and callerPhone only if the caller already gave them. The app writes the "
-    "reply about the call back."
+    "reply about the call back.\n"
+    "Checking or changing a visit. When the caller asks about, moves or cancels a visit, "
+    "identify them (a service address counts), call lookup_my_appointments and give each "
+    "visit's weekday, date, window and technician. To move a visit, call "
+    "find_open_windows with the visit's serviceType and the day they ask for as "
+    "preferredDate, and let them pick from the buttons. When they pick, call move_visit "
+    "with the appointmentId, that window's slotId and callerQuote copied exactly from "
+    "their message, then confirm only the new date, window and technician it returned "
+    "and the diagnostic fee as for a booking, never the old date. When the caller asks "
+    "to cancel, call cancel_visit for that visit in the same turn (calling "
+    "lookup_my_appointments first if you do not have its appointmentId yet), give the "
+    "terms it returns and end with a question asking them to confirm; call it again only "
+    "when the caller's next message is a clear yes. If they are unsure, change nothing and ask "
+    "what they would like. Never waive, reduce or promise to waive any fee; if asked, say "
+    "you cannot waive fees in this chat and offer to pass them to a person."
 )
+
+
+def _today_line(settings: Settings) -> str:
+    """The reference clock in words, so the model can turn day names into dates."""
+    today = date.fromisoformat(settings.REFERENCE_DATE)
+    return (
+        f"Today is {today:%A %B} {today.day}, {today.year}, {settings.REFERENCE_TIME} "
+        "Central time. Work out day names such as Monday from today."
+    )
 
 
 def _recent_turns(
@@ -456,7 +480,14 @@ def run_turn(
             try:
                 result = model_pool.submit(
                     ctx.model.complete,
-                    [{"role": "system", "content": INSTRUCTIONS}, *history, *stored],
+                    [
+                        {
+                            "role": "system",
+                            "content": f"{INSTRUCTIONS}\n{_today_line(ctx.settings)}",
+                        },
+                        *history,
+                        *stored,
+                    ],
                     tools=tools.TOOLS,
                     timeout_s=remaining,
                 ).result(timeout=remaining - FALLBACK_RESERVE_S)
@@ -690,6 +721,12 @@ def run_turn(
                 ).fetchone()
             ):
                 actions = [*actions, "ask_solved"]
+    # A yes can confirm a cancel only after the model's own reply put the terms.
+    state.keep_cancel_asks(
+        final_text
+        if status == "active" and final_text == last_said and not turn["error"]
+        else None
+    )
     if status == "active" and earlier + 1 >= ctx.settings.TURN_CAP:
         final_text = f"{final_text} {guards.TURN_CAP_TEXT}".strip()
     turn["reply_text"] = final_text

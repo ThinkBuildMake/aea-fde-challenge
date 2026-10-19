@@ -211,6 +211,11 @@ def _hours_before(ctx: AppContext, slot_date: str, window: str) -> float:
     return (start.astimezone(UTC) - now.astimezone(UTC)).total_seconds() / 3600
 
 
+def has_started(ctx: AppContext, slot_date: str, window: str) -> bool:
+    """The window has begun by the reference clock, so the visit can no longer change."""
+    return _hours_before(ctx, slot_date, window) <= 0
+
+
 def list_appointments(ctx: AppContext, customer_id: str) -> list[AppointmentView]:
     try:
         with closing(connect(ctx)) as conn:
@@ -443,6 +448,8 @@ def move_visit(
         old = _own_appointment(conn, customer_id, appointment_id)
         if old["status"] != "scheduled":
             raise NotEligible("not_scheduled")
+        if has_started(ctx, old["slot_date"], old["window"]):
+            raise NotEligible("already_started")
         slot = _claim_in_transaction(ctx, conn, customer_id, new_slot_id)
         moved = conn.execute(
             "UPDATE appointments SET slot_id = ? "
@@ -486,6 +493,8 @@ def cancel_visit(
         row = _own_appointment(conn, customer_id, appointment_id)
         if row["status"] != "scheduled":
             raise AppointmentNotFound("appointment not found")
+        if has_started(ctx, row["slot_date"], row["window"]):
+            raise NotEligible("already_started")
         cancelled = conn.execute(
             "UPDATE appointments SET status = 'cancelled' "
             "WHERE appointment_id = ? AND status = 'scheduled'",
