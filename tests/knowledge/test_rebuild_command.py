@@ -25,9 +25,9 @@ def test_command_prints_version_and_counts(env: Settings, capsys):
     assert rebuild.main(embedder=FakeEmbedder()) == 0
     printed = json.loads(capsys.readouterr().out)
     assert set(printed) == {"indexVersion", "passages", "sources"}
-    assert printed["passages"] > 0 and printed["sources"] == 9
     manifest = json.loads((env.KB_DIR.parent / "kb_manifest.json").read_text())["files"]
     current = {rel for rel, e in manifest.items() if e["status"] == "current"}
+    assert printed["passages"] > 0 and printed["sources"] == len(current)
     from app.knowledge.index import read_index
 
     loaded = read_index(env.INDEX_PATH)
