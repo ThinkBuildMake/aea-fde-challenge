@@ -242,7 +242,9 @@ class ErrorBody(Model):
 class OverviewStatus(Model):
     public_url: str
     last_conversation_at: str | None
-    errors_shown_24h: int = Field(alias="errorsShown24h")
+    errors_shown_24h: int = Field(
+        validation_alias="errorsShown24h", serialization_alias="errorsShown24h"
+    )
     handoffs_waiting: int
 
 
@@ -274,7 +276,9 @@ class DayCount(Model):
 class Outcomes(Model):
     contained: int
     handoff: int
-    safety_stop: int
+    safety_stop: int = Field(
+        validation_alias="safety_stop", serialization_alias="safety_stop"
+    )
     failed: int
     active: int
 
@@ -320,7 +324,9 @@ class Overview(Model):
     volume: OverviewVolume
     recent: list[RecentConversation]
     guarantees: list[Guarantee]
-    latency_series_24h: list[LatencyPoint]
+    latency_series_24h: list[LatencyPoint] = Field(
+        validation_alias="latencySeries24h", serialization_alias="latencySeries24h"
+    )
     spend: OverviewSpend
 
 

@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from app.context import AppContext
-from app.conversation.service import close_idle_conversations
+from app.conversation.service import _stamp, close_idle_conversations
 from app.knowledge.service import index_status
 from app.logs import log_event
 from app.scheduling.service import scheduling_status
@@ -64,10 +64,6 @@ HANDLED_INTENTS = (
     "billing_lookup",
 )
 IN_WINDOW = "started_at >= ? AND turn_count > 0"
-
-
-def _stamp(moment: datetime) -> str:
-    return moment.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def _pct(part: int, whole: int) -> float | None:
@@ -186,8 +182,8 @@ def get_overview(
     now = now or datetime.now(UTC)
     try:
         close_idle_conversations(ctx, now)
-    except sqlite3.Error:
-        log_event("overview_close_idle_failed")
+    except Exception as exc:  # noqa: BLE001 - the overview must still render
+        log_event("overview_close_idle_failed", error=type(exc).__name__)
     dates = [
         (now - timedelta(days=days - 1 - i)).strftime("%Y-%m-%d") for i in range(days)
     ]
@@ -219,7 +215,7 @@ def get_overview(
         status=OverviewStatus(
             public_url=s.PUBLIC_URL,
             last_conversation_at=last,
-            errorsShown24h=errors,
+            errors_shown_24h=errors,
             handoffs_waiting=waiting,
         ),
         success=OverviewSuccess(

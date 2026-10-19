@@ -120,7 +120,7 @@ def test_route_answers_an_html_fragment_for_htmx(
     assert response.headers["content-type"].startswith("text/html")
     assert "<html" not in response.text.lower()
     for name, field in case[5].model_fields.items():
-        key = field.alias or name
+        key = field.serialization_alias or field.alias or name
         assert f'data-field="{key}"' in response.text
 
 

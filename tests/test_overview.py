@@ -48,7 +48,7 @@ def seed(
     booked: bool = False,
 ) -> str:
     cid = f"c{next(_ids)}"
-    began = started or ago(hours=1)
+    began = started or ago(minutes=1)
     db.execute(
         "INSERT INTO conversations (id, started_at, last_activity_at, ended_at, "
         "outcome, intent, intents_seen, solved, turn_count) VALUES (?,?,?,?,?,?,?,?,?)",
@@ -163,8 +163,8 @@ def test_status_counts_kept_apart(client, db):
     turn(db, cid, ago(hours=2), 1)
     turn(db, cid, ago(hours=25), 1)
     turn(db, cid, ago(hours=1), 0)
-    seed(db, outcome="handoff", reason="policy")
-    other = seed(db, outcome="handoff", reason="policy")
+    seed(db, outcome="handoff", reason="policy", last=ago(minutes=10))
+    other = seed(db, outcome="handoff", reason="policy", last=ago(minutes=10))
     db.execute(
         "UPDATE handoffs SET status = 'followed_up' WHERE conversation_id = ?", (other,)
     )
@@ -238,3 +238,32 @@ def test_days_sets_series_length(client):
     body = client.get("/overview?days=30").json()
     assert len(body["success"]["series"]) == 30
     assert len(body["volume"]["conversationsByDay"]) == 30
+
+
+def test_overview_keys_match_contract(client):
+    body = client.get("/overview").json()
+    assert set(body) == {
+        "asOf", "status", "success", "supporting", "volume", "recent",
+        "guarantees", "latencySeries24h", "spend",
+    }  # fmt: skip
+    assert set(body["status"]) == {
+        "publicUrl", "lastConversationAt", "errorsShown24h", "handoffsWaiting",
+    }  # fmt: skip
+    assert set(body["volume"]["outcomes"]) == {
+        "contained", "handoff", "safety_stop", "failed", "active",
+    }  # fmt: skip
+
+
+def test_overview_model_dump_by_alias_keeps_contract_keys():
+    from app.types import Outcomes
+
+    dumped = Outcomes(contained=0, handoff=0, safety_stop=2, failed=0, active=0)
+    assert dumped.model_dump(by_alias=True)["safety_stop"] == 2
+
+
+def test_close_idle_failure_does_not_break_overview(client, monkeypatch):
+    def boom(ctx, now):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("app.monitoring.service.close_idle_conversations", boom)
+    assert client.get("/overview").status_code == 200
