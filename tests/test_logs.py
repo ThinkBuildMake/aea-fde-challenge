@@ -5,14 +5,19 @@ import pytest
 
 from app.logs import log_event
 
-DIGIT_RUN = re.compile(r"\d(?:[ \t-]{0,3}\d){12,18}")
+DIGIT_RUN = re.compile(r"\d(?:[\s.\-\u2010-\u2015\u2212/,_]*\d){12,}")
 
 
 def test_log_event_masks_digit_runs(capsys: pytest.CaptureFixture[str]) -> None:
     log_event("x", note="4111 1111 1111 1111", other="4111-1111-1111-1111", n=5)
     log_event("x", a="4111  1111 1111 1111", b="4111 - 1111 - 1111 - 1111")
+    log_event("x", c="4111    1111    1111    1111", d="4111\n1111\n1111\n1111")
+    log_event("x", e="4111.1111.1111.1111", f="4111 -  1111\t\t1111  1111")
+    log_event("x", g="4111\u20131111\u20131111\u20131111", h="4111/1111/1111/1111")
+    log_event("x", i="4111,1111,1111,1111", j="4111_1111_1111_1111")
     out = capsys.readouterr().out
-    assert DIGIT_RUN.search(out) is None
+    values = [str(v) for line in out.splitlines() for v in json.loads(line).values()]
+    assert not [v for v in values if DIGIT_RUN.search(v)]
     data = json.loads(out.splitlines()[0])
     assert data["n"] == 5
     assert data["event"] == "x"
@@ -29,3 +34,32 @@ def test_log_event_is_one_json_line(capsys: pytest.CaptureFixture[str]) -> None:
         "none": None,
         "text": "plain",
     }
+
+
+def test_log_event_keeps_ordinary_numbers(capsys: pytest.CaptureFixture[str]) -> None:
+    log_event("x", phone="512-555-0102", price="$1,200", day="2026/10/21")
+    data = json.loads(capsys.readouterr().out)
+    assert (data["phone"], data["price"], data["day"]) == (
+        "512-555-0102",
+        "$1,200",
+        "2026/10/21",
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Account MHC-10002, 512-555-0102",
+        "512-555-0102, 4412 Oak Hollow Dr",
+        "MHC-10002 512-555-0102",
+        "Daniel Reyes 512-555-0104 4412 Oak Hollow",
+        "512-555-0102 / 512-555-0199",
+        "$1,200 and $3,400, 512-555-0102",
+        "Omar Patel, MHC-10002, 512-555-0102, 901 Brookside Ct",
+    ],
+)
+def test_log_event_keeps_identity_details(
+    capsys: pytest.CaptureFixture[str], text: str
+) -> None:
+    log_event("x", said=text)
+    assert json.loads(capsys.readouterr().out)["said"] == text

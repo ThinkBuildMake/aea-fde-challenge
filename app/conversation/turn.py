@@ -112,7 +112,12 @@ INSTRUCTIONS = (
     "terms it returns and end with a question asking them to confirm; call it again only "
     "when the caller's next message is a clear yes. If they are unsure, change nothing and ask "
     "what they would like. Never waive, reduce or promise to waive any fee; if asked, say "
-    "you cannot waive fees in this chat and offer to pass them to a person."
+    "you cannot waive fees in this chat and offer to pass them to a person.\n"
+    "Billing: once the caller is matched, call get_my_billing and give the balance with "
+    "each open invoice id; explain a line from its line items. To pay, call "
+    "send_payment_link and give its url here; nothing is sent by phone or email. Never "
+    "ask for card details. Discuss only the matched caller's own account; for anyone "
+    "else's, say you can only discuss theirs."
 )
 
 
@@ -281,6 +286,20 @@ def _handoff_end(
         conversation_service.end_with_handoff(db, conversation_id)
 
     return end
+
+
+def _gives_earlier_link(text: str, history: list[dict[str, Any]]) -> bool:
+    """True when the reply holds a payment link a tool returned in an earlier turn."""
+    for message in history:
+        if message.get("role") != "tool":
+            continue
+        try:
+            url = json.loads(str(message.get("content"))).get("url")
+        except (ValueError, AttributeError):
+            continue
+        if isinstance(url, str) and url in text:
+            return True
+    return False
 
 
 def _fixed_handoff_text(state: tools.ToolState) -> str | None:
@@ -476,7 +495,8 @@ def run_turn(
     def left() -> float:
         return ctx.settings.TURN_DEADLINE - (ctx.clock.monotonic() - started)
 
-    redacted = safety.redact_card_numbers(text).text
+    redaction = safety.redact_card_numbers(text)
+    redacted = redaction.text
 
     history: list[dict[str, Any]] = []
     earlier = 0
@@ -492,6 +512,7 @@ def run_turn(
         (conversation_id,),
     ).fetchone()[0]
     state = tools.ToolState.load(db, conversation_id, redacted, history)
+    state.card_removed = redaction.removed
     recent, follow_up_pending = _recent_turns(db, conversation_id)
 
     user = {"role": "user", "content": redacted}
@@ -662,6 +683,8 @@ def run_turn(
     end = None
     booking = state.booking
     choices: list[Any] = []
+    amended = False  # the app added a card refusal or a payment link to the reply
+    unamended = ""
     if verdict is not None and verdict.verdict != "safe":
         emergency = verdict.verdict == "emergency"
         final_text = (
@@ -779,17 +802,34 @@ def run_turn(
                 ).fetchone()
             ):
                 actions = [*actions, "ask_solved"]
+            unamended = final_text
+            if state.handoff is None and not withheld:
+                if (
+                    state.card_removed
+                    and state.payment_link is None
+                    and not _gives_earlier_link(final_text, history)
+                ):
+                    state.payment_link = tools.card_turn_link(ctx, state)
+                link = state.payment_link
+                if link is not None and link.url not in final_text:
+                    final_text = f"{final_text} {guards.payment_link_text(link)}"
+                    amended = True
+        if state.card_removed and not guards.refuses_card(final_text):
+            final_text = f"{guards.CARD_REFUSAL_TEXT} {final_text}"
+            amended = True
+        if amended:
+            turn["stored"] = [*stored, {"role": "assistant", "content": final_text}]
     # A yes can confirm a cancel only after the model's own reply put the terms.
+    model_said = final_text == last_said or (amended and unamended == last_said)
     state.keep_cancel_asks(
-        final_text
-        if status == "active" and final_text == last_said and not turn["error"]
-        else None
+        last_said if status == "active" and model_said and not turn["error"] else None
     )
     if status == "active" and earlier + 1 >= ctx.settings.TURN_CAP:
         final_text = f"{final_text} {guards.TURN_CAP_TEXT}".strip()
     turn["reply_text"] = final_text
     turn["latency_ms"] = round((ctx.clock.monotonic() - started) * 1000)
     saved: int | None = None
+    cost = round(cost, 10)
     try:
         seq = saved = _save_turn(ctx, db, conversation_id, state, turn, cost, end)
     except sqlite3.Error as exc:

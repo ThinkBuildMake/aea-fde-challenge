@@ -7,7 +7,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from app.types import Booking
+from app.types import Booking, PaymentLink
 
 EMERGENCY_TEXT = (
     "Please leave the house now and call 911 from outside, or call the gas utility from "
@@ -109,6 +109,15 @@ def not_sure_first(text: str) -> str:
     return text if "not sure" in text.casefold() else f"{NOT_SURE_LEAD} {text}"
 
 
+NO_MATCH_TEXT = (
+    "I could not find an account that matches those details, so I cannot share any "
+    "account information here. I am passing you to a person. They will have this "
+    "conversation, so you will not need to repeat anything, and they will call you back. "
+    "Please pick the best time below."
+)
+CARD_REFUSAL_TEXT = (
+    "I cannot take card numbers in this chat, and I have not kept the one you sent."
+)
 CANCELLED_TEXT = "Your visit has been cancelled."
 WAITLIST_TEXT = (
     "On the waitlist for an earlier window. The team will call you if one opens."
@@ -171,7 +180,48 @@ def handoff_text(reason: str, kind: str) -> str | None:
         return SUPERVISOR_TEXT
     if reason == "caller_asked_for_person":
         return PERSON_TEXT
+    if reason == "no_account_match":
+        return NO_MATCH_TEXT
     return None
+
+
+_CARD_REFUSAL = re.compile(
+    r"\b(?:cannot|can't|can not|unable to|do not|don't|won't|will not|not able to)\b"
+    r"[^.!?]*\b(?:take|accept|process|use|store|keep)\b[^.!?]*\bcard",
+    re.IGNORECASE,
+)
+
+
+def refuses_card(text: str) -> bool:
+    """True when one sentence of the reply says card numbers are not taken here."""
+    return _CARD_REFUSAL.search(text.replace("\u2019", "'")) is not None
+
+
+# What a caller writes beside a card number when they really want a person or dispute.
+_CARD_TURN_HANDOFF = {
+    "caller_asked_for_person": re.compile(
+        r"\b(?:person|human|someone|somebody|agent|representative|supervisor|manager)\b",
+        re.IGNORECASE,
+    ),
+    "billing_dispute": re.compile(
+        r"\b(?:charged twice|double[- ]charged|dispute\w*|overcharg\w*|wrong\w* charged"
+        r"|refund\w*)\b",
+        re.IGNORECASE,
+    ),
+}
+
+
+def card_turn_handoff(reason: str, caller_text: str) -> bool:
+    """True when a card turn's message itself asks for a person or disputes a charge."""
+    rule = _CARD_TURN_HANDOFF.get(reason)
+    return rule is not None and rule.search(caller_text) is not None
+
+
+def payment_link_text(link: PaymentLink) -> str:
+    return (
+        f"You can pay securely with this link, valid for {link.valid_for_hours} "
+        f"hours: {link.url}"
+    )
 
 
 def emergency_text(matched: bool) -> str:

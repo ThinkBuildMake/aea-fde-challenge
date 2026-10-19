@@ -10,10 +10,10 @@ from pydantic import BaseModel
 from app import usage
 from app.context import AppContext
 from app.llm import reported_cost
-from app.logs import log_event
+from app.logs import DIGIT_RUN, log_event, mask_card_runs
 from app.types import RedactResult, Verdict
 
-CARD_RUN = re.compile(r"(?<!\d)\d(?:[ \t-]{0,3}\d){12,}(?!\d)")
+CARD_RUN = DIGIT_RUN  # candidate runs; mask_card_runs decides which ones are cards
 CARD_PLACEHOLDER = "[card number removed]"
 SAFETY_TIMEOUT_S = 8.0
 
@@ -123,7 +123,7 @@ class _Parsed(BaseModel):
 
 
 def redact_card_numbers(text: str) -> RedactResult:
-    new, count = CARD_RUN.subn(CARD_PLACEHOLDER, text)
+    new, count = mask_card_runs(text, CARD_PLACEHOLDER)
     return RedactResult(text=new, removed=count > 0)
 
 
