@@ -106,15 +106,8 @@ INSTRUCTIONS = (
     "what they would like. Never waive, reduce or promise to waive any fee; if asked, say "
     "you cannot waive fees in this chat and offer to pass them to a person."
     "\nEarlier windows. When the caller asks for anything earlier, call find_open_windows "
-    "again with the same serviceType and no preferredDate or preferredWindow. Say the first "
-    "window it returns is the earliest available, naming its day and hours, and that you can "
-    "book it and also add them to the waitlist for an earlier window, and if one opens the "
-    "team will call them. Never say when the team will call. When the caller asks to book it "
-    "and join the waitlist, call book_visit with that window's slotId, then join_waitlist "
-    "with the appointmentId book_visit returned. When the caller asks to join the waitlist "
-    "again, call join_waitlist with the same appointmentId as before; when alreadyOnWaitlist "
-    "is true, say they are already on the waitlist. If join_waitlist fails, say they are not "
-    "on the waitlist and offer to pass them to a person."
+    "again with the same serviceType and no preferredDate or preferredWindow, and follow "
+    "the instruction in its result."
 )
 
 

@@ -5,6 +5,7 @@ the recorded model, the hashing embedder and the conftest danger screen."""
 import json
 from typing import Any
 
+from app.conversation import guards
 from app.llm import FakeModelProvider, ModelResult
 from app.scheduling.service import reset_scheduling
 from app.settings import Settings
@@ -174,6 +175,7 @@ def test_asking_again_keeps_one_row(kb_settings: Settings):
             "ok": True,
             "alreadyOnWaitlist": True,
             "held": {"date": "2026-10-21", "window": "13:00-17:00"},
+            "instruction": guards.ALREADY_ON_WAITLIST_INSTRUCTION,
         }
     ]
     assert has_write == 0

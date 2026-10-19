@@ -6,7 +6,11 @@ from typing import Any
 import pytest
 
 from app.conversation.guards import (
+    ALREADY_ON_WAITLIST_INSTRUCTION,
     CANCEL_CONFIRM_INSTRUCTION,
+    EARLIER_INSTRUCTION,
+    JOIN_AFTER_BOOKING_INSTRUCTION,
+    ON_WAITLIST_INSTRUCTION,
     SEARCH_UNAVAILABLE_INSTRUCTION,
 )
 from app.conversation.tools import ToolState, run_tool
@@ -782,12 +786,13 @@ def test_earlier_ask_offers_three_choices(
             reason=None,
         ),
     )
-    _, replies = run(
+    cid, replies = run(
         started,
         identify("MHC-10002"),
         [tool_call("w", "find_open_windows", serviceType="hvac_repair")],
         texts=["Omar Patel, MHC-10002", "Can you do anything earlier?"],
     )
+    assert tool_results(started, cid)[-1]["instruction"] == EARLIER_INSTRUCTION
     choices = replies[1]["choices"]
     assert [c["label"] for c in choices] == EARLIER_LABELS
     assert [c["text"] for c in choices] == EARLIER_LABELS
@@ -805,12 +810,13 @@ def test_typed_earlier_variant_keeps_window_buttons(
             windows=[window(119, "13:00", "17:00")], matched_request=True, reason=None
         ),
     )
-    _, replies = run(
+    cid, replies = run(
         started,
         identify("MHC-10002"),
         [tool_call("w", "find_open_windows", serviceType="hvac_repair")],
         texts=["Omar Patel, MHC-10002", "anything sooner?"],
     )
+    assert "instruction" not in tool_results(started, cid)[-1]
     assert (
         replies[1]["choices"][-1]["label"]
         == "Nothing earlier? Ask for an earlier window"
@@ -836,6 +842,7 @@ def test_waitlist_repeat_says_already_on_it(
         "ok": True,
         "alreadyOnWaitlist": True,
         "held": {"date": "2026-10-21", "window": "13:00-17:00"},
+        "instruction": ALREADY_ON_WAITLIST_INSTRUCTION,
     }
     has_write = rows(
         started,
@@ -858,17 +865,21 @@ def test_join_after_booking_holds_the_new_booking(
     )
     got = stub(monkeypatch, "app.scheduling.service.get_appointment", held(7))
     stub(monkeypatch, "app.followups.service.join_waitlist", joined(created=True))
-    _, replies = run(
+    quote = "Book it and join the waitlist for earlier"
+    cid, replies = run(
         started,
         identify_and_offer(monkeypatch, "MHC-10002"),
         [
             tool_call(
-                "b", "book_visit", slotId=3, issue="no cooling", callerQuote="yes"
+                "b", "book_visit", slotId=3, issue="no cooling", callerQuote=quote
             ),
             tool_call("j", "join_waitlist", appointmentId=99),
         ],
-        texts=["hi", "yes"],
+        texts=["hi", quote],
     )
+    booked, joined_out = tool_results(started, cid)[-2:]
+    assert booked["instruction"] == JOIN_AFTER_BOOKING_INSTRUCTION
+    assert joined_out["instruction"] == ON_WAITLIST_INSTRUCTION
     assert got.calls[0][1:] == ("MHC-10002", 7)
     assert replies[1]["booking"]["appointmentId"] == 7
     assert replies[1]["waitlisted"] is True

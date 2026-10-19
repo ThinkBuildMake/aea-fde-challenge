@@ -67,6 +67,24 @@ WAITLIST_FAILED_INSTRUCTION = (
     "The caller was not added to the waitlist. Do not say they are on it. "
     "Offer to pass them to a person."
 )
+EARLIER_INSTRUCTION = (
+    "The caller asked for anything earlier. Say the first window is the earliest "
+    "available, naming its day and hours, that you can book it and also add them to the "
+    "waitlist for an earlier window, and that if one opens the team will call them. "
+    "Never say when the team will call. The choices appear as buttons; do not list them."
+)
+JOIN_AFTER_BOOKING_INSTRUCTION = (
+    "The caller also asked to join the waitlist for an earlier window. Call "
+    "join_waitlist with this booking's appointmentId before you answer."
+)
+ON_WAITLIST_INSTRUCTION = (
+    "The caller is on the waitlist for an earlier window. Say the team will call if "
+    "one opens; never say when."
+)
+ALREADY_ON_WAITLIST_INSTRUCTION = (
+    "The caller was already on the waitlist; nothing changed. Say they are already on "
+    "the waitlist."
+)
 SEARCH_UNAVAILABLE_INSTRUCTION = (
     "The knowledge base is unavailable. Do not answer fees, policy, membership or "
     "warranty questions from memory. Say it cannot be checked right now and offer a person."

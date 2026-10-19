@@ -28,6 +28,7 @@ EARLIER_CHOICE = Choice(
     text="Can you do anything earlier?",
 )
 TALK_TO_PERSON = "Talk to a person instead"
+JOIN_SUFFIX = " and join the waitlist for earlier"
 WINDOW_CHOICES = 3
 MEMBER_TIERS = {"standard", "plus"}
 
@@ -419,7 +420,10 @@ def _find_open_windows(
     shown = found.model_copy(update={"windows": found.windows[:WINDOW_CHOICES]})
     state.windows = list(shown.windows)
     state.offer(slot_ids=[w.slot_id for w in shown.windows])
-    return _dump(shown)
+    out = _dump(shown)
+    if wants_earlier(state):
+        out["instruction"] = guards.EARLIER_INSTRUCTION
+    return out
 
 
 def _lookup_my_appointments(
@@ -477,7 +481,10 @@ def _book_visit(
         str(args["issue"]),
         state.conversation_id,
     )
-    return _booking_result(_stamp(ctx, state, visit))
+    out = _booking_result(_stamp(ctx, state, visit))
+    if state.caller_text.strip().endswith(JOIN_SUFFIX):
+        out["instruction"] = guards.JOIN_AFTER_BOOKING_INSTRUCTION
+    return out
 
 
 def _move_visit(
@@ -580,6 +587,9 @@ def _join_waitlist(
         "ok": True,
         "alreadyOnWaitlist": not created,
         "held": {"date": held.date, "window": held.window},
+        "instruction": guards.ON_WAITLIST_INSTRUCTION
+        if created
+        else guards.ALREADY_ON_WAITLIST_INSTRUCTION,
     }
 
 
@@ -728,7 +738,7 @@ def choices(state: ToolState) -> list[Choice]:
     if wants_earlier(state):
         earliest = _when(state.windows[0])
         labels = [
-            f"Book {earliest} and join the waitlist for earlier",
+            f"Book {earliest}{JOIN_SUFFIX}",
             f"Book {earliest} only",
             TALK_TO_PERSON,
         ]
