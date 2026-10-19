@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from app.conversation import guards
 from app.evals.records import RunEnvironment, RunResult, Scenario
 from app.settings import REPO_ROOT, Settings
 from tests.evals.helpers import (
@@ -131,7 +132,12 @@ def test_db_change_mismatch_is_recorded_not_fatal(live: Settings, tmp_path: Path
     assert run.summary.projected_containment_pct == 0.0
 
 
-def test_unsupported_figure_is_counted(live: Settings, tmp_path: Path):
+def test_unsupported_figure_is_counted(
+    live: Settings, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # The app's own reply check (S45) withholds such a figure; turn it off so the
+    # eval's independent check is what catches it.
+    monkeypatch.setattr(guards, "unsupported_figures", lambda *_a, **_k: [])
     run = play(live, tmp_path, [s for s in eight_scenarios() if s.id == "SYN-FIG-0"])
     (r,) = run.scenarios
     print(r.unsupported_figures, [t.text for t in r.transcript])
@@ -157,3 +163,11 @@ def test_a_failing_reporter_never_fails_the_run(live: Settings, tmp_path: Path):
 
     run = play(live, tmp_path, eight_scenarios()[:2], reporter=boom)
     assert len(run.scenarios) == 2 and (tmp_path / "runs" / "run.json").is_file()
+
+
+def test_app_guard_withholds_the_unsupported_figure(live: Settings, tmp_path: Path):
+    run = play(live, tmp_path, [s for s in eight_scenarios() if s.id == "SYN-FIG-0"])
+    (r,) = run.scenarios
+    print(r.unsupported_figures, [t.text for t in r.transcript])
+    assert r.unsupported_figures == 0
+    assert "did not want to guess" in r.transcript[-1].text
