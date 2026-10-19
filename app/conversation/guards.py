@@ -49,6 +49,66 @@ HANDOFF_TEXT = (
     "conversation, so you will not need to repeat anything, and they will call you back. "
     "Please pick the best time below."
 )
+TECHNICIAN_LATE_TEXT = (
+    "I am sorry your technician has not arrived. I cannot change anything about this "
+    "visit here, so I am passing you to a person who can check with dispatch. They will "
+    "have this conversation, so you will not need to repeat anything, and they will call "
+    "you back. Please pick the best time below."
+)
+NO_PLUMBER_TEXT = (
+    "I am sorry, no plumber is available in your area right now, so I have not booked "
+    "anything. I am passing you to a person who will follow up. They will have this "
+    "conversation, so you will not need to repeat anything, and they will call you back. "
+    "Please pick the best time below."
+)
+NOT_SURE_LEAD = "I'm not sure about that, and I did not want to guess."
+ESCALATE_INSTRUCTIONS = {
+    "membership_change": "Handoff noted. If you have not yet, call search_knowledge "
+    "about this membership change, then explain what the documents say about it (for "
+    "auto-renew: when it can be cancelled and the refund terms). Never say the change "
+    "is done; a person will make it and call back.",
+    "new_system_quote": "Handoff noted. If you have not yet, call search_knowledge for "
+    "the system's price, then give the typical installed range from the documents and "
+    "say the exact price comes from a free in-home estimate on site. Book nothing; a "
+    "person will call back to arrange the estimate.",
+    "no_document_answer": "Handoff noted. Give only what a retrieved document settles, "
+    "say you are not sure about the rest, give nothing from memory, and say a person "
+    "will call back.",
+    "out_of_scope": "Handoff noted. Only if a search_knowledge result lists this "
+    "service as not offered, say Meridian does not offer it and offer the partner or "
+    "referral the documents name; a person will follow up with it and call back. If no "
+    "result lists it, say you are not sure whether Meridian offers it and state no answer.",
+    "city_not_in_zone_map": "Handoff noted. Say their town is in the service area but "
+    "cannot be booked here, and that a person will call back. Ask nothing else.",
+}
+ESCALATE_INSTRUCTION = (
+    "Handoff noted. Tell the caller a person will take over, why, and that they will "
+    "call back at the time the caller picks. Do not promise a time or ask for anything "
+    "else."
+)
+NO_WINDOW_INSTRUCTIONS = {
+    "no_plumber_in_zone": "No plumber serves this caller's area right now. Book nothing "
+    "and call escalate with reason no_plumber_in_zone.",
+    "city_not_in_zone_map": "This caller's town is served but cannot be booked here. "
+    "Book nothing and call escalate with reason city_not_in_zone_map.",
+}
+
+
+def unzoned_town_instruction(towns: list[str]) -> str:
+    """What a service-area search tells the model about towns it cannot book."""
+    return (
+        f"Visits can be booked here only in {', '.join(towns)}. If the caller's town is "
+        "in the service area but not one of those, say it is served but cannot be booked "
+        "here, book nothing, ask nothing else (not even the danger question), and call "
+        "escalate with reason city_not_in_zone_map."
+    )
+
+
+def not_sure_first(text: str) -> str:
+    """The reply led by the not-sure line, unless it already says it is not sure."""
+    return text if "not sure" in text.casefold() else f"{NOT_SURE_LEAD} {text}"
+
+
 CANCELLED_TEXT = "Your visit has been cancelled."
 WAITLIST_TEXT = (
     "On the waitlist for an earlier window. The team will call you if one opens."
@@ -103,6 +163,10 @@ def handoff_text(reason: str, kind: str) -> str | None:
     """The fixed reply for a handoff, or None when the model's checked reply is used."""
     if reason == "billing_dispute":
         return SUPERVISOR_DISPUTE_TEXT
+    if reason == "technician_late":
+        return TECHNICIAN_LATE_TEXT
+    if reason == "no_plumber_in_zone":
+        return NO_PLUMBER_TEXT
     if kind == "supervisor_callback":
         return SUPERVISOR_TEXT
     if reason == "caller_asked_for_person":

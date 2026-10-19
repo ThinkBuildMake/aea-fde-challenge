@@ -77,7 +77,12 @@ def screen_says_safe(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyP
     Its own tests and S14's choose a verdict; the S29 live test uses the real one."""
     name = request.module.__name__
     if name.startswith(
-        ("tests.test_safety", "tests.test_interfaces", "tests.test_policy_answers_live")
+        (
+            "tests.test_safety",
+            "tests.test_interfaces",
+            "tests.test_policy_answers_live",
+            "tests.test_other_handoffs_live",
+        )
     ):
         return
     from app.safety.service import OpenRouterSafetyClassifier

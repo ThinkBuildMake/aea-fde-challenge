@@ -12,6 +12,7 @@ from app.conversation import guards
 from app.followups import service as followups
 from app.knowledge import service as knowledge
 from app.scheduling import service as scheduling
+from app.scheduling.store import ZONE_BY_CITY
 from app.types import (
     BookedVisit,
     Booking,
@@ -70,6 +71,7 @@ ESCALATE_REASONS = [
     "manager_request",
     "technician_late",
     "new_system_quote",
+    "city_not_in_zone_map",
     "other",
 ]
 _LABEL = re.compile(r"^[a-z_]+$")
@@ -337,12 +339,15 @@ def _search_knowledge(
         state.retrieved.append(
             {"passageId": p.passage_id, "sourceFile": p.source_file, "score": p.score}
         )
-    return {
+    out: dict[str, Any] = {
         "passages": [
             {"source": p.source_file, "section": p.section, "text": p.text}
             for p in passages
         ]
     }
+    if any(p.source_file.endswith("service_area.md") for p in passages):
+        out["instruction"] = guards.unzoned_town_instruction(list(ZONE_BY_CITY))
+    return out
 
 
 def _report_status(
@@ -426,6 +431,8 @@ def _find_open_windows(
     out = _dump(shown)
     if wants_earlier(state):
         out["instruction"] = guards.EARLIER_INSTRUCTION
+    if shown.reason in guards.NO_WINDOW_INSTRUCTIONS:
+        out["instruction"] = guards.NO_WINDOW_INSTRUCTIONS[shown.reason]
     return out
 
 
@@ -642,9 +649,9 @@ def _escalate(
         )
     return {
         "ok": True,
-        "instruction": "Handoff noted. Tell the caller a person will take over, why, "
-        "and that they will call back at the time the caller picks. Do not promise a "
-        "time or ask for anything else.",
+        "instruction": guards.ESCALATE_INSTRUCTIONS.get(
+            state.handoff.reason, guards.ESCALATE_INSTRUCTION
+        ),
     }
 
 

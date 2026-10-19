@@ -142,9 +142,11 @@ def test_a_model_written_handoff_reply_is_checked(started: Settings):
     reply = say(client, cid, "Do you install solar panels?")
     row = handoff_row(started, cid)
     show(reply, row)
-    assert reply["text"] == guards.HANDOFF_TEXT
+    # S49: a no_document_answer handoff leads with the not-sure line.
+    expected = f"{guards.NOT_SURE_LEAD} {guards.HANDOFF_TEXT}"
+    assert reply["text"] == expected
     assert (reply["status"], reply["banner"]) == ("handed_off", "handoff")
-    assert row["told_caller"] == guards.HANDOFF_TEXT
+    assert row["told_caller"] == expected
     error = rows(started, "SELECT error FROM turns WHERE conversation_id = ?", cid)
     assert error[0][0] == "promise_withheld"
 
