@@ -22,6 +22,11 @@ GREETING = (
     "Hi, I am the Meridian assistant. I can book a visit, check or change one, answer "
     "questions about fees, membership and warranty, or look up your bill. What do you need?"
 )
+SOLVED_YES_TEXT = "Thanks for letting us know. Have a good day."
+SOLVED_NO_TEXT = (
+    "Sorry that did not solve it. Would you like me to pass you to a person?"
+)
+NOW_SQL = "strftime('%Y-%m-%dT%H:%M:%fZ','now')"
 
 
 def require_conversation(db: sqlite3.Connection, conversation_id: str) -> None:
@@ -93,10 +98,38 @@ def record_solved(
     db: sqlite3.Connection = Depends(get_db),
 ) -> Response:
     require_conversation(db, conversation_id)
+    answer = payload.answer
+    if answer not in ("yes", "no"):
+        raise AppError(422, "invalid_answer", "The answer must be yes or no.")
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        solved, outcome, handed_off = db.execute(
+            "SELECT solved, outcome, EXISTS("
+            "SELECT 1 FROM handoffs WHERE conversation_id = conversations.id) "
+            "FROM conversations WHERE id = ?",
+            (conversation_id,),
+        ).fetchone()
+        if solved is not None:
+            raise AppError(409, "already_answered", "This was already answered.")
+        if outcome is not None or handed_off:
+            raise AppError(409, "conversation_ended", "This conversation has ended.")
+        ending = (
+            ", outcome = 'contained', ended_at = " + NOW_SQL if answer == "yes" else ""
+        )
+        db.execute(
+            f"UPDATE conversations SET solved = ?, solved_at = {NOW_SQL}, "
+            f"last_activity_at = {NOW_SQL}{ending} "
+            "WHERE id = ? AND solved IS NULL AND outcome IS NULL",
+            (answer, conversation_id),
+        )
+        db.execute("COMMIT")
+    except BaseException:
+        db.execute("ROLLBACK")
+        raise
     body = SolvedResponse(
         saved=True,
-        status="ended",
-        text="Thanks, your answer is saved. This conversation has ended.",
+        status="ended" if answer == "yes" else "active",
+        text=SOLVED_YES_TEXT if answer == "yes" else SOLVED_NO_TEXT,
         actions=["new_conversation"],
     )
     return respond(request, body)

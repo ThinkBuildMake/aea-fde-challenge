@@ -330,7 +330,7 @@ class SendMessageRequest(Model):
 
 
 class SolvedRequest(Model):
-    answer: Literal["yes", "no"]
+    answer: str
 
 
 class CallbackWindowRequest(Model):
