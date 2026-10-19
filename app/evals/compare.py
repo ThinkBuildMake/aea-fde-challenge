@@ -125,6 +125,7 @@ def compare_runs(old: RunResult, new: RunResult) -> str:
         ),
         _number("Contained wrong", a.contained_wrong, b.contained_wrong),
         _number("Unsupported figures", a.unsupported_figures, b.unsupported_figures),
+        _number("Unconfirmed changes", a.unconfirmed_changes, b.unconfirmed_changes),
         _number("Invariant violations", a.invariant_violations, b.invariant_violations),
         _number(
             "Database-change mismatches", a.db_change_mismatches, b.db_change_mismatches
@@ -151,6 +152,11 @@ def compare_runs(old: RunResult, new: RunResult) -> str:
             f"  {sid}: {x.observed_outcome if x else 'absent'} -> "
             f"{y.observed_outcome if y else 'absent'} ({_passfail(x)} -> {_passfail(y)})"
         )
+    ids = list(dict.fromkeys([*before, *after]))
+    differs = sum(
+        1 for sid in ids if _passfail(before.get(sid)) != _passfail(after.get(sid))
+    )
+    lines.append(f"Pass or fail differs on {differs} of {len(ids)} scenarios")
     lines += (
         ["Scenarios that changed:", *changed] if changed else ["No scenario changed."]
     )
