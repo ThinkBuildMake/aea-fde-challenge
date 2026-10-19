@@ -37,3 +37,6 @@ venv = ".venv"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = ["error"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends"]

@@ -1,0 +1,44 @@
+import sqlite3
+import time
+from collections.abc import Iterator
+from dataclasses import dataclass
+from typing import Protocol
+
+from fastapi import Request
+from fastapi.templating import Jinja2Templates
+
+from app.db import connect_app_db
+from app.llm import ModelProvider
+from app.settings import Settings
+
+
+class Clock(Protocol):
+    def monotonic(self) -> float: ...
+
+
+class SystemClock:
+    def monotonic(self) -> float:
+        return time.monotonic()
+
+
+@dataclass
+class AppContext:
+    settings: Settings
+    model: ModelProvider
+    clock: Clock
+    templates: Jinja2Templates
+
+    def open_app_db(self) -> sqlite3.Connection:
+        return connect_app_db(self.settings.APP_DB_PATH)
+
+
+def get_ctx(request: Request) -> AppContext:
+    return request.app.state.ctx
+
+
+def get_db(request: Request) -> Iterator[sqlite3.Connection]:
+    conn = get_ctx(request).open_app_db()
+    try:
+        yield conn
+    finally:
+        conn.close()
