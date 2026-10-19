@@ -82,6 +82,17 @@ CASES: list[Case] = [
 ]
 
 
+def end_conversation(client: TestClient, conversation_id: str) -> None:
+    conn = sqlite3.connect(client.app.state.ctx.settings.APP_DB_PATH)
+    conn.execute(
+        "UPDATE conversations SET outcome = 'contained',"
+        " ended_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?",
+        (conversation_id,),
+    )
+    conn.commit()
+    conn.close()
+
+
 def call(client: TestClient, case: Case, ids: dict[str, str], extra: dict[str, str]):
     method, path, body, headers, _, _ = case
     if path.endswith(("/callback-window", "/followed-up")):
@@ -93,6 +104,8 @@ def call(client: TestClient, case: Case, ids: dict[str, str], extra: dict[str, s
         )
         conn.commit()
         conn.close()
+    if path.endswith("/eval-candidate"):
+        end_conversation(client, ids["id"])
     return client.request(
         method,
         path.format(id=ids["id"], public=ids["public"]),
@@ -144,6 +157,7 @@ def test_camel_case_keys_in_the_start_response(client: TestClient):
 def test_eval_candidate_scenario_id_does_not_leak_the_secret_conversation_id(
     client: TestClient, ids: dict[str, str]
 ):
+    end_conversation(client, ids["id"])
     response = client.post(f"/conversations/{ids['public']}/eval-candidate")
     scenario_id = response.json()["candidate"]["scenarioId"]
     assert ids["id"][:8] not in scenario_id

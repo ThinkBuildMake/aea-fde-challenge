@@ -1,24 +1,16 @@
-import sqlite3
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.admin import require_admin
-from app.context import AppContext, get_ctx, get_db
+from app.context import AppContext, get_ctx
 from app.errors import AppError
-from app.monitoring.service import get_health, get_overview, now_iso
+from app.monitoring import conversations
+from app.monitoring.service import get_health, get_overview
 from app.monitoring.view import overview_view
 from app.negotiation import respond
 from app.types import (
-    CandidateCreated,
-    ConversationDetail,
-    ConversationList,
-    ConversationSummary,
-    EvalCandidateList,
-    EvalCandidateRef,
-    FlagCreated,
-    FlagInfo,
     FlagRequest,
 )
 
@@ -32,17 +24,6 @@ TABS = [
 ]
 
 OUTCOMES = {"contained", "handoff", "safety_stop", "failed", "active"}
-
-
-def require_public(db: sqlite3.Connection, public_id: str) -> str:
-    row = db.execute(
-        "SELECT id FROM conversations WHERE public_id = ?", (public_id,)
-    ).fetchone()
-    if row is None:
-        raise AppError(
-            404, "conversation_not_found", "No conversation matches this id."
-        )
-    return row[0]
 
 
 @router.get("/business", response_class=HTMLResponse)
@@ -68,43 +49,25 @@ def overview(
 
 @router.get("/conversations")
 def list_conversations(
-    request: Request, outcome: str | None = None, limit: int = 50
+    request: Request,
+    outcome: str | None = None,
+    limit: int = 50,
+    ctx: AppContext = Depends(get_ctx),
 ) -> Response:
     if outcome is not None and outcome not in OUTCOMES:
         raise AppError(
             422, "invalid_outcome", "Outcome is not one of the known values."
         )
-    return respond(request, ConversationList(conversations=[]))
+    return respond(
+        request, conversations.list_conversations(ctx, outcome, min(max(limit, 1), 200))
+    )
 
 
 @router.get("/conversations/{public_id}")
 def get_conversation(
-    public_id: str, request: Request, db: sqlite3.Connection = Depends(get_db)
+    public_id: str, request: Request, ctx: AppContext = Depends(get_ctx)
 ) -> Response:
-    require_public(db, public_id)
-    row = db.execute(
-        "SELECT public_id, started_at, ended_at, intent, outcome, outcome_reason, turn_count,"
-        " cost_usd, solved FROM conversations WHERE public_id = ?",
-        (public_id,),
-    ).fetchone()
-    summary = ConversationSummary(
-        public_id=row["public_id"],
-        started_at=row["started_at"],
-        ended_at=row["ended_at"],
-        intent=row["intent"],
-        outcome=row["outcome"],
-        outcome_reason=row["outcome_reason"],
-        turn_count=row["turn_count"],
-        cost_usd=row["cost_usd"],
-        solved=row["solved"],
-        flagged=False,
-        has_handoff=False,
-        customer_name=None,
-    )
-    detail = ConversationDetail(
-        summary=summary, turns=[], handoff=None, flags=[], eval_candidate=None
-    )
-    return respond(request, detail)
+    return respond(request, conversations.get_conversation(ctx, public_id))
 
 
 @router.post("/conversations/{public_id}/flag")
@@ -112,25 +75,19 @@ def flag_conversation(
     public_id: str,
     payload: FlagRequest,
     request: Request,
-    db: sqlite3.Connection = Depends(get_db),
+    ctx: AppContext = Depends(get_ctx),
 ) -> Response:
-    require_public(db, public_id)
-    if not payload.note.strip():
-        raise AppError(
-            422, "note_required", "A note saying what was wrong is required."
-        )
-    return respond(request, FlagCreated(flag=FlagInfo(id=0, created_at=now_iso())), 201)
+    return respond(
+        request, conversations.flag_conversation(ctx, public_id, payload.note), 201
+    )
 
 
 @router.post("/conversations/{public_id}/eval-candidate")
 def create_eval_candidate(
-    public_id: str, request: Request, db: sqlite3.Connection = Depends(get_db)
+    public_id: str, request: Request, ctx: AppContext = Depends(get_ctx)
 ) -> Response:
-    require_public(db, public_id)
-    body = CandidateCreated(
-        candidate=EvalCandidateRef(scenario_id="CAND-" + public_id[:8])
-    )
-    return respond(request, body, 201)
+    body, created = conversations.create_eval_candidate(ctx, public_id)
+    return respond(request, body, 201 if created else 200)
 
 
 @router.api_route("/health", methods=["GET", "HEAD"])
@@ -139,5 +96,7 @@ def health(request: Request, ctx: AppContext = Depends(get_ctx)) -> Response:
 
 
 @router.get("/admin/eval-candidates", dependencies=[Depends(require_admin)])
-def list_eval_candidates(request: Request) -> Response:
-    return respond(request, EvalCandidateList(candidates=[]))
+def list_eval_candidates(
+    request: Request, ctx: AppContext = Depends(get_ctx)
+) -> Response:
+    return respond(request, conversations.list_eval_candidates(ctx))
