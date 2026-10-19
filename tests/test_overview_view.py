@@ -21,7 +21,7 @@ def at(minutes: int) -> str:
     return f"2026-10-16T{(17 * 60 - minutes) // 60:02d}:{(17 * 60 - minutes) % 60:02d}:00.000Z"
 
 
-def make(**changes) -> Overview:
+def make_overview(**changes) -> Overview:
     base = Overview(
         as_of=AS_OF,
         status=OverviewStatus(
@@ -106,7 +106,7 @@ def test_formatting():
 
 
 def test_guarantee_rows_in_wireframe_order():
-    rows = view.overview_view(make())["guarantees"]
+    rows = view.overview_view(make_overview())["guarantees"]
     assert [r["limit"] for r in rows] == [
         "at most 6 s",
         "at most 10 s",
@@ -119,7 +119,7 @@ def test_guarantee_rows_in_wireframe_order():
 
 
 def test_recent_newest_first():
-    rows = view.overview_view(make())["recent"]
+    rows = view.overview_view(make_overview())["recent"]
     assert [r["when"] for r in rows] == ["3 min", "21 min"]
     assert rows[0]["what"] == "Book a visit, central zone"
     assert rows[1]["outcome"] == "Safety stop"
@@ -132,6 +132,6 @@ def test_chart_geometry():
 
 
 def test_spend_line_and_banner():
-    v = view.overview_view(make())
+    v = view.overview_view(make_overview())
     assert v["spend_line"] == "Total model spend: $104 of the $100 alert."
     assert v["banner"]

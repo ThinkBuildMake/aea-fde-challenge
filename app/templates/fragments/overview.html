@@ -1,0 +1,98 @@
+<div id="overview-body" class="overview">
+  {% if view.banner %}<div class="banner banner-warn" data-banner="spend" role="status">{{ view.banner }}</div>{% endif %}
+
+  <div class="tiles">
+    <div class="tile" data-tile="public-url"><div class="tile-label">Public URL</div><div class="tile-value ok">{{ view.status.public_url }}</div></div>
+    <div class="tile" data-tile="last-conversation"><div class="tile-label">Last conversation</div><div class="tile-value">{{ view.status.last }}</div></div>
+    <div class="tile" data-tile="errors"><div class="tile-label">Errors shown to callers, last 24 h</div><div class="tile-value">{{ view.status.errors }}</div></div>
+    <div class="tile" data-tile="handoffs-waiting"><div class="tile-label">Handoffs waiting for follow-up</div><div class="tile-value warn">{{ view.status.waiting }}</div></div>
+  </div>
+
+  <section class="card success-block" data-block="settled">
+    <div class="success-text">
+      <h2 class="label">Calls settled by the agent (rolling 7 days)</h2>
+      <div class="metric-big">{{ view.settled.pct }}</div>
+      <div class="count-line">{{ view.settled.count }} of {{ view.settled.total }} conversations: no handoff and the caller tapped "yes, that solved it"</div>
+      <div class="note">Target {{ view.settled.band_lo }}% to {{ view.settled.band_hi }}%. Callers who skip the tap count as not settled.</div>
+    </div>
+    <div class="success-chart">
+      <svg viewBox="0 0 520 170" width="100%" role="img" aria-label="Seven day line chart of calls settled by the agent">
+        <rect x="40" y="{{ view.settled.band_top }}" width="470" height="{{ view.settled.band_h }}" fill="#E3F0F7"/>
+        <line x1="40" y1="140" x2="510" y2="140" stroke="#9AA8B5"/>
+        <line x1="40" y1="10" x2="40" y2="140" stroke="#9AA8B5"/>
+        <text x="4" y="14" font-size="11" fill="#4A5A68">100%</text>
+        <text x="14" y="143" font-size="11" fill="#4A5A68">0%</text>
+        <text x="46" y="{{ view.settled.band_label_y }}" font-size="11" fill="#0F5E8C">target band {{ view.settled.band_lo }} to {{ view.settled.band_hi }}%</text>
+        <polyline points="{{ view.settled.line }}" fill="none" stroke="#0F5E8C" stroke-width="2.5"/>
+        <text x="40" y="160" font-size="11" fill="#4A5A68">7 days ago</text>
+        <text x="470" y="160" font-size="11" fill="#4A5A68">today</text>
+      </svg>
+    </div>
+  </section>
+
+  <div class="support-row">
+    <div class="support" data-block="booking-completion"><h2 class="label">Booking completion</h2><div class="support-value">{{ view.supporting.booking }}</div><div class="note">asked for a visit and ended with a confirmed booking. No target yet.</div></div>
+    <div class="support" data-block="handoffs-handled-topics"><h2 class="label">Handoffs on topics the agent should handle</h2><div class="support-value">{{ view.supporting.handoffs }}</div><div class="note">{% if view.supporting.reason %}Top reason: {{ view.supporting.reason }}. {% endif %}No target yet.</div></div>
+    <div class="support" data-block="flagged-wrong"><h2 class="label">Flagged wrong</h2><div class="support-value">{{ view.supporting.flagged }}</div><div class="note">of conversations the agent finished alone</div></div>
+  </div>
+
+  <section class="card" data-block="volume">
+    <h2 class="card-title">Conversations by day and outcome</h2>
+    <div class="charts-row">
+      <div class="chart-col">
+        <svg viewBox="0 0 400 120" width="100%" role="img" aria-label="Bar chart of conversations per day">
+          <line x1="0" y1="90" x2="400" y2="90" stroke="#9AA8B5"/>
+          {% for b in view.volume.bars %}
+          <rect class="day-bar" x="{{ b.x }}" y="{{ b.y }}" width="{{ 400 / view.volume.bars|length * 0.6 }}" height="{{ b.h }}" fill="#0F5E8C"/>
+          <text class="day-count" x="{{ b.x + 400 / view.volume.bars|length * 0.3 }}" y="{{ b.y - 4 }}" font-size="11" text-anchor="middle" fill="#14202B">{{ b.count }}</text>
+          <text class="day-date" x="{{ b.x + 400 / view.volume.bars|length * 0.3 }}" y="106" font-size="10" text-anchor="middle" fill="#4A5A68">{{ b.label }}</text>
+          {% endfor %}
+        </svg>
+      </div>
+      <ul class="outcome-list chart-col">
+        {% for key, label, n in view.volume.outcomes %}<li data-outcome="{{ key }}">{{ label }} {{ n }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </section>
+
+  <section class="card" data-block="recent">
+    <h2 class="card-title">What just happened</h2>
+    {% for r in view.recent %}
+    <div class="recent-row">
+      <span class="when">{{ r.when }}</span>
+      <span class="what">{{ r.what }}</span>
+      <span class="outcome {{ r.tone }}">{{ r.outcome }}</span>
+      <span class="latency">{{ r.latency }}</span>
+    </div>
+    {% endfor %}
+  </section>
+
+  <section class="card" data-block="promises">
+    <h2 class="card-title">Promises we keep</h2>
+    <div class="table-scroll">
+      <table class="promises">
+        <thead><tr><th>Measure</th><th>Now</th><th>Limit</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for g in view.guarantees %}
+          <tr><td>{{ g.name }}</td><td>{{ g.now }}</td><td>{{ g.limit }}</td><td class="status {{ g.tone }}">{{ g.status }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="charts-row">
+      <div class="chart-col" data-block="first-reply">
+        <div class="label">Time to first reply, p95 by hour, last 24 h (limit 6 s)</div>
+        <svg viewBox="0 0 400 120" width="100%" role="img" aria-label="Line chart of first reply time p95 over 24 hours">
+          <line x1="30" y1="100" x2="395" y2="100" stroke="#9AA8B5"/>
+          <line x1="30" y1="{{ view.latency.limit_y }}" x2="395" y2="{{ view.latency.limit_y }}" stroke="#B3261E" stroke-dasharray="4 3"/>
+          <text x="34" y="{{ view.latency.limit_label_y }}" font-size="10" fill="#B3261E">limit 6 s</text>
+          <polyline points="{{ view.latency.line }}" fill="none" stroke="#0F5E8C" stroke-width="2"/>
+        </svg>
+      </div>
+      <div class="chart-col">
+        <p class="note" data-spend-line>{{ view.spend_line }}</p>
+      </div>
+    </div>
+  </section>
+</div>

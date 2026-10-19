@@ -1,4 +1,5 @@
 import sqlite3
+from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
@@ -7,6 +8,7 @@ from app.admin import require_admin
 from app.context import AppContext, get_ctx, get_db
 from app.errors import AppError
 from app.monitoring.service import get_health, get_overview, now_iso
+from app.monitoring.view import overview_view
 from app.negotiation import respond
 from app.types import (
     CandidateCreated,
@@ -29,18 +31,6 @@ TABS = [
     ("conversations", "Conversations"),
 ]
 
-METRIC_PANELS = [
-    ("settled", "Calls settled by the agent"),
-    ("booking-completion", "Booking completion"),
-    ("handoffs-handled-topics", "Handoffs on handled topics"),
-    ("flagged-wrong", "Flagged-wrong rate"),
-    ("time-to-first-reply", "Time to first reply"),
-    ("time-write-turn", "Time for a turn that books, moves or cancels"),
-    ("booking-mismatches", "Booking mismatches"),
-    ("errors-shown", "Errors shown to callers"),
-    ("model-spend", "Total model spend"),
-]
-
 OUTCOMES = {"contained", "handoff", "safety_stop", "failed", "active"}
 
 
@@ -61,11 +51,10 @@ def business_page(
 ) -> Response:
     if tab not in dict(TABS):
         tab = "overview"
-    return ctx.templates.TemplateResponse(
-        request,
-        "business.html",
-        {"tabs": TABS, "tab": tab, "panels": METRIC_PANELS},
-    )
+    context: dict[str, Any] = {"tabs": TABS, "tab": tab}
+    if tab == "overview":
+        context["view"] = overview_view(get_overview(ctx))
+    return ctx.templates.TemplateResponse(request, "business.html", context)
 
 
 @router.get("/overview")

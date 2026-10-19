@@ -13,13 +13,8 @@
     </nav>
   </header>
   {% if tab == "overview" %}
-  <div class="panels">
-    {% for key, name in panels %}
-    <section class="panel" data-metric="{{ key }}">
-      <h2>{{ name }}</h2>
-      <p class="empty">No data yet</p>
-    </section>
-    {% endfor %}
+  <div id="overview" hx-get="/business?tab=overview" hx-trigger="every 30s" hx-select="#overview-body" hx-swap="innerHTML">
+    {% include "fragments/overview.html" %}
   </div>
   {% else %}
   <section class="panel table-frame" data-tab="{{ tab }}">

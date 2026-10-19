@@ -7,18 +7,6 @@ from app.llm import FakeModelProvider
 from app.main import create_app
 from app.settings import Settings
 
-METRICS = [
-    "Calls settled by the agent",
-    "Booking completion",
-    "Handoffs on handled topics",
-    "Flagged-wrong rate",
-    "Time to first reply",
-    "Time for a turn that books, moves or cancels",
-    "Booking mismatches",
-    "Errors shown to callers",
-    "Total model spend",
-]
-
 
 @pytest.fixture
 def client(started: Settings) -> TestClient:
@@ -35,7 +23,7 @@ def test_caller_page_loads_without_sign_in(client: TestClient):
     assert "sign in" not in lowered and "log in" not in lowered
 
 
-def test_business_page_has_title_tabs_and_nine_empty_panels(client: TestClient):
+def test_business_page_has_title_tabs_and_overview(client: TestClient):
     response = client.get("/business")
     assert response.status_code == 200
     html = response.text
@@ -47,14 +35,15 @@ def test_business_page_has_title_tabs_and_nine_empty_panels(client: TestClient):
         ("waitlist", "Waitlist"),
         ("conversations", "Conversations"),
     ]
-    panels = re.findall(
-        r'<section class="panel" data-metric="[^"]+">\s*<h2>([^<]+)</h2>(.*?)</section>',
-        html,
-        re.DOTALL,
-    )
-    assert [name for name, _ in panels] == METRICS
-    assert all("No data yet" in body for _, body in panels)
+    assert 'id="overview-body"' in html
     assert "example data" not in html.lower()
+
+
+def test_overview_polls_every_30_seconds(client: TestClient):
+    html = client.get("/business?tab=overview").text
+    assert 'hx-trigger="every 30s"' in html
+    assert 'hx-get="/business?tab=overview"' in html
+    assert 'hx-select="#overview-body"' in html
 
 
 @pytest.mark.parametrize("tab", ["overview", "handoffs", "waitlist", "conversations"])
