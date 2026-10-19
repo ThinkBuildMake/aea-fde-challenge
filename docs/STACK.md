@@ -265,7 +265,7 @@ At these prices the high-level design's cost envelope (§6) is about 1.5 to 2 ti
 
 **Choice: none for the caller chat.** DP-1 requires no login. The business view and its write actions (flag, mark followed up) are open to anyone with the URL; see open questions.
 
-**Needs from the design.** Per-IP rate limits with `slowapi` (the client address comes from `X-Forwarded-For` behind Railway's proxy [verify]), a per-conversation turn cap and a message-length cap, so an anonymous visitor cannot run up the model bill (GC-3). Security headers (a strict content policy, no framing, no sniffing; htmx is served from our own files so the policy stays strict). No cross-origin access: pages and API share one origin, so no CORS middleware. The admin token is compared in constant time. `pip-audit` and Dependabot cover dependencies.
+**Needs from the design.** Per-IP rate limits with `limits` 5.8.0 (the in-process counter library `slowapi` is built on, used directly so each app instance keeps its own counters and settings; the client address is the rightmost `X-Forwarded-For` entry behind Railway's proxy [verify]), a per-conversation turn cap and a message-length cap, so an anonymous visitor cannot run up the model bill (GC-3). Security headers (a strict content policy, no framing, no sniffing; htmx is served from our own files so the policy stays strict). No cross-origin access: pages and API share one origin, so no CORS middleware. The admin token is compared in constant time. `pip-audit` and Dependabot cover dependencies.
 
 ---
 

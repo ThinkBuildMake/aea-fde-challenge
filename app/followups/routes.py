@@ -16,6 +16,7 @@ from app.followups.service import (
 from app.followups.service import list_handoffs as list_handoffs_service
 from app.followups.service import list_waitlist as list_waitlist_service
 from app.negotiation import respond
+from app.ratelimit import limit_business_writes
 from app.types import (
     CallbackWindow,
     CallbackWindowRequest,
@@ -63,7 +64,9 @@ def list_handoffs(
     return respond(request, HandoffList(handoffs=handoffs))
 
 
-@router.post("/handoffs/{handoff_id}/followed-up")
+@router.post(
+    "/handoffs/{handoff_id}/followed-up", dependencies=[Depends(limit_business_writes)]
+)
 def mark_followed_up(
     handoff_id: int,
     request: Request,

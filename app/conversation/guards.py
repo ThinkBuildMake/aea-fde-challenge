@@ -20,6 +20,10 @@ FALLBACK_TEXT = (
     "Sorry, I am having trouble right now and did not want to guess. "
     "A person can help you with this. Would you like a call back?"
 )
+TURN_CAP_TEXT = (
+    "This conversation has reached its limit. "
+    "Please start a new conversation, or ask for a call back."
+)
 NOT_SURE_TEXT = (
     "I'm not sure about that, and I did not want to guess. "
     "Would you like me to pass you to a person?"

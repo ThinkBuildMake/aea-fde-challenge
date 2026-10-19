@@ -12,6 +12,7 @@ from app.conversation.service import close_idle_conversations
 from app.conversation.turn import run_turn
 from app.errors import AppError
 from app.negotiation import respond
+from app.ratelimit import limit_messages, limit_new_conversations
 from app.types import (
     SendMessageRequest,
     SolvedRequest,
@@ -50,7 +51,7 @@ def caller_page(request: Request, ctx: AppContext = Depends(get_ctx)) -> Respons
     return ctx.templates.TemplateResponse(request, "chat.html", {"greeting": GREETING})
 
 
-@router.post("/conversations")
+@router.post("/conversations", dependencies=[Depends(limit_new_conversations)])
 def start_conversation(
     request: Request,
     ctx: AppContext = Depends(get_ctx),
@@ -71,7 +72,10 @@ def start_conversation(
     return respond(request, body, 201)
 
 
-@router.post("/conversations/{conversation_id}/messages")
+@router.post(
+    "/conversations/{conversation_id}/messages",
+    dependencies=[Depends(limit_messages)],
+)
 def send_message(
     conversation_id: str,
     payload: SendMessageRequest,
@@ -79,11 +83,30 @@ def send_message(
     ctx: AppContext = Depends(get_ctx),
     db: sqlite3.Connection = Depends(get_db),
 ) -> Response:
+    if len(payload.text) > ctx.settings.MESSAGE_MAX_CHARS:
+        raise AppError(
+            413,
+            "message_too_long",
+            f"Messages can be at most {ctx.settings.MESSAGE_MAX_CHARS} characters.",
+        )
+    if not payload.text.strip():
+        raise AppError(422, "empty_message", "Please type a message first.")
     require_conversation(db, conversation_id)
-    if db.execute(
-        "SELECT outcome FROM conversations WHERE id = ?", (conversation_id,)
-    ).fetchone()[0]:
+    outcome, turn_count = db.execute(
+        "SELECT outcome, turn_count FROM conversations WHERE id = ?",
+        (conversation_id,),
+    ).fetchone()
+    if outcome:
         raise AppError(409, "conversation_ended", "This conversation has ended.")
+    if turn_count >= ctx.settings.TURN_CAP:
+        db.execute(
+            "UPDATE conversations SET outcome = 'failed', outcome_reason = 'turn_cap', "
+            f"ended_at = {NOW_SQL} WHERE id = ? AND outcome IS NULL",
+            (conversation_id,),
+        )
+        raise AppError(
+            409, "turn_limit_reached", "This conversation has reached its limit."
+        )
     with _in_flight_lock:
         if conversation_id in _in_flight:
             raise AppError(
