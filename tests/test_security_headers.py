@@ -42,7 +42,15 @@ def test_pages_carry_security_headers(client: TestClient, method: str, path: str
     response = client.request(method, path)
 
     policy = response.headers["content-security-policy"]
-    print(method, path, response.status_code, "CSP:", policy)
+    print(method, path, response.status_code, "| CSP:", policy)
+    print(
+        "   X-Frame-Options:",
+        response.headers.get("x-frame-options"),
+        "| X-Content-Type-Options:",
+        response.headers.get("x-content-type-options"),
+        "| Referrer-Policy:",
+        response.headers.get("referrer-policy"),
+    )
     assert all(d in policy for d in DIRECTIVES)
     assert "unsafe-inline" not in policy and "unsafe-eval" not in policy
     assert response.headers["x-frame-options"] == "DENY"
