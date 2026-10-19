@@ -1,12 +1,16 @@
+import shutil
 import sqlite3
 from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.followups.service import join_waitlist
 from app.llm import FakeModelProvider
 from app.main import create_app
+from app.scheduling.service import book_visit
 from app.settings import Settings
+from app.types import WaitlistRequest
 
 
 @pytest.fixture
@@ -211,3 +215,75 @@ def test_undo(client: TestClient, db: sqlite3.Connection):
     ).fetchone()
     assert tuple(row) == ("open", None)
     print(handoff["status"], handoff["followedUpAt"])
+
+
+def join(client: TestClient, db: sqlite3.Connection, slot_id: int, issue: str):
+    cid = new_conversation(client, db)
+    visit = book_visit(client.app.state.ctx, "MHC-10002", slot_id, issue, cid)  # type: ignore[attr-defined]
+    return join_waitlist(
+        client.app.state.ctx,  # type: ignore[attr-defined]
+        WaitlistRequest(
+            conversation_id=cid,
+            customer_id="MHC-10002",
+            service_type=visit.service_type,
+            zone=visit.zone,
+            held_date=visit.date,
+            held_window=visit.window,
+        ),
+    ).entry
+
+
+def test_waitlist_oldest_first(client: TestClient, db: sqlite3.Connection):
+    newer = join(client, db, 115, "AC not cooling")
+    older = join(client, db, 119, "Thermostat")
+    db.execute(
+        "UPDATE waitlist_entries SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', "
+        "'now', '-120 seconds') WHERE id = ?",
+        (older.id,),
+    )
+    db.execute(
+        "UPDATE waitlist_entries SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', "
+        "'now', '-60 seconds') WHERE id = ?",
+        (newer.id,),
+    )
+    response = client.get("/waitlist")
+    entries = response.json()["entries"]
+    assert response.status_code == 200
+    print(
+        [
+            (
+                e["id"],
+                e["caller"]["name"],
+                e["caller"]["phone"],
+                e["serviceType"],
+                e["zone"],
+                e["held"],
+                e["waitingSeconds"],
+            )
+            for e in entries
+        ]
+    )
+    assert [e["id"] for e in entries] == [older.id, newer.id]
+    for e in entries:
+        assert e["caller"]["name"] == "Omar Patel"
+        assert e["caller"]["phone"] == "512-555-0102"
+        assert e["caller"]["city"] == "Kyle"
+        assert {"serviceType", "zone", "held", "waitingSeconds"} <= set(e)
+    assert abs(entries[0]["waitingSeconds"] - 120) <= 2
+    assert abs(entries[1]["waitingSeconds"] - 60) <= 2
+    assert older.conversation_public_id in response.text
+    private_id = db.execute(
+        "SELECT conversation_id FROM waitlist_entries WHERE id = ?", (older.id,)
+    ).fetchone()[0]
+    assert private_id not in response.text
+
+
+def test_waitlist_survives_seed_reset(
+    client: TestClient, db: sqlite3.Connection, started, seed_path
+):
+    join(client, db, 115, "AC not cooling")
+    shutil.copy(seed_path, started.SCHEDULING_DB_PATH)
+    entries = client.get("/waitlist").json()["entries"]
+    print(len(entries), entries[0]["held"], entries[0]["caller"])
+    assert len(entries) == 1
+    assert entries[0]["held"] == {"date": "2026-10-21", "window": "08:00-12:00"}
