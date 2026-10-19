@@ -79,13 +79,13 @@ def identify_customer(
     matches = [
         r
         for r in rows
-        if _name(str(r["name"])) == _name(name)
+        if _name(r["name"]) == _name(name)
         and (
-            (wanted_phone and _digits(str(r["phone"] or "")) == wanted_phone)
-            or (wanted_account and str(r["customer_id"]) == wanted_account)
+            (wanted_phone and _digits(r["phone"] or "") == wanted_phone)
+            or (wanted_account and r["customer_id"] == wanted_account)
             or (
                 wanted_address
-                and _address(str(r["service_address"] or "")) == wanted_address
+                and _address(r["service_address"] or "") == wanted_address
             )
         )
     ]
