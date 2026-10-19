@@ -101,7 +101,7 @@ svg{display:block;max-width:100%}
 .row .summary,.row .want{flex:2 1 280px;min-width:0;overflow-wrap:anywhere}
 .row .window{flex:1 1 140px;color:var(--muted)}
 .row .since{flex:1 1 100px;color:var(--muted)}
-.mark.stop{color:#8C1D18;font-weight:600;margin-right:6px}
+.mark.stop{color:#8C1D18;font-weight:600}
 .btn-toggle,.btn-eval,.btn-flag{min-height:44px;padding:0 14px;border-radius:8px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;background:#fff}
 .btn-toggle,.btn-eval{border:1px solid var(--accent);color:var(--accent)}
 .btn-toggle.done{background:#E3F0F7}

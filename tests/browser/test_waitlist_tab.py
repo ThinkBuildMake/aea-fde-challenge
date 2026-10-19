@@ -46,3 +46,11 @@ def test_waitlist_empty(page: Page, live_url: str, overview_stub):
     json_route(page, WAITLIST, {"entries": []})
     page.goto(live_url + "/business?tab=waitlist")
     expect(page.locator("[data-tab=waitlist] .empty")).to_have_text("No data yet")
+
+
+def test_list_failure_says_could_not_load(page: Page, live_url: str, overview_stub):
+    json_route(page, WAITLIST, {"error": {}}, status=500)
+    page.goto(live_url + "/business?tab=waitlist")
+    expect(page.locator("[data-tab=waitlist] .empty")).to_have_text(
+        "Could not load the waitlist. Reload to try again."
+    )
