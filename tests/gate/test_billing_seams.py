@@ -80,15 +80,15 @@ def test_five_cards_and_a_payment_leave_no_digit_run(
     )
     cid = new(client)
     first = send(client, cid, "What do I owe? Omar Patel, account MHC-10002.")
-    print(f"\nbalance: {first['text']}")
+    said = [f"balance: {first['text']}"]
     for number in CARDS:
         reply = send(client, cid, f"My card is {number}.")
-        print(f"card reply: status={reply['status']} text={reply['text']!r}")
+        said.append(f"card reply: status={reply['status']} text={reply['text']!r}")
         assert guards.refuses_card(reply["text"])
         assert "https://pay.example.com/invoice/INV-204411?token=" in reply["text"]
         assert (reply["status"], reply["banner"]) == ("active", "none")
     paid = send(client, cid, "I'd like to pay that now.")
-    print(f"pay reply: {paid['text']!r}")
+    said.append(f"pay reply: {paid['text']!r}")
     assert "https://pay.example.com/invoice/INV-204411?token=" in paid["text"]
 
     turns = rows(kb_settings, "SELECT * FROM turns WHERE conversation_id = ?", cid)
@@ -106,6 +106,8 @@ def test_five_cards_and_a_payment_leave_no_digit_run(
     ]
     found += [m.group() for t in stored for m in [BARE_RUN.search(t)] if m]
     handoffs = rows(kb_settings, "SELECT COUNT(*) FROM handoffs")[0][0]
+    stored_callers = [t["caller_text"] for t in turns]
+    print("\n" + "\n".join(said) + f"\nstored caller texts: {stored_callers}")
     print(
         f"turns={len(turns)} stored values={len(stored)} stdout lines="
         f"{len(out.splitlines())} screen inputs={len(screened)} "
