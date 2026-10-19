@@ -93,7 +93,14 @@ def test_command_leaves_conversations_handoffs_and_waitlist(env, cid):
     before = [rows(env.APP_DB_PATH, f"SELECT * FROM {t}") for t in tables]
     assert all(len(r) == 1 for r in before)
     assert reset.main() == 0
-    assert [rows(env.APP_DB_PATH, f"SELECT * FROM {t}") for t in tables] == before
+    after = [rows(env.APP_DB_PATH, f"SELECT * FROM {t}") for t in tables]
+    for table, b, a in zip(tables, before, after, strict=True):
+        print(f"{table}: before {len(b)} after {len(a)} identical {a == b}")
+    print(
+        "waitlist held:",
+        rows(env.APP_DB_PATH, "SELECT held_date, held_window FROM waitlist_entries"),
+    )
+    assert after == before
 
 
 def test_command_retires_the_book_row(env, ctx, cid):
