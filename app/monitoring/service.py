@@ -189,8 +189,9 @@ RECENT_COUNT = 5
 
 
 def read_total_spend(ctx: AppContext) -> float | None:
-    """Total model spend in USD; S18 replaces this with the key-usage reader."""
-    return None
+    """Total model spend in USD: provider key usage plus the manual OpenAI line."""
+    usage = ctx.spend.total()
+    return None if usage is None else usage + ctx.settings.OPENAI_SPEND_USD
 
 
 def _p95(values: list[int]) -> int | None:

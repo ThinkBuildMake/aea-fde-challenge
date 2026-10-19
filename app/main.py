@@ -15,6 +15,7 @@ from app.knowledge.index import IndexStore
 from app.knowledge.routes import router as knowledge_router
 from app.llm import ModelProvider, StubModelProvider
 from app.monitoring.routes import router as monitoring_router
+from app.monitoring.spend import KeyUsageCache, KeyUsageReader, OpenRouterKeyUsage
 from app.scheduling.routes import router as scheduling_router
 from app.settings import Settings
 
@@ -27,8 +28,10 @@ def create_app(
     model: ModelProvider | None = None,
     clock: Clock | None = None,
     embedder: Embedder | None = None,
+    key_usage: KeyUsageReader | None = None,
 ) -> FastAPI:
     embedder = embedder or OpenRouterEmbedder(settings)
+    clock = clock or SystemClock()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -47,10 +50,11 @@ def create_app(
     app.state.ctx = AppContext(
         settings=settings,
         model=model or StubModelProvider(),
-        clock=clock or SystemClock(),
+        clock=clock,
         templates=Jinja2Templates(directory=APP_DIR / "templates"),
         embedder=embedder,
         index=IndexStore(settings.INDEX_PATH, embedder.model),
+        spend=KeyUsageCache(key_usage or OpenRouterKeyUsage(settings), clock),
     )
     app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
     errors.install(app)
