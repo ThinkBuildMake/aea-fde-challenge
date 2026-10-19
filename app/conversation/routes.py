@@ -1,5 +1,6 @@
 import logging
 import sqlite3
+import threading
 import uuid
 from datetime import UTC, datetime
 
@@ -29,6 +30,8 @@ SOLVED_YES_TEXT = "Thanks for letting us know. Have a good day."
 SOLVED_NO_TEXT = (
     "Sorry that did not solve it. Would you like me to pass you to a person?"
 )
+_in_flight: set[str] = set()
+_in_flight_lock = threading.Lock()
 NOW_SQL = "strftime('%Y-%m-%dT%H:%M:%fZ','now')"
 
 
@@ -81,7 +84,27 @@ def send_message(
         "SELECT outcome FROM conversations WHERE id = ?", (conversation_id,)
     ).fetchone()[0]:
         raise AppError(409, "conversation_ended", "This conversation has ended.")
-    return respond(request, run_turn(ctx, db, conversation_id, payload.text))
+    with _in_flight_lock:
+        if conversation_id in _in_flight:
+            raise AppError(
+                409,
+                "turn_in_progress",
+                "Another message for this conversation is still being answered.",
+            )
+        _in_flight.add(conversation_id)
+    try:
+        reply = run_turn(
+            ctx,
+            db,
+            conversation_id,
+            payload.text,
+            simulate_outage=bool(payload.simulate_outage)
+            and ctx.settings.DEMO_FAULT_INJECTION,
+        )
+    finally:
+        with _in_flight_lock:
+            _in_flight.discard(conversation_id)
+    return respond(request, reply)
 
 
 @router.post("/conversations/{conversation_id}/solved")

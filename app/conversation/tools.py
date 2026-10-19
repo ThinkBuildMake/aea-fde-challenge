@@ -168,6 +168,7 @@ class ToolState:
         self.has_write = False
         self.write_failed = False
         self.waitlisted = False
+        self.cancelled = False
 
     def offer(
         self, slot_ids: Iterable[int] = (), appointment_ids: Iterable[int] = ()
@@ -448,6 +449,7 @@ def _cancel_visit(
         ctx, _customer(state), int(args["appointmentId"]), state.conversation_id
     )
     state.commit()
+    state.cancelled = True
     out = _dump(cancelled)
     out["ok"] = True
     if cancelled.late_fee_applies:

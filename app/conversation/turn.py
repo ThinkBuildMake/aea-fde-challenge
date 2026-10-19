@@ -6,14 +6,18 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
+import openai
+
 from app.context import AppContext
 from app.conversation import guards, tools
 from app.errors import AppError
 from app.followups import service as followups
+from app.logs import log_event
 from app.safety import service as safety
 from app.types import HandoffRecord, Reply, TurnInfo, Verdict
 
 MAX_TOOL_ROUNDS = 6
+FALLBACK_RESERVE_S = 1.0
 
 INSTRUCTIONS = (
     "You are the Meridian assistant, answering a caller's message. For any question about "
@@ -65,8 +69,8 @@ def _save_turn(
             "INSERT INTO turns (conversation_id, seq, kind, caller_text, reply_text, "
             "model_messages, tools_called, retrieved, latency_ms, prompt_tokens, "
             "completion_tokens, cost_usd, cost_source, safety_verdict, offered, "
-            "has_write, error) "
-            "VALUES (?, ?, 'message', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "has_write, error, fallback_used) "
+            "VALUES (?, ?, 'message', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 conversation_id,
                 seq,
@@ -84,6 +88,7 @@ def _save_turn(
                 state.offered_json() if turn["safety_verdict"] == "safe" else "{}",
                 int(state.has_write),
                 turn.get("error"),
+                turn["fallback_used"],
             ),
         )
         db.execute(
@@ -141,19 +146,50 @@ def _stop_for(
     return end
 
 
+def _failure_code(exc: Exception, has_history: bool) -> str:
+    if isinstance(exc, TimeoutError | openai.APITimeoutError):
+        return "provider_timeout"
+    if has_history and isinstance(exc, openai.BadRequestError):
+        return "replay_rejected"
+    return "provider_error"
+
+
+def _end_failed(db: sqlite3.Connection, conversation_id: str) -> Callable[[str], None]:
+    """End the conversation as failed because the provider refused its replayed history."""
+
+    def end(told_caller: str) -> None:
+        db.execute(
+            "UPDATE conversations SET outcome = 'failed', outcome_reason = 'replay_rejected', "
+            "ended_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND outcome IS NULL",
+            (conversation_id,),
+        )
+
+    return end
+
+
 def run_turn(
-    ctx: AppContext, db: sqlite3.Connection, conversation_id: str, text: str
+    ctx: AppContext,
+    db: sqlite3.Connection,
+    conversation_id: str,
+    text: str,
+    simulate_outage: bool = False,
 ) -> Reply:
     started = ctx.clock.monotonic()
+
+    def left() -> float:
+        return ctx.settings.TURN_DEADLINE - (ctx.clock.monotonic() - started)
+
     redacted = safety.redact_card_numbers(text).text
 
     history: list[dict[str, Any]] = []
+    earlier = 0
     for row in db.execute(
         "SELECT model_messages FROM turns WHERE conversation_id = ? AND kind = 'message' "
         "ORDER BY seq",
         (conversation_id,),
     ):
         history.extend(json.loads(row["model_messages"]))
+        earlier += 1
     state = tools.ToolState.load(db, conversation_id, redacted, history)
     recent, follow_up_pending = _recent_turns(db, conversation_id)
 
@@ -162,38 +198,51 @@ def run_turn(
     tools_called: list[dict[str, Any]] = []
     cost = 0.0
     all_reported = True
-    prompt_tokens = completion_tokens = 0
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
     said: list[str] = []
     verdict: Verdict | None = None
-    error: str | None = None
+    failure: str | None = "provider_error" if simulate_outage else None
 
     screen = ThreadPoolExecutor(max_workers=1)
+    model_pool = ThreadPoolExecutor(max_workers=1)
     screening = screen.submit(
         safety.screen_safety, ctx, redacted, recent, follow_up_pending
     )
     try:
-        for _ in range(MAX_TOOL_ROUNDS):
-            remaining = ctx.settings.TURN_DEADLINE - (ctx.clock.monotonic() - started)
+        for _ in range(0 if failure else MAX_TOOL_ROUNDS):
+            remaining = left()
+            if remaining <= FALLBACK_RESERVE_S:
+                failure = "provider_timeout"
+                break
             try:
-                result = ctx.model.complete(
+                result = model_pool.submit(
+                    ctx.model.complete,
                     [{"role": "system", "content": INSTRUCTIONS}, *history, *stored],
                     tools=tools.TOOLS,
-                    timeout_s=max(remaining, 1.0),
+                    timeout_s=remaining,
+                ).result(timeout=remaining - FALLBACK_RESERVE_S)
+            except Exception as exc:  # noqa: BLE001 - any provider failure falls back
+                failure = _failure_code(exc, bool(history))
+                log_event(
+                    "model_call_failed", error=failure, error_type=type(exc).__name__
                 )
-            except Exception:
-                if state.booking is None:
-                    raise
-                error = "provider_error"
-                said = [guards.confirmation_text(state.booking)]
-                stored.append({"role": "assistant", "content": said[0]})
                 break
             if verdict is None:
-                remaining = ctx.settings.TURN_DEADLINE - (
-                    ctx.clock.monotonic() - started
-                )
-                verdict = screening.result(timeout=max(remaining, 1.0))
-            prompt_tokens += result.prompt_tokens or 0
-            completion_tokens += result.completion_tokens or 0
+                try:
+                    verdict = screening.result(
+                        timeout=max(left() - FALLBACK_RESERVE_S, 0.0)
+                    )
+                except Exception as exc:  # noqa: BLE001 - an unscreened turn takes the fallback
+                    failure = _failure_code(exc, False)
+                    log_event(
+                        "screen_failed", error=failure, error_type=type(exc).__name__
+                    )
+                    break
+            if result.prompt_tokens is not None:
+                prompt_tokens = (prompt_tokens or 0) + result.prompt_tokens
+            if result.completion_tokens is not None:
+                completion_tokens = (completion_tokens or 0) + result.completion_tokens
             if result.cost_usd is not None:
                 cost += result.cost_usd
             else:
@@ -205,10 +254,13 @@ def run_turn(
                 ) / 1e6
             if verdict.verdict != "safe":
                 break
+            calls = result.message.get("tool_calls") or []
+            if not all(isinstance(c, dict) and c.get("id") for c in calls):
+                failure = "malformed_reply"
+                break
             stored.append(result.message)
             if result.message.get("content"):
                 said.append(str(result.message["content"]).strip())
-            calls = result.message.get("tool_calls") or []
             if not calls:
                 break
             for call in calls:
@@ -221,8 +273,19 @@ def run_turn(
                         "content": json.dumps(output),
                     }
                 )
+        else:
+            if not failure:
+                failure = "tool_rounds_exhausted"
+        if failure and verdict is None:
+            try:
+                verdict = screening.result(
+                    timeout=max(left() - FALLBACK_RESERVE_S, 0.0)
+                )
+            except Exception:  # noqa: BLE001 - an unscreened turn keeps the failure path
+                verdict = None
     finally:
         screen.shutdown(wait=False)
+        model_pool.shutdown(wait=False)
 
     turn: dict[str, Any] = {
         "caller_text": redacted,
@@ -232,7 +295,8 @@ def run_turn(
         "completion_tokens": completion_tokens,
         "cost_source": "reported" if all_reported else "estimated",
         "safety_verdict": verdict.verdict if verdict else "safe",
-        "error": error,
+        "error": None,
+        "fallback_used": 0,
     }
     status: Any = "active"
     banner: Any = "none"
@@ -249,6 +313,7 @@ def run_turn(
         )
         turn["stored"] = [user, {"role": "assistant", "content": final_text}]
         turn["tools_called"] = []
+        turn["error"] = failure
         if emergency:
             status = banner = "safety_stop"
             actions = ["new_conversation"]
@@ -258,12 +323,37 @@ def run_turn(
             end = _stop_for(db, conversation_id, state.customer_id, verdict)
     else:
         final_text = "\n\n".join(said)
-        choices = tools.choices(state)
-        if state.write_failed and booking is None:
-            actions = ["request_callback"]
+        if not failure and not final_text.strip():
+            failure = "empty_reply"
+        if failure:
+            turn["error"] = failure
+            committed = guards.committed_text(
+                state.booking, state.cancelled, state.waitlisted
+            )
+            if committed:
+                final_text = committed
+            else:
+                final_text = guards.FALLBACK_TEXT
+                banner = "error"
+                actions = ["request_callback"]
+                turn["fallback_used"] = 1
+                booking = None
+            turn["stored"] = [*stored, {"role": "assistant", "content": final_text}]
+            if failure == "replay_rejected":
+                status = "ended"
+                actions = [*actions, "new_conversation"]
+                end = _end_failed(db, conversation_id)
+        else:
+            choices = tools.choices(state)
+            if state.write_failed and booking is None:
+                actions = ["request_callback"]
     turn["reply_text"] = final_text
     turn["latency_ms"] = round((ctx.clock.monotonic() - started) * 1000)
-    seq = _save_turn(ctx, db, conversation_id, state, turn, cost, end)
+    try:
+        seq = _save_turn(ctx, db, conversation_id, state, turn, cost, end)
+    except sqlite3.Error as exc:
+        log_event("turn_save_failed", table="turns", error_type=type(exc).__name__)
+        seq = earlier + 1
 
     return Reply(
         conversation_id=conversation_id,
