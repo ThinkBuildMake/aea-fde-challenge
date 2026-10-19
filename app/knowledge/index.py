@@ -1,7 +1,6 @@
 """The index file (numpy vectors plus passage records), written atomically, and its in-memory copy."""
 
 import fcntl
-import hashlib
 import json
 import os
 import threading
@@ -26,13 +25,6 @@ class LoadedIndex:
     vectors: NDArray[np.float32]
 
 
-def passages_hash(passages: list[PassageRecord]) -> str:
-    digest = hashlib.sha256()
-    for p in passages:
-        digest.update(f"{p.passage_id}\0{p.text}\0".encode())
-    return digest.hexdigest()
-
-
 def write_index(path: Path, loaded: LoadedIndex) -> None:
     """Write beside the old file, then replace it; a failure leaves the old file as it was."""
     meta = json.dumps(
@@ -40,7 +32,6 @@ def write_index(path: Path, loaded: LoadedIndex) -> None:
             "version": loaded.version,
             "model": loaded.model,
             "dims": loaded.dims,
-            "hash": passages_hash(loaded.passages),
             "passages": [asdict(p) for p in loaded.passages],
         }
     )
@@ -58,10 +49,7 @@ def read_index(path: Path) -> LoadedIndex:
         meta = json.loads(str(data["meta"]))
         vectors = np.asarray(data["vectors"], dtype=np.float32)
     passages = [PassageRecord(**p) for p in meta["passages"]]
-    if meta["hash"] != passages_hash(passages) or vectors.shape != (
-        len(passages),
-        meta["dims"],
-    ):
+    if vectors.shape != (len(passages), meta["dims"]):
         raise ValueError("index file does not match itself")
     return LoadedIndex(meta["version"], meta["model"], meta["dims"], passages, vectors)
 
