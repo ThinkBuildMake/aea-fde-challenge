@@ -1,5 +1,6 @@
 import sqlite3
 from contextlib import closing
+from typing import Literal
 
 from app.context import AppContext
 from app.conversation.service import end_with_handoff
@@ -20,6 +21,10 @@ from app.types import (
 
 class NoHandoff(Exception):
     """The conversation has no handoff."""
+
+
+class HandoffNotFound(Exception):
+    """No handoff has this id."""
 
 
 def placeholder_handoff(
@@ -71,44 +76,93 @@ def _customer(ctx: AppContext, customer_id: str) -> tuple[str, str, str] | None:
     return None if row is None else (row[0], row[1], row[2])
 
 
+def _views(
+    tx: sqlite3.Connection, where: str, params: tuple, ctx: AppContext | None
+) -> list[HandoffView]:
+    rows = tx.execute(
+        f"SELECT {_COLUMNS} FROM handoffs h JOIN conversations c "
+        f"ON c.id = h.conversation_id WHERE {where} ORDER BY h.created_at, h.id",
+        params,
+    ).fetchall()
+    views = []
+    for row in rows:
+        customer_id: str | None = row[5]
+        city: str | None = None
+        if ctx is not None and customer_id is not None:
+            found = _customer(ctx, customer_id)
+            city = None if found is None else found[2]
+        views.append(
+            HandoffView(
+                id=row[0],
+                conversation_public_id=row[1],
+                kind=row[2],
+                reason=row[3],
+                by_error=bool(row[4]),
+                caller=HandoffCaller(
+                    customer_id=customer_id,
+                    name=row[6],
+                    phone=row[7],
+                    city=city,
+                    zone=None if city is None else zone_for_city(city),
+                    stated_by_caller=bool(row[8]),
+                ),
+                intent=row[9],
+                told_caller=row[10],
+                summary=f"{row[3]}: {row[10]}",
+                summary_source=row[11],
+                preferred_window=row[12],
+                status=row[13],
+                created_at=row[14],
+                followed_up_at=row[15],
+            )
+        )
+    return views
+
+
 def _view(
     tx: sqlite3.Connection, conversation_id: str, ctx: AppContext | None
 ) -> HandoffView | None:
-    row = tx.execute(
-        f"SELECT {_COLUMNS} FROM handoffs h JOIN conversations c "
-        "ON c.id = h.conversation_id WHERE h.conversation_id = ?",
-        (conversation_id,),
-    ).fetchone()
-    if row is None:
-        return None
-    customer_id: str | None = row[5]
-    city: str | None = None
-    if ctx is not None and customer_id is not None:
-        found = _customer(ctx, customer_id)
-        city = None if found is None else found[2]
-    return HandoffView(
-        id=row[0],
-        conversation_public_id=row[1],
-        kind=row[2],
-        reason=row[3],
-        by_error=bool(row[4]),
-        caller=HandoffCaller(
-            customer_id=customer_id,
-            name=row[6],
-            phone=row[7],
-            city=city,
-            zone=None if city is None else zone_for_city(city),
-            stated_by_caller=bool(row[8]),
-        ),
-        intent=row[9],
-        told_caller=row[10],
-        summary=f"{row[3]}: {row[10]}",
-        summary_source=row[11],
-        preferred_window=row[12],
-        status=row[13],
-        created_at=row[14],
-        followed_up_at=row[15],
-    )
+    views = _views(tx, "h.conversation_id = ?", (conversation_id,), ctx)
+    return views[0] if views else None
+
+
+def list_handoffs(
+    ctx: AppContext, status: Literal["open", "followed_up"]
+) -> list[HandoffView]:
+    """Handoffs with this status, oldest first."""
+    with closing(ctx.open_app_db()) as conn:
+        return _views(conn, "h.status = ?", (status,), ctx)
+
+
+def mark_handoff_followed_up(
+    ctx: AppContext, handoff_id: int, followed_up: bool
+) -> HandoffView:
+    """open -> followed_up (once), or the undo followed_up -> open; otherwise no change."""
+    with closing(ctx.open_app_db()) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            if followed_up:
+                conn.execute(
+                    "UPDATE handoffs SET status = 'followed_up', "
+                    "followed_up_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') "
+                    "WHERE id = ? AND status = 'open'",
+                    (handoff_id,),
+                )
+            else:
+                conn.execute(
+                    "UPDATE handoffs SET status = 'open', followed_up_at = NULL "
+                    "WHERE id = ? AND status = 'followed_up'",
+                    (handoff_id,),
+                )
+            views = _views(conn, "h.id = ?", (handoff_id,), ctx)
+            if not views:
+                raise HandoffNotFound(handoff_id)
+            conn.execute("COMMIT")
+        except BaseException:
+            if conn.in_transaction:
+                conn.execute("ROLLBACK")
+            raise
+        return views[0]
 
 
 def create_handoff(

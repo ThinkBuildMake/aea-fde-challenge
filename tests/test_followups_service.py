@@ -6,7 +6,14 @@ import pytest
 
 from app.context import AppContext
 from app.db import connect_app_db
-from app.followups.service import NoHandoff, create_handoff, set_callback_window
+from app.followups.service import (
+    HandoffNotFound,
+    NoHandoff,
+    create_handoff,
+    list_handoffs,
+    mark_handoff_followed_up,
+    set_callback_window,
+)
 from app.llm import FakeModelProvider
 from app.main import create_app
 from app.settings import Settings
@@ -206,3 +213,44 @@ def test_failed_fallback_write_leaves_nothing(
     assert check.execute("SELECT COUNT(*) FROM handoffs").fetchone()[0] == 0
     assert check.execute("SELECT outcome FROM conversations").fetchone()[0] is None
     check.close()
+
+
+def seed(conn: sqlite3.Connection, cid: str, created_at: str, status: str = "open"):
+    conn.execute("INSERT INTO conversations (id) VALUES (?)", (cid,))
+    conn.execute(
+        "INSERT INTO handoffs (conversation_id, kind, reason, intent, told_caller, "
+        "status, created_at) VALUES (?, 'handoff', 'r', 'i', 't', ?, ?)",
+        (cid, status, created_at),
+    )
+
+
+def test_list_handoffs_by_status_oldest_first(
+    conn: sqlite3.Connection, ctx: AppContext
+):
+    seed(conn, "n1", "2026-01-02T00:00:00.000Z")
+    seed(conn, "n2", "2026-01-01T00:00:00.000Z")
+    seed(conn, "n3", "2026-01-03T00:00:00.000Z", "followed_up")
+    open_ = list_handoffs(ctx, "open")
+    assert [h.created_at for h in open_] == [
+        "2026-01-01T00:00:00.000Z",
+        "2026-01-02T00:00:00.000Z",
+    ]
+    assert len(list_handoffs(ctx, "followed_up")) == 1
+
+
+def test_mark_followed_up_then_again_then_undo(
+    conn: sqlite3.Connection, ctx: AppContext
+):
+    seed(conn, "n1", "2026-01-01T00:00:00.000Z")
+    hid = conn.execute("SELECT id FROM handoffs").fetchone()[0]
+    first = mark_handoff_followed_up(ctx, hid, True)
+    assert first.status == "followed_up" and first.followed_up_at is not None
+    again = mark_handoff_followed_up(ctx, hid, True)
+    assert again.followed_up_at == first.followed_up_at
+    undone = mark_handoff_followed_up(ctx, hid, False)
+    assert undone.status == "open" and undone.followed_up_at is None
+
+
+def test_mark_unknown_handoff_raises(ctx: AppContext):
+    with pytest.raises(HandoffNotFound):
+        mark_handoff_followed_up(ctx, 9999, True)
