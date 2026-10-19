@@ -16,6 +16,6 @@ def reset_scheduling_route(
 ) -> Response:
     result = reset_scheduling(ctx)
     body = ResetSchedulingResult(
-        restored=False, snapshot_id=result.snapshot_id, slot_counts=result.slot_counts
+        restored=True, snapshot_id=result.snapshot_id, slot_counts=result.slot_counts
     )
     return respond(request, body)
