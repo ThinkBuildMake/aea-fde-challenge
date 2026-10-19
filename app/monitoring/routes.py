@@ -74,7 +74,7 @@ def overview(
 ) -> Response:
     if not 1 <= days <= 90:
         raise AppError(422, "invalid_days", "Days must be between 1 and 90.")
-    return respond(request, get_overview(ctx))
+    return respond(request, get_overview(ctx, days))
 
 
 @router.get("/conversations")

@@ -2,7 +2,7 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 
@@ -242,7 +242,7 @@ class ErrorBody(Model):
 class OverviewStatus(Model):
     public_url: str
     last_conversation_at: str | None
-    errors_shown_24h: int
+    errors_shown_24h: int = Field(alias="errorsShown24h")
     handoffs_waiting: int
 
 
