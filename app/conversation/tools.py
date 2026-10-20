@@ -17,6 +17,7 @@ from app.types import (
     BookedVisit,
     Booking,
     Choice,
+    CustomerRef,
     HandoffRecord,
     PaymentLink,
     ServiceType,
@@ -438,7 +439,7 @@ def _identify_customer(
             args.get("serviceAddress"),
         )
         if again is not None and again.customer_id == state.customer_id:
-            return {"ok": True, "customer": _dump(again)}
+            return _match(ctx, again)
         return {
             "ok": False,
             "error": "already_identified",
@@ -513,7 +514,24 @@ def _identify_customer(
         "UPDATE conversations SET customer_id = ? WHERE id = ?",
         (ref.customer_id, state.conversation_id),
     )
-    return {"ok": True, "customer": _dump(ref)}
+    return _match(ctx, ref)
+
+
+def _match(ctx: AppContext, ref: CustomerRef) -> dict[str, Any]:
+    """The match, with when the install labor warranty ends, so the model does no date math."""
+    out = _dump(ref)
+    if ref.system_install_date:
+        installed = date.fromisoformat(ref.system_install_date)
+        # warranty_policy.md: a 2-year labor warranty on every full system installation.
+        try:
+            ends = installed.replace(year=installed.year + 2)
+        except ValueError:  # Feb 29
+            ends = installed.replace(year=installed.year + 2, day=28)
+        out["installLaborWarrantyEnds"] = ends.isoformat()
+        out["installLaborWarrantyEnded"] = ends < date.fromisoformat(
+            ctx.settings.REFERENCE_DATE
+        )
+    return {"ok": True, "customer": out}
 
 
 def _customer(state: ToolState) -> str:

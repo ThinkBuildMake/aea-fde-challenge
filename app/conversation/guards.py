@@ -109,13 +109,19 @@ def unzoned_town_instruction(towns: list[str]) -> str:
 
 
 WARRANTY_INSTRUCTION = (
-    "Answer from what the caller has said, asking nothing first: for a part Meridian "
-    "repaired, the repair labor warranty from the repair date; otherwise the "
-    "manufacturer parts term for that brand and part and its registration condition, "
-    "then each Meridian labor warranty term and whether the system's age is inside it. "
-    "Never ask who installed or repaired it or about Comfort Club membership; state "
-    "those as conditions with the labor terms. Only if the brand or the system's age is missing, ask for just that in one "
-    "short question and state no terms."
+    "If the question is about the caller's own system or an earlier Meridian repair and "
+    "the caller is not matched yet, state no terms: ask only for their name and one of "
+    "phone number, account number or service address. Once matched, answer from their "
+    "record: systemBrand, installLaborWarrantyEnds and installLaborWarrantyEnded from the "
+    "match (never work the date out yourself) and earlier repairs from get_my_billing. "
+    "For a general question, answer from what the caller has said, asking nothing "
+    "first: for a part Meridian repaired, the repair labor warranty from the repair "
+    "date; otherwise the manufacturer parts term for that brand and part and its "
+    "registration condition, then each Meridian labor warranty term and whether the "
+    "system's age is inside it. Only if the brand or the system's age is missing, ask "
+    "for just that in one short question and state no terms. Never ask who installed or "
+    "repaired it or about Comfort Club membership; state membership at install among the "
+    "conditions, or for a member today say you are not sure about the 5-year term."
 )
 HOLIDAY_INSTRUCTION = (
     "For a holiday, name every date listed for it (each day of a range), whether the "

@@ -41,7 +41,15 @@ def test_warranty_result_says_to_answer_with_conditions(
         started, "My American Standard compressor died at three years. Covered?"
     )
     assert instruction == guards.WARRANTY_INSTRUCTION
-    for rule in ("parts", "labor", "conditions", "Never ask"):
+    for rule in (
+        "parts",
+        "labor",
+        "conditions",
+        "Never ask",
+        "not matched yet",
+        "ask only for their name and one of phone number",
+        "installLaborWarrantyEnded",
+    ):
         assert rule in instruction, rule
 
 
