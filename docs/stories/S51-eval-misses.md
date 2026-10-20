@@ -37,14 +37,14 @@ Turn tests with the scripted fake model (`tests/test_turn.py` helpers) for the g
    The instructions tell the agent to give, for each open invoice, its id, balance, issued date and due date; and when explaining an invoice, its total, issued date, whether it is paid or unpaid, and every line item with its amount
 
 5. Warranty answers use the caller's record
-   The instructions tell the agent, for a warranty question about the caller's own system, to identify the caller first, then use `system_brand` and `system_install_date` from the match and the caller's earlier Meridian repairs from `get_my_billing`; to work out from today's date whether the 2-year installation labor warranty (or a 1-year repair labor warranty on the same part) is still running and say the date it ended or ends; to say Meridian registers every installed unit when the parts warranty depends on registration; when the caller quotes an older rule, to say it is out of date and give the current one without repeating the caller's figure; and, for a covered repeat failure, to say the return visit and labor are free instead of quoting the diagnostic fee
+   The instructions tell the agent, for a warranty question about the caller's own system, to identify the caller first, then use `system_brand` and `system_install_date` from the match and the caller's earlier Meridian repairs from `get_my_billing`; to work out from today's date whether the 2-year installation labor warranty (or a 1-year repair labor warranty on the same part) is still running and say the date it ended or ends; to say Meridian registers every installed unit when the parts warranty depends on registration; when the caller quotes an older rule, to say it is out of date and give the current one without repeating the caller's figure; and, for a covered repeat failure of the same part, to say the return visit and labor are free if the technician finds the same part failed instead of quoting the diagnostic fee. The warranty guidance attached to warranty search results (`guards.WARRANTY_INSTRUCTION`) agrees: an unmatched caller asking about their own system is only asked who they are. The identify_customer match carries `installLaborWarrantyEnds` and `installLaborWarrantyEnded`, computed by the app from `system_install_date` and today (amended 2026-10-20: live WA-3 showed the model getting this date comparison wrong)
 
 6. Live: the five scenarios pass
    AP-2, BI-1, BI-2, WA-1 and WA-2 are contained-correct on a live eval run of those scenarios
 
 #### Not in this story
 - Changing any eval scenario, the judge, or the weighting
-- New tools or new fields on tool results
+- New tools; the only new tool-result fields are the two computed install-labor-warranty fields on the identify_customer match (AC5)
 - BK-2, ME-2, T-1, T-3 (they flip between runs)
 
 ## Plan
@@ -61,7 +61,7 @@ Turn tests with the scripted fake model (`tests/test_turn.py` helpers) for the g
 
 ### Subtasks
 1. **Cancel confirmation** — Satisfies AC1–3. Files: `app/conversation/guards.py`, `app/conversation/tools.py`, `app/conversation/turn.py` (only the `keep_cancel_asks` call site near the end of the turn, never `INSTRUCTIONS`), `tests/test_cancel_confirm.py`. Approach: in `clear_yes`, also treat commas as clause breaks when looking for the yes, keeping every `_NOT_YES` and fee-acceptance check on the whole text. For AC2, a turn whose shown reply states each still-pending ask's fee and does not cancel carries the previous turn's cancel asks forward into its own `offered.cancelAppointmentIds` (so `last_cancel_asks` stays a one-turn lookback); a reply that does not state the fee drops them.
-2. **Billing and warranty instructions** — Satisfies AC4–5. Files: `app/conversation/turn.py` (`INSTRUCTIONS` only), `tests/gate/test_booking_instructions.py`. Keep every rule string other tests assert on (`grep -rn INSTRUCTIONS tests`). Edit the existing "Billing:" and "Warranty coverage" paragraphs; do not add a new section elsewhere. The "never repeat the caller's figure" and "never promise a waiver" rules stay; "the return visit and labor are free" is the policy's own wording, stated as policy.
+2. **Billing and warranty instructions** — Satisfies AC4–5. Files: `app/conversation/turn.py` (`INSTRUCTIONS` only), `app/conversation/guards.py` (`WARRANTY_INSTRUCTION` only), `app/conversation/tools.py` (`_identify_customer` result only), `tests/gate/test_booking_instructions.py`, `tests/test_search_guidance.py`. Keep every rule string other tests assert on (`grep -rn INSTRUCTIONS tests`). Edit the existing "Billing:" and "Warranty coverage" paragraphs; do not add a new section elsewhere. The "never repeat the caller's figure" and "never promise a waiver" rules stay; "the return visit and labor are free" is the policy's own wording, stated as policy.
 
 ### Constraints
 - No new dependency. No scenario, judge or weight change.
