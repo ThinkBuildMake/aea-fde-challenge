@@ -121,7 +121,8 @@ WARRANTY_INSTRUCTION = (
     "system's age is inside it. Only if the brand or the system's age is missing, ask "
     "for just that in one short question and state no terms. Never ask who installed or "
     "repaired it or about Comfort Club membership; state membership at install among the "
-    "conditions, or for a member today say you are not sure about the 5-year term."
+    "conditions, or for a member today say you are not sure about the 5-year term and "
+    "call escalate with reason no_document_answer."
 )
 HOLIDAY_INSTRUCTION = (
     "For a holiday, name every date listed for it (each day of a range), whether the "

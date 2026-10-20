@@ -520,8 +520,11 @@ def _identify_customer(
 def _match(ctx: AppContext, ref: CustomerRef) -> dict[str, Any]:
     """The match, with when the install labor warranty ends, so the model does no date math."""
     out = _dump(ref)
-    if ref.system_install_date:
-        installed = date.fromisoformat(ref.system_install_date)
+    try:
+        installed = date.fromisoformat(ref.system_install_date or "")
+    except ValueError:  # no usable install date: say nothing about the warranty end
+        installed = None
+    if installed:
         # warranty_policy.md: a 2-year labor warranty on every full system installation.
         try:
             ends = installed.replace(year=installed.year + 2)

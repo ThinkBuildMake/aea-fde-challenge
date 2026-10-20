@@ -21,6 +21,9 @@ def matched(started: Settings, monkeypatch: pytest.MonkeyPatch, install: str | N
         ("2023-02-17", "2025-02-17", True),
         ("2025-03-01", "2027-03-01", False),
         ("2024-02-29", "2026-02-28", True),
+        # Today is the reference date 2026-10-16, not the wall clock.
+        ("2024-10-16", "2026-10-16", False),
+        ("2024-10-17", "2026-10-17", False),
     ],
 )
 def test_match_gives_the_install_labor_warranty_end(
@@ -35,9 +38,10 @@ def test_match_gives_the_install_labor_warranty_end(
     assert match["installLaborWarrantyEnded"] is ended
 
 
-def test_no_install_date_gives_no_warranty_fields(
-    started: Settings, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("install", [None, "2023/02/17"])
+def test_no_usable_install_date_gives_no_warranty_fields(
+    started: Settings, monkeypatch: pytest.MonkeyPatch, install: str | None
 ):
-    match = matched(started, monkeypatch, None)
+    match = matched(started, monkeypatch, install)
     assert "installLaborWarrantyEnds" not in match
     assert "installLaborWarrantyEnded" not in match
