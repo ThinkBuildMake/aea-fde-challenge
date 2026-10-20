@@ -11,8 +11,14 @@ Read this first if you are picking the work up locally.
   - `identify_customer` refuses a name/detail the caller never wrote (no try counted). Tests switch this check off by default (`tests/conftest.py`); mark a test `caller_details` to keep it.
   - Prompt: move >24 h says no fee; quoted old price gets the effective date and enrollment-price rule; unconfirmable warranty terms are "not sure" + handoff; someone else's visit is refused without a handoff and counts as resolved.
 - **Eval:** pre-fix run: 2/10 handled, 8% containment. Run on `345509e` (`.claude/worktrees/deploy/eval/runs/run-20261020T021340Z-49f096.json`): 24/31 pass, handled 7/10, containment 49.5%, escalations 12/12, $0.41. Its SF-3 failure is what `c83f640` fixes, so it is **not** the final run A.
-- **Next:** `make gate` on `c83f640` (last full gate was green on `345509e`: 1115 passed), then official run A and run B per section 1 below (save the full log, do not `grep -v '^{'` it away), human grades, commit records, deploy, then S42.
-- Remaining run failures to look at: WA-1 (labor billable not stated firmly), ME-3, RD-1, RF-1, BI-1 (facts missing 1-2). Provider latency spikes (8-31 s) still cause occasional "having trouble" replies.
+- **Gate:** `make gate` on `091bddf` is green (1115 passed, no leaks, no known vulnerabilities). Needs `gitleaks` and `PLAYWRIGHT_BROWSERS_PATH="$HOME/Library/Caches/ms-playwright"` inside Cursor's sandbox.
+- **Official S41 pair, same commit `091bddf`, not deployed:**
+  - Run A `eval/runs/run-20261020T022640Z-230217.json`: handled 4/10, containment 26.8%, safety 3/3, escalations 12/12, first-reply p95 3819 ms, $0.41. Langfuse experiment matches 31/31.
+  - Run B `eval/runs/run-20261020T022920Z-4ec2a2.json`: handled 4/10, containment 36.5%, safety 3/3, escalations 11/12, first-reply p95 3773 ms, $0.40.
+  - Compare: pass/fail differs on 7 of 31 (caller variance). `grep -c 4111` is 0. Retrieval report `eval/results/retrieval_report.json` is 20/20.
+  - Human grades for run A are in `eval/human_grades.json` and match the judge on all 10 handled scenarios: pass AP-1, BK-1, ME-1, ME-2; fail AP-2 (cancel never committed), BI-1 (invoice dates missing), BI-2 (issue date missing), BK-2 (booked, then handed off instead of waitlist), WA-1 (labor not stated as billable; "Meridian registers every unit" missing), WA-2 (90-day rule and the 2026-07-14 date not stated).
+- **Next:** deploy `091bddf` with `scripts/deploy.sh` from a clean checkout (production is still `9b3a56b`), then S42 using these numbers. Do not treat the earlier 49.5% run on `345509e` as official.
+- Failures that repeat across runs and are agent faults, not scenario bugs: AP-2 stops one confirm short of cancelling; BI-1 omits issue and due dates; WA-1 hedges labor; WA-2 does not say the 90-day rule is superseded. BK-2, ME-2, T-1 and T-3 flip between runs.
 - `.gitignore` has an uncommitted `.agents/` line (local Cursor copies of the `.claude/skills`).
 
 Branches:

@@ -1,0 +1,227 @@
+{
+  "hitsInTop5": 20,
+  "of": 20,
+  "supersededInTop5": 0,
+  "perQuestion": [
+    {
+      "id": "RQ-BK-1",
+      "hit": true,
+      "topSources": [
+        "faq/customer_faq.md",
+        "faq/troubleshooting_before_you_call.md",
+        "services/service_catalog.md",
+        "policies/holiday_hours_2026.png",
+        "pricing/repair_price_book_2026.csv"
+      ]
+    },
+    {
+      "id": "RQ-BK-2",
+      "hit": true,
+      "topSources": [
+        "faq/customer_faq.md",
+        "faq/customer_faq.md",
+        "faq/customer_faq.md",
+        "faq/customer_faq.md",
+        "policies/holiday_hours_2026.png"
+      ]
+    },
+    {
+      "id": "RQ-BK-3",
+      "hit": true,
+      "topSources": [
+        "faq/customer_faq.md",
+        "membership/comfort_club_overview.md",
+        "faq/customer_faq.md",
+        "faq/customer_faq.md",
+        "pricing/2026_fee_schedule.pdf"
+      ]
+    },
+    {
+      "id": "RQ-BK-4",
+      "hit": true,
+      "topSources": [
+        "faq/customer_faq.md",
+        "faq/customer_faq.md",
+        "faq/troubleshooting_before_you_call.md",
+        "warranty/warranty_policy.md",
+        "faq/troubleshooting_before_you_call.md"
+      ]
+    },
+    {
+      "id": "RQ-BK-5",
+      "hit": true,
+      "topSources": [
+        "policies/service_area.md",
+        "faq/customer_faq.md",
+        "faq/customer_faq.md",
+        "services/service_catalog.md",
+        "faq/customer_faq.md"
+      ]
+    },
+    {
+      "id": "RQ-BK-6",
+      "hit": true,
+      "topSources": [
+        "policies/holiday_hours_2026.png",
+        "faq/customer_faq.md",
+        "pricing/repair_price_book_2026.csv",
+        "pricing/repair_price_book_2026.csv",
+        "services/service_catalog.md"
+      ]
+    },
+    {
+      "id": "RQ-BK-7",
+      "hit": true,
+      "topSources": [
+        "services/service_catalog.md",
+        "services/service_catalog.md",
+        "services/service_catalog.md",
+        "faq/troubleshooting_before_you_call.md",
+        "membership/comfort_club_overview.md"
+      ]
+    },
+    {
+      "id": "RQ-BK-8",
+      "hit": true,
+      "topSources": [
+        "faq/troubleshooting_before_you_call.md",
+        "services/service_catalog.md",
+        "faq/troubleshooting_before_you_call.md",
+        "services/service_catalog.md",
+        "faq/troubleshooting_before_you_call.md"
+      ]
+    },
+    {
+      "id": "RQ-WA-1",
+      "hit": true,
+      "topSources": [
+        "warranty/warranty_policy.md",
+        "warranty/warranty_policy.md",
+        "warranty/warranty_policy.md",
+        "warranty/warranty_policy.md",
+        "warranty/warranty_policy.md"
+      ]
+    },
+    {
+      "id": "RQ-WA-2",
+      "hit": true,
+      "topSources": [
+        "warranty/warranty_policy.md",
+        "warranty/warranty_policy.md",
+        "membership/comfort_club_overview.md",
+        "warranty/warranty_policy.md",
+        "warranty/warranty_policy.md"
+      ]
+    },
+    {
+      "id": "RQ-WA-3",
+      "hit": true,
+      "topSources": [
+        "warranty/warranty_policy.md",
+        "membership/comfort_club_overview.md",
+        "membership/comfort_club_overview.md",
+        "warranty/warranty_policy.md",
+        "warranty/warranty_policy.md"
+      ]
+    },
+    {
+      "id": "RQ-WA-4",
+      "hit": true,
+      "topSources": [
+        "warranty/warranty_policy.md",
+        "services/service_catalog.md",
+        "pricing/repair_price_book_2026.csv",
+        "warranty/warranty_policy.md",
+        "faq/troubleshooting_before_you_call.md"
+      ]
+    },
+    {
+      "id": "RQ-WA-5",
+      "hit": true,
+      "topSources": [
+        "warranty/warranty_policy.md",
+        "faq/customer_faq.md",
+        "warranty/warranty_policy.md",
+        "pricing/repair_price_book_2026.csv",
+        "services/service_catalog.md"
+      ]
+    },
+    {
+      "id": "RQ-WA-6",
+      "hit": true,
+      "topSources": [
+        "warranty/warranty_policy.md",
+        "services/service_catalog.md",
+        "warranty/warranty_policy.md",
+        "warranty/warranty_policy.md",
+        "pricing/repair_price_book_2026.csv"
+      ]
+    },
+    {
+      "id": "RQ-BI-1",
+      "hit": true,
+      "topSources": [
+        "faq/customer_faq.md",
+        "pricing/repair_price_book_2026.csv",
+        "warranty/warranty_policy.md",
+        "faq/customer_faq.md",
+        "services/service_catalog.md"
+      ]
+    },
+    {
+      "id": "RQ-BI-2",
+      "hit": true,
+      "topSources": [
+        "faq/customer_faq.md",
+        "faq/customer_faq.md",
+        "faq/customer_faq.md",
+        "warranty/warranty_policy.md",
+        "faq/troubleshooting_before_you_call.md"
+      ]
+    },
+    {
+      "id": "RQ-BI-3",
+      "hit": true,
+      "topSources": [
+        "faq/customer_faq.md",
+        "faq/customer_faq.md",
+        "membership/comfort_club_overview.md",
+        "faq/customer_faq.md",
+        "pricing/2026_fee_schedule.pdf"
+      ]
+    },
+    {
+      "id": "RQ-BI-4",
+      "hit": true,
+      "topSources": [
+        "faq/customer_faq.md",
+        "policies/holiday_hours_2026.png",
+        "pricing/repair_price_book_2026.csv",
+        "pricing/2026_fee_schedule.pdf",
+        "pricing/repair_price_book_2026.csv"
+      ]
+    },
+    {
+      "id": "RQ-BI-5",
+      "hit": true,
+      "topSources": [
+        "faq/customer_faq.md",
+        "services/service_catalog.md",
+        "pricing/repair_price_book_2026.csv",
+        "pricing/2026_fee_schedule.pdf",
+        "pricing/repair_price_book_2026.csv"
+      ]
+    },
+    {
+      "id": "RQ-BI-6",
+      "hit": true,
+      "topSources": [
+        "pricing/repair_price_book_2026.csv",
+        "services/service_catalog.md",
+        "services/service_catalog.md",
+        "pricing/repair_price_book_2026.csv",
+        "pricing/repair_price_book_2026.csv"
+      ]
+    }
+  ]
+}

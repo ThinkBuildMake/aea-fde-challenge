@@ -1,0 +1,15 @@
+{
+  "runId": "run-20261020T022640Z-230217",
+  "grades": {
+    "AP-1": "pass",
+    "AP-2": "fail",
+    "BI-1": "fail",
+    "BI-2": "fail",
+    "BK-1": "pass",
+    "BK-2": "fail",
+    "ME-1": "pass",
+    "ME-2": "pass",
+    "WA-1": "fail",
+    "WA-2": "fail"
+  }
+}
