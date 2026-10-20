@@ -1,0 +1,347 @@
+1
+00:00:00,250 --> 00:00:02,929
+Meridian Home Comfort asked one question.
+
+2
+00:00:02,929 --> 00:00:05,869
+Can an A I agent settle sixty to seventy-five
+
+3
+00:00:05,869 --> 00:00:08,875
+percent of the calls a busy call center takes,
+
+4
+00:00:08,875 --> 00:00:11,358
+and hand the rest to a person cleanly?
+
+5
+00:00:11,358 --> 00:00:13,449
+To find out, we read every call,
+
+6
+00:00:13,449 --> 00:00:17,043
+built the agent, and tested it on thirty-one scenarios.
+
+7
+00:00:17,043 --> 00:00:19,068
+It's live on Railway right now.
+
+8
+00:00:19,068 --> 00:00:20,636
+Here's how we got there,
+
+9
+00:00:20,636 --> 00:00:22,270
+and what the numbers say.
+
+10
+00:00:23,123 --> 00:00:26,520
+First, the drivers. We read all four hundred twenty
+
+11
+00:00:26,520 --> 00:00:27,652
+calls end to end.
+
+12
+00:00:27,652 --> 00:00:29,717
+A rule set strips filler turns,
+
+13
+00:00:29,717 --> 00:00:32,781
+then labels what the caller wanted and how the
+
+14
+00:00:32,781 --> 00:00:35,978
+human settled it. A second read of twenty random
+
+15
+00:00:35,978 --> 00:00:38,975
+calls agreed with those labels on all twenty.
+
+16
+00:00:38,975 --> 00:00:42,306
+The five drivers the agent can actually settle are
+
+17
+00:00:42,306 --> 00:00:44,637
+booking, warranty, billing lookups,
+
+18
+00:00:44,637 --> 00:00:47,767
+membership questions and existing appointments.
+
+19
+00:00:47,767 --> 00:00:51,364
+Together that's sixty-five point two percent of calls,
+
+20
+00:00:51,364 --> 00:00:53,229
+and it's our honest ceiling.
+
+21
+00:00:53,229 --> 00:00:56,759
+Disputes, refunds, safety and commercial work go to a
+
+22
+00:00:56,759 --> 00:00:57,958
+person, by design.
+
+23
+00:00:58,809 --> 00:01:00,822
+Next, chunking and retrieval.
+
+24
+00:01:00,822 --> 00:01:04,571
+Fourteen callers asked, I thought the membership was a
+
+25
+00:01:04,571 --> 00:01:08,111
+hundred forty-nine dollars? That was the old price,
+
+26
+00:01:08,111 --> 00:01:10,888
+and it still sits in the archive folder.
+
+27
+00:01:10,888 --> 00:01:12,485
+So let's ask the agent.
+
+28
+00:01:12,485 --> 00:01:15,609
+Every file in the knowledge base has a status
+
+29
+00:01:15,609 --> 00:01:18,802
+in a manifest, and only the nine current files
+
+30
+00:01:18,802 --> 00:01:23,523
+are indexed. Superseded, internal and placeholder files never become
+
+31
+00:01:23,523 --> 00:01:26,508
+passages, so the old price can't come back.
+
+32
+00:01:26,508 --> 00:01:29,215
+Each price-book row is its own passage,
+
+33
+00:01:29,215 --> 00:01:31,784
+and the holiday image and the fee P D
+
+34
+00:01:31,784 --> 00:01:34,630
+F are indexed from text a person checked.
+
+35
+00:01:34,630 --> 00:01:37,754
+A small embedding model returns the top five.
+
+36
+00:01:37,754 --> 00:01:39,351
+And there's the answer,
+
+37
+00:01:39,351 --> 00:01:40,670
+with today's price.
+
+38
+00:01:41,522 --> 00:01:43,269
+Now, how escalation works.
+
+39
+00:01:43,269 --> 00:01:46,563
+Let's start fresh, and say we were charged twice.
+
+40
+00:01:46,563 --> 00:01:50,192
+A billing dispute is something the agent never settles
+
+41
+00:01:50,192 --> 00:01:52,141
+on its own. It doesn't argue,
+
+42
+00:01:52,141 --> 00:01:54,292
+and it doesn't promise a refund.
+
+43
+00:01:54,292 --> 00:01:57,450
+It tells the caller a supervisor will call back
+
+44
+00:01:57,450 --> 00:01:59,063
+within one business day,
+
+45
+00:01:59,063 --> 00:02:00,744
+writes down what it said,
+
+46
+00:02:00,744 --> 00:02:02,558
+and asks for the best time.
+
+47
+00:02:02,558 --> 00:02:05,717
+We'll pick afternoon. A gas smell is different.
+
+48
+00:02:05,717 --> 00:02:07,128
+That's a safety stop.
+
+49
+00:02:07,128 --> 00:02:09,884
+The caller is told to leave the house and
+
+50
+00:02:09,884 --> 00:02:11,094
+call nine one one,
+
+51
+00:02:11,094 --> 00:02:12,505
+before anything else.
+
+52
+00:02:13,357 --> 00:02:14,694
+On the business side,
+
+53
+00:02:14,694 --> 00:02:16,159
+the handoff lands here.
+
+54
+00:02:16,159 --> 00:02:18,833
+Each row is what the person who follows up
+
+55
+00:02:18,833 --> 00:02:20,552
+needs. Why the caller came,
+
+56
+00:02:20,552 --> 00:02:22,335
+exactly what they were told,
+
+57
+00:02:22,335 --> 00:02:24,054
+and the window they picked.
+
+58
+00:02:24,054 --> 00:02:26,983
+So nobody makes the caller repeat their story.
+
+59
+00:02:27,835 --> 00:02:30,484
+The overview tracks the success metric,
+
+60
+00:02:30,484 --> 00:02:32,317
+calls settled by the agent,
+
+61
+00:02:32,317 --> 00:02:35,985
+against the sixty to seventy-five percent target band,
+
+62
+00:02:35,985 --> 00:02:38,837
+with volume, errors and reply times below.
+
+63
+00:02:38,837 --> 00:02:41,689
+Today, that's mostly our own test traffic.
+
+64
+00:02:41,689 --> 00:02:43,727
+And this is the learning loop.
+
+65
+00:02:43,727 --> 00:02:46,511
+Any conversation can be flagged as wrong,
+
+66
+00:02:46,511 --> 00:02:49,092
+and turned into a draft test scenario.
+
+67
+00:02:49,092 --> 00:02:52,216
+A person writes the right answer and fixes the
+
+68
+00:02:52,216 --> 00:02:54,185
+document or the instructions.
+
+69
+00:02:54,185 --> 00:02:56,562
+Then we rerun the eval and compare.
+
+70
+00:02:57,414 --> 00:02:59,173
+What the eval numbers say.
+
+71
+00:02:59,173 --> 00:03:00,391
+On the graded run,
+
+72
+00:03:00,391 --> 00:03:04,181
+projected containment is twenty-six point eight percent.
+
+73
+00:03:04,181 --> 00:03:08,106
+Warranty and billing contained neither of their scenarios.
+
+74
+00:03:08,106 --> 00:03:11,827
+Accuracy on the ten handled-driver scenarios is four of
+
+75
+00:03:11,827 --> 00:03:14,872
+ten, and a person's grades match the judge on
+
+76
+00:03:14,872 --> 00:03:18,323
+all ten. All fourteen scenarios that must leave the
+
+77
+00:03:18,323 --> 00:03:21,571
+agent did: twelve handoffs and two safety stops.
+
+78
+00:03:21,571 --> 00:03:25,902
+Thirty-one scenarios give a coarse projection with no confidence
+
+79
+00:03:25,902 --> 00:03:29,556
+interval. A second run landed at thirty-six point five
+
+80
+00:03:29,556 --> 00:03:32,331
+percent and disagreed on seven scenarios.
+
+81
+00:03:32,331 --> 00:03:34,902
+Both are under the sixty percent band.
+
+82
+00:03:35,754 --> 00:03:39,147
+So, can it settle sixty to seventy-five percent?
+
+83
+00:03:39,147 --> 00:03:40,632
+Not on this evidence.
+
+84
+00:03:40,632 --> 00:03:44,096
+The projection is twenty-six point eight percent,
+
+85
+00:03:44,096 --> 00:03:45,793
+and the misses are real.
+
+86
+00:03:45,793 --> 00:03:47,348
+The handoffs did fire.
+
+87
+00:03:47,348 --> 00:03:48,762
+Thanks for watching.
