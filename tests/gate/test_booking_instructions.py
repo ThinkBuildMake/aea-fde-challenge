@@ -69,6 +69,7 @@ def test_instructions_carry_the_warranty_record_rules():
         "the first reply only asks who they are, with no coverage terms",
         "installLaborWarrantyEnds and installLaborWarrantyEnded",
         "a repeat failure of the same part an earlier Meridian repair replaced",
+        "so the repair, named by its invoice date, is inside it",
     ):
         assert rule in INSTRUCTIONS, rule
 
