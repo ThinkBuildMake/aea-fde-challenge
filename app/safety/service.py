@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from app import usage
 from app.context import AppContext
-from app.llm import reported_cost
+from app.llm import AGENT_PROVIDER_ROUTE, reported_cost
 from app.logs import DIGIT_RUN, log_event, mask_card_runs
 from app.types import RedactResult, Verdict
 
@@ -108,7 +108,10 @@ class OpenRouterSafetyClassifier:
                     "schema": _SCHEMA,
                 },
             },
-            extra_body={"provider": {"data_collection": "deny"}},
+            extra_body={
+                # Vertex first; fallback stays on, since nothing is replayed here.
+                "provider": {"order": [AGENT_PROVIDER_ROUTE], "data_collection": "deny"}
+            },
         )
         if resp.usage is not None:
             usage.report(

@@ -10,7 +10,7 @@ from openai import OpenAI
 from pydantic import BaseModel
 
 from app.evals.records import FactCheck, Judge, Scenario, TranscriptLine
-from app.llm import OPENROUTER_BASE_URL, reported_cost
+from app.llm import AGENT_PROVIDER_ROUTE, OPENROUTER_BASE_URL, reported_cost
 from app.settings import Settings
 
 JUDGE_SYSTEM = (
@@ -91,7 +91,10 @@ class OpenRouterJudge:
             extra_body={
                 "reasoning": {"effort": "low"},
                 "usage": {"include": True},
-                "provider": {"data_collection": "deny"},
+                "provider": {
+                    "order": [AGENT_PROVIDER_ROUTE],
+                    "data_collection": "deny",
+                },
             },
         )
         data = json.loads(raw.text)

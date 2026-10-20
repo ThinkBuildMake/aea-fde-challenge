@@ -57,7 +57,7 @@ def test_openrouter_request_is_pinned(tmp_settings: Settings):
     assert seen[0].url.path.endswith("/chat/completions")
     body = json.loads(seen[0].content)
     assert body["model"] == tmp_settings.AGENT_MODEL
-    assert body["provider"] == {"order": ["google-ai-studio"], "allow_fallbacks": False}
+    assert body["provider"] == {"order": ["google-vertex"], "allow_fallbacks": False}
     assert body["reasoning"] == {"effort": "low"}
     assert body["tools"] == TOOLS
     assert body["messages"] == messages

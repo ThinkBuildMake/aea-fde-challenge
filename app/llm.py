@@ -15,7 +15,7 @@ from openai import OpenAI, omit
 from app.settings import Settings
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-AGENT_PROVIDER_ROUTE = "google-ai-studio"
+AGENT_PROVIDER_ROUTE = "google-vertex"
 PLACEHOLDER_REPLY = "This is a placeholder reply. The assistant is not connected yet."
 
 
