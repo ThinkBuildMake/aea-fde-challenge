@@ -1,0 +1,5 @@
+# Synthetic demo payment links (pay.example.com) in the committed S41 eval run records.
+5b1b1a016aea4ae095fd5050e4ceb037b34deaed:eval/runs/run-20261020T022920Z-4ec2a2.json:generic-api-key:443
+5b1b1a016aea4ae095fd5050e4ceb037b34deaed:eval/runs/run-20261020T022920Z-4ec2a2.json:generic-api-key:2274
+5b1b1a016aea4ae095fd5050e4ceb037b34deaed:eval/runs/run-20261020T022640Z-230217.json:generic-api-key:2274
+5b1b1a016aea4ae095fd5050e4ceb037b34deaed:eval/runs/run-20261020T022640Z-230217.json:generic-api-key:2286
