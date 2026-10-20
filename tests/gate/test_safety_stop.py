@@ -37,6 +37,19 @@ SCREEN = {
     YES: {"verdict": "burning_followup", "reason": "burning_smell"},
     NO: {"verdict": "burning_followup", "reason": "burning_smell"},
 }
+WARM = "My AC is blowing warm air"
+LABOR = "How much is labor on a compressor?"
+SCHEDULE = "okay, let's schedule it."
+# S52: the screen model labels a reply that does not answer the danger question.
+SCREEN |= {
+    WARM: {"verdict": "safe", "reason": "no_hazard", "followup_answer": "not_pending"},
+    LABOR: {"verdict": "safe", "reason": "no_hazard", "followup_answer": "unanswered"},
+    SCHEDULE: {
+        "verdict": "safe",
+        "reason": "no_hazard",
+        "followup_answer": "unanswered",
+    },
+}
 
 
 def recorded(*parts: str) -> list[ModelResult]:
@@ -254,4 +267,54 @@ def test_a_failing_screen_gets_the_fallback(kb_settings: Settings, screen: list[
         "{}",
     )
     assert chat.handoffs() == []
+    assert_schedule_unchanged(kb_settings, before)
+
+
+@pytest.mark.parametrize(
+    ("opening", "asked", "first_model"),
+    [
+        (BURNING, guards.SMELL_FOLLOWUP_TEXT, recorded("proposal")),
+        (
+            WARM,
+            guards.BURNING_FOLLOWUP_TEXT,
+            [
+                ModelResult(
+                    {"role": "assistant", "content": guards.BURNING_FOLLOWUP_TEXT}
+                )
+            ],
+        ),
+    ],
+    ids=["screen_asked", "agent_asked"],
+)
+def test_s52_a_non_answer_is_asked_again_once_then_stops(
+    kb_settings: Settings,
+    screen: list[bool],
+    opening: str,
+    asked: str,
+    first_model: list[ModelResult],
+):
+    before = schedule_dump(kb_settings)
+    model = FakeModelProvider(results=[*first_model, *recorded("proposal", "proposal")])
+    chat = Chat(kb_settings, model)
+    assert chat.say(opening)["text"] == asked
+
+    again = chat.say(LABOR)
+
+    assert again["text"] == asked
+    assert (again["status"], again["banner"]) == ("active", "none")
+    assert again["choices"] == [] and again["booking"] is None
+    assert chat.handoffs() == []
+
+    stop = chat.say(SCHEDULE)
+
+    assert stop["text"] == guards.emergency_text(False)
+    assert stop["status"] == stop["banner"] == "safety_stop"
+    _, t2, t3 = chat.turns()
+    assert (t2["safety_verdict"], t2["tools_called"], t2["offered"]) == (
+        "burning_followup",
+        "[]",
+        "{}",
+    )
+    assert t3["safety_verdict"] == "emergency"
+    assert chat.handoffs() == [("safety_stop", "followup_not_clear_no")]
     assert_schedule_unchanged(kb_settings, before)

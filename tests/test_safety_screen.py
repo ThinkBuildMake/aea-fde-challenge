@@ -6,12 +6,15 @@ import httpx2
 import pytest
 
 from app import usage
+from app.conversation import guards
 from app.main import create_app
 from app.safety.service import (
+    _SCHEMA,
     CARD_PLACEHOLDER,
     REASONS,
     OpenRouterSafetyClassifier,
     ScreenUnavailable,
+    _is_clear_no,
     screen_safety,
 )
 from app.settings import Settings
@@ -20,8 +23,13 @@ DIGIT_RUN = re.compile(r"\d(?:[ -]?\d){12,18}")
 
 
 class FakeClassifier:
-    def __init__(self, verdict: str, reason: str) -> None:
-        self.reply = json.dumps({"verdict": verdict, "reason": reason})
+    def __init__(
+        self, verdict: str, reason: str, followup_answer: str | None = None
+    ) -> None:
+        reply = {"verdict": verdict, "reason": reason}
+        if followup_answer:
+            reply["followup_answer"] = followup_answer
+        self.reply = json.dumps(reply)
         self.seen: list[str] = []
 
     def classify(self, messages: list[dict[str, str]], timeout_s: float) -> str:
@@ -253,3 +261,104 @@ def test_screen_reports_its_tokens_and_cost(tmp_settings: Settings) -> None:
     with usage.collect() as seen:
         screen_safety(ctx, "hello there", [], False)
     assert seen == [usage.Usage(input_tokens=120, output_tokens=8, cost_usd=0.00002)]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("No burning smell or anything like that.", True),
+        (
+            "No burning smell or anything like that. I'm Grace Okafor, 512-555-0103.",
+            True,
+        ),
+        (
+            (
+                "No, there is no smoke, smell, or sparks, and no tripped breaker. "
+                "It is just warm air."
+            ),
+            True,
+        ),
+        (
+            "No burning smell or anything like that. Can someone come out to look at it?",
+            True,
+        ),
+        ("No smoke, sparks", False),
+        ("not that I know of", False),
+        ("No smoke but I smell burning", False),
+        ("no sparks, just smoke", False),
+        ("I don't think so", False),
+        ("No, but the breaker tripped", False),
+        ("No burning smell or anything like that, but sparks", False),
+        ("There is smoke", False),
+        ("No, there is smoke", False),
+    ],
+)
+def test_s52_more_clear_nos(text: str, expected: bool) -> None:
+    assert _is_clear_no(text) is expected
+
+
+ASKED = ["My AC is blowing warm air", guards.BURNING_FOLLOWUP_TEXT]
+REASKED = [*ASKED, "How much is labor on a compressor?", guards.BURNING_FOLLOWUP_TEXT]
+
+
+@pytest.mark.parametrize("model_says", ["safe", "burning_followup"])
+@pytest.mark.parametrize(
+    "text", ["How much is labor on a compressor?", "okay, let's schedule it."]
+)
+def test_s52_unanswered_followup_is_asked_again(
+    tmp_settings: Settings, text: str, model_says: str
+) -> None:
+    ctx = _ctx(tmp_settings, FakeClassifier(model_says, "no_hazard", "unanswered"))
+    v = screen_safety(ctx, text, ASKED, True)
+    assert (v.verdict, v.reason) == ("burning_followup", "followup_unanswered")
+
+
+@pytest.mark.parametrize(
+    ("text", "answer", "pending"),
+    [
+        ("How hot does the compressor get?", "unanswered", True),  # a _RISKY word
+        ("okay, let's schedule it.", "yes_or_unsure", True),
+        ("okay, let's schedule it.", "no", True),
+        ("okay, let's schedule it.", "not_pending", True),
+        ("okay, let's schedule it.", None, True),  # the field is missing
+    ],
+)
+def test_s52_other_non_answers_still_stop(
+    tmp_settings: Settings, text: str, answer: str | None, pending: bool
+) -> None:
+    ctx = _ctx(tmp_settings, FakeClassifier("safe", "no_hazard", answer))
+    v = screen_safety(ctx, text, ASKED, pending)
+    assert (v.verdict, v.reason) == ("emergency", "followup_not_clear_no")
+
+
+def test_s52_asked_again_only_once(tmp_settings: Settings) -> None:
+    ctx = _ctx(tmp_settings, FakeClassifier("safe", "no_hazard", "unanswered"))
+    v = screen_safety(ctx, "okay, let's schedule it.", REASKED, True)
+    assert (v.verdict, v.reason) == ("emergency", "followup_not_clear_no")
+
+
+@pytest.mark.parametrize(
+    ("text", "reply", "expected"),
+    [
+        ("not that I know of", ("safe", "no_hazard", "no"), "followup_not_clear_no"),
+        (
+            "No smoke, sparks",
+            ("burning_followup", "burning_smell", "no"),
+            "followup_not_clear_no",
+        ),
+        ("okay, let's schedule it.", ("emergency", "smoke", "unanswered"), "smoke"),
+        ("No", ("emergency", "smoke", "no"), "smoke"),
+    ],
+)
+def test_s52_model_never_makes_it_safe(
+    tmp_settings: Settings, text: str, reply: tuple[str, str, str], expected: str
+) -> None:
+    ctx = _ctx(tmp_settings, FakeClassifier(*reply))
+    v = screen_safety(ctx, text, ASKED, True)
+    assert (v.verdict, v.reason) == ("emergency", expected)
+
+
+def test_s52_schema_asks_for_the_followup_answer() -> None:
+    field = _SCHEMA["properties"]["followup_answer"]
+    assert field["enum"] == ["no", "yes_or_unsure", "unanswered", "not_pending"]
+    assert "followup_answer" in _SCHEMA["required"]

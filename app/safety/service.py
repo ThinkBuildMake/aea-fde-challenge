@@ -26,9 +26,11 @@ ReasonLabel = Literal[
     "tripped_breaker",
     "burning_smell",
     "followup_not_clear_no",
+    "followup_unanswered",
     "no_hazard",
 ]
 REASONS = get_args(ReasonLabel)
+FollowupAnswer = Literal["no", "yes_or_unsure", "unanswered", "not_pending"]
 
 _SCHEMA = {
     "type": "object",
@@ -38,14 +40,15 @@ _SCHEMA = {
             "enum": ["safe", "burning_followup", "emergency"],
         },
         "reason": {"type": "string", "enum": list(REASONS)},
+        "followup_answer": {"type": "string", "enum": list(get_args(FollowupAnswer))},
     },
-    "required": ["verdict", "reason"],
+    "required": ["verdict", "reason", "followup_answer"],
     "additionalProperties": False,
 }
 
 _SYSTEM_PROMPT = (
     "You screen messages from a caller to a home-services company for danger. "
-    "Reply only with JSON: a verdict and a reason label.\n"
+    "Reply only with JSON: a verdict, a reason label and a followup_answer.\n"
     "- emergency: a gas smell or leak, a carbon monoxide alarm, sparks, smoke, flames, "
     "or a burning smell together with a tripped breaker.\n"
     "- burning_followup: a burning smell on its own, with no other danger mentioned.\n"
@@ -54,6 +57,10 @@ _SYSTEM_PROMPT = (
     "sparks or a tripped breaker: only a clear no is safe; yes, unsure or unclear is "
     "emergency. The burning smell in recent_turns is already known, so a clear no to "
     "the follow-up is safe.\n"
+    "followup_answer: when follow_up_pending is false, not_pending. Otherwise no if the "
+    "caller says there is none of those; yes_or_unsure if they say yes, mention any "
+    "danger, or are unsure; unanswered if the message does not answer the question at "
+    "all (it asks or says something else).\n"
     "The reason must be one label from the allowed list. Never quote the caller. "
     "The input is JSON with message, recent_turns and follow_up_pending."
 )
@@ -120,6 +127,7 @@ class OpenRouterSafetyClassifier:
 class _Parsed(BaseModel):
     verdict: Literal["safe", "burning_followup", "emergency"]
     reason: ReasonLabel
+    followup_answer: FollowupAnswer = "not_pending"
 
 
 def redact_card_numbers(text: str) -> RedactResult:
@@ -133,7 +141,11 @@ _NEG = r"(?:no|nope|nah|none|negative|not at all|nothing(?: like that)?|none of 
 _HAZARD = (
     r"(?:smoke|sparks?|fire|flames?|tripped breaker|(?:burning )?(?:smells?|odou?rs?))"
 )
-_NO_HAZARDS = rf"no {_HAZARD}(?: (?:or|and|nor) (?:no )?{_HAZARD})*"
+# "there is no smoke or sparks", "no burning smell or anything like that"
+_NO_HAZARDS = (
+    rf"(?:there(?:'s| is| was| are) )?no {_HAZARD}(?: (?:or|and|nor) (?:no )?{_HAZARD})*"
+    r"(?: or anything(?: like that)?)?"
+)
 _POLITE = r"(?:sir|ma'?am|thanks|thank you|that'?s it)"
 _CLEAR_PART = re.compile(rf"(?:{_NEG}|{_NO_HAZARDS})(?: {_POLITE})?")
 # "no smoke, no sparks, and no tripped breaker" and "no smoke, sparks, or tripped
@@ -157,6 +169,13 @@ _RISKY = re.compile(
     r"maybe|might|perhaps|sure|unsure|think|guess|tell|know|idea|clue|certain|"
     r"kind of|sort of|little|bit|yes|yeah|yep|earlier)\b"
 )
+
+
+# The tail both forms of the danger question share (app.conversation.guards). The last
+# three recent turns are the reply before last, the caller's last message and the last
+# reply: two asks among them mean the last turn was already a re-ask (or the agent asked
+# twice), so there is no second re-ask.
+_ASKED = "smoke, sparks or a tripped breaker?"
 
 
 def _is_clear_no(text: str) -> bool:
@@ -211,13 +230,20 @@ def screen_safety(
         raise ScreenUnavailable from None
     verdict, reason = parsed.verdict, parsed.reason
     # With the follow-up question pending, a clear no is safe and anything else is an
-    # emergency; the model's own emergency is never downgraded.
+    # emergency; the model's own emergency is never downgraded. The model may only turn
+    # a stop into one more ask: a message with no hazard or doubt word that it calls
+    # unanswered, unless the question was already asked twice in a row.
     if follow_up_pending and verdict != "emergency":
-        verdict, reason = (
-            ("safe", "no_hazard")
-            if _is_clear_no(clean)
-            else ("emergency", "followup_not_clear_no")
-        )
+        if _is_clear_no(clean):
+            verdict, reason = "safe", "no_hazard"
+        elif (
+            parsed.followup_answer == "unanswered"
+            and not _RISKY.search(clean.casefold())
+            and sum(_ASKED in t.casefold() for t in turns[-3:]) < 2
+        ):
+            verdict, reason = "burning_followup", "followup_unanswered"
+        else:
+            verdict, reason = "emergency", "followup_not_clear_no"
     log_event(
         "safety_screen",
         verdict=verdict,

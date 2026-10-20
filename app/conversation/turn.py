@@ -724,6 +724,10 @@ def run_turn(
         final_text = (
             guards.emergency_text(state.customer_id is not None)
             if emergency
+            # A re-ask repeats the full question unless the smell was already known.
+            else guards.BURNING_FOLLOWUP_TEXT
+            if verdict.reason == "followup_unanswered"
+            and recent[-1:] != [guards.SMELL_FOLLOWUP_TEXT]
             else guards.SMELL_FOLLOWUP_TEXT
         )
         turn["stored"] = [user, {"role": "assistant", "content": final_text}]
