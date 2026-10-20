@@ -493,14 +493,19 @@ def earlier_offered(
     return slots, appointments
 
 
-def last_cancel_asks(db: sqlite3.Connection, conversation_id: str) -> set[int]:
-    """Appointments whose cancel terms the previous message turn put to the caller."""
+def last_cancel_asks(
+    db: sqlite3.Connection, conversation_id: str
+) -> dict[int, int | None]:
+    """Appointments whose cancel terms the previous message turn put to the caller, each
+    with the late fee in cents it stated (0 for none, None when the row did not record it)."""
     row = db.execute(
         "SELECT offered FROM turns WHERE conversation_id = ? AND kind = 'message' "
         "ORDER BY seq DESC LIMIT 1",
         (conversation_id,),
     ).fetchone()
-    return set(json.loads(row[0]).get("cancelAppointmentIds", [])) if row else set()
+    offered = json.loads(row[0]) if row else {}
+    fees = offered.get("cancelFeeCents", {})
+    return {i: fees.get(str(i)) for i in offered.get("cancelAppointmentIds", [])}
 
 
 _YES = re.compile(
@@ -524,9 +529,9 @@ _ACCEPTS = re.compile(
 
 def clear_yes(text: str) -> bool:
     """A short plain yes: no question, no condition, and the fee named only to accept it.
-    The first sentence may accept the fee ("I accept the fee. Please go ahead.")."""
+    The first clause may accept the fee ("I accept the fee, please go ahead.")."""
     text = text.strip().replace("\u2019", "'")
-    sentences = [s.strip() for s in re.split(r"[.!;]+", text) if s.strip()]
+    sentences = [s.strip() for s in re.split(r"[.!;,]+", text) if s.strip()]
     if not sentences or len(text.split()) > 16 or _NOT_YES.search(text):
         return False
     if _FEE.search(text) and not _ACCEPTS.search(text):

@@ -213,7 +213,7 @@ class ToolState:
         self.handoff: HandoffRecord | None = None
         self.cancel_asked: list[int] = []
         self.cancel_fee_cents: dict[int, int] = {}
-        self.cancel_confirmable: set[int] = set()
+        self.cancel_confirmable: dict[int, int | None] = {}
         self.card_removed = False
         self.payment_link: PaymentLink | None = None
 
@@ -230,17 +230,34 @@ class ToolState:
 
     def offered_json(self) -> str:
         """This turn's offers as stored in turns.offered."""
-        offered: dict[str, list[int]] = {
+        offered: dict[str, Any] = {
             "slotIds": self.offered_slot_ids,
             "appointmentIds": self.offered_appointment_ids,
         }
         if self.cancel_asked:
             offered["cancelAppointmentIds"] = self.cancel_asked
+            offered["cancelFeeCents"] = {
+                str(i): self.cancel_fee_cents.get(i, 0) for i in self.cancel_asked
+            }
         return json.dumps(offered)
 
     def keep_cancel_asks(self, shown: str | None) -> None:
         """Keep this turn's cancel asks only if the caller saw the model's own reply
-        (`shown`) and it states each late fee; otherwise a later yes cannot commit."""
+        (`shown`) and it states each late fee; otherwise a later yes cannot commit.
+        A reply that asks again to confirm a cancel (a question about the terms came in
+        between) carries the previous turn's asks forward on the same terms."""
+        if (
+            shown is not None
+            and not self.cancelled
+            and "cancel" in shown.casefold()
+            and "?" in shown
+        ):
+            for i, fee in self.cancel_confirmable.items():
+                if fee is None or i in self.cancel_asked:
+                    continue  # an old row without its fee is never carried
+                if fee:
+                    self.cancel_fee_cents[i] = fee
+                self.cancel_asked.append(i)
         self.cancel_asked = [
             i
             for i in self.cancel_asked
