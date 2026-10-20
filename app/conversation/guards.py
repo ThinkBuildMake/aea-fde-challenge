@@ -497,7 +497,8 @@ def last_cancel_asks(
     db: sqlite3.Connection, conversation_id: str
 ) -> dict[int, int | None]:
     """Appointments whose cancel terms the previous message turn put to the caller, each
-    with the late fee in cents it stated (0 for none, None when the row did not record it)."""
+    with the late fee in cents that turn asked about itself (None for no fee, or for an
+    ask it only carried forward)."""
     row = db.execute(
         "SELECT offered FROM turns WHERE conversation_id = ? AND kind = 'message' "
         "ORDER BY seq DESC LIMIT 1",
@@ -527,18 +528,22 @@ _ACCEPTS = re.compile(
 )
 
 
+_CLOSING = re.compile(r"thanks|thank you|that is all|that's all", re.IGNORECASE)
+
+
 def clear_yes(text: str) -> bool:
     """A short plain yes: no question, no condition, and the fee named only to accept it.
-    The first clause may accept the fee ("I accept the fee, please go ahead.")."""
+    Every clause is a yes, an acceptance of the fee or a closing ("I accept the fee,
+    please go ahead and cancel it. That is all.")."""
     text = text.strip().replace("\u2019", "'")
-    sentences = [s.strip() for s in re.split(r"[.!;,]+", text) if s.strip()]
-    if not sentences or len(text.split()) > 16 or _NOT_YES.search(text):
+    clauses = [s.strip() for s in re.split(r"[.!;,]+", text) if s.strip()]
+    if not clauses or len(text.split()) > 16 or _NOT_YES.search(text):
         return False
     if _FEE.search(text) and not _ACCEPTS.search(text):
         return False
-    return any(_YES.match(s) or _ACCEPTS.match(s) for s in sentences) and any(
-        _YES.match(s) for s in sentences
-    )
+    return all(
+        _YES.match(s) or _ACCEPTS.match(s) or _CLOSING.fullmatch(s) for s in clauses
+    ) and any(_YES.match(s) for s in clauses)
 
 
 _CANCEL_CLAIM = re.compile(

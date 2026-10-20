@@ -21,10 +21,7 @@ UNSTATED = "Yes, the policy asks for 48 hours notice. Would you like me to cance
 ACCEPT = "I accept the fee, please go ahead and cancel it. That is all."
 
 
-@pytest.fixture
-def cancels(monkeypatch: pytest.MonkeyPatch):
-    """Appointment 25 for MHC-29577, inside the late window ($49 fee)."""
-    stub(monkeypatch, "app.scheduling.service.identify_customer", customer("MHC-29577"))
+def held(monkeypatch: pytest.MonkeyPatch, late: bool) -> None:
     view = AppointmentView(
         appointment_id=25,
         date="2026-10-21",
@@ -33,10 +30,17 @@ def cancels(monkeypatch: pytest.MonkeyPatch):
         service_type="hvac_repair",
         zone="south",
         issue="x",
-        late_cancel_fee_applies=True,
+        late_cancel_fee_applies=late,
     )
     stub(monkeypatch, "app.scheduling.service.list_appointments", [view])
     stub(monkeypatch, "app.scheduling.service.get_appointment", view)
+
+
+@pytest.fixture
+def cancels(monkeypatch: pytest.MonkeyPatch):
+    """Appointment 25 for MHC-29577, inside the late window ($49 fee)."""
+    stub(monkeypatch, "app.scheduling.service.identify_customer", customer("MHC-29577"))
+    held(monkeypatch, late=True)
     stub(
         monkeypatch,
         "app.knowledge.service.get_fee",
@@ -76,7 +80,7 @@ def test_comma_joined_acceptance_cancels(started: Settings, cancels):
     assert replies[-1]["text"] == "Your visit is cancelled."
 
 
-def three_turns(started: Settings, between: str):
+def three_turns(started: Settings, between: str, ask: str = ASK):
     return run(
         started,
         LOOKUP,
@@ -84,7 +88,7 @@ def three_turns(started: Settings, between: str):
         STATUS,
         CANCEL,
         texts=["hi", "Cancel my visit", NOTICE, "Yes, cancel it"],
-        answers=["Found your visit.", ASK, between, "Your visit is cancelled."],
+        answers=["Found your visit.", ask, between, "Your visit is cancelled."],
     )
 
 
@@ -116,7 +120,60 @@ def test_comma_joined_yes_is_clear(text: str):
         "ok but only if there's no fee",
         "I'm not sure",
         "I accept, but can you waive the fee",
+        "Keep it, ok",
+        "Hold off, ok",
+        "Let me check with my wife first, ok",
+        "Move it to Thursday, sure",
+        "Actually reschedule instead, sure",
+        "I'll call back later, ok bye",
+        "Hmm, ok",
     ],
 )
 def test_still_not_a_yes(text: str):
     assert guards.clear_yes(text) is False
+
+
+def test_two_turns_between_terms_and_yes_drop_the_ask(started: Settings, cancels):
+    cid, replies = run(
+        started,
+        LOOKUP,
+        CANCEL,
+        STATUS,
+        STATUS,
+        CANCEL,
+        texts=["hi", "Cancel my visit", NOTICE, "Is that the rule?", "Yes, cancel it"],
+        answers=["Found your visit.", ASK, RESTATED, RESTATED, "Cancelled."],
+    )
+    print("reply:", replies[-1]["text"])
+    assert cancels.calls == []
+    assert tool_results(started, cid)[-1]["needsConfirmation"] is True
+
+
+def test_a_free_ask_is_not_carried(
+    started: Settings, cancels, monkeypatch: pytest.MonkeyPatch
+):
+    held(monkeypatch, late=False)
+    cid, replies = three_turns(
+        started,
+        "We're open 8-6. You can cancel any time. Need anything else?",
+        ask="It can be cancelled with no fee. Do you want me to cancel it?",
+    )
+    print("reply:", replies[-1]["text"])
+    assert cancels.calls == []
+    assert tool_results(started, cid)[-1]["needsConfirmation"] is True
+
+
+def test_a_withheld_cancel_claim_carries_no_other_ask(started: Settings, cancels):
+    other = [tool_call("o", "cancel_visit", appointmentId=26, callerQuote="the other")]
+    _, replies = run(
+        started,
+        LOOKUP,
+        CANCEL,
+        other,
+        CANCEL,
+        texts=["hi", "Cancel my visit", "And cancel the other one", "Yes, cancel it"],
+        answers=["Found your visit.", ASK, "It has been cancelled.", "Cancelled."],
+    )
+    print("turn 2 reply:", replies[2]["text"], "| turn 3 reply:", replies[-1]["text"])
+    assert replies[2]["text"] == guards.cancel_pending_text(4900)
+    assert cancels.calls == []

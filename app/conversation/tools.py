@@ -214,6 +214,7 @@ class ToolState:
         self.cancel_asked: list[int] = []
         self.cancel_fee_cents: dict[int, int] = {}
         self.cancel_confirmable: dict[int, int | None] = {}
+        self.cancel_carried: set[int] = set()
         self.card_removed = False
         self.payment_link: PaymentLink | None = None
 
@@ -236,28 +237,31 @@ class ToolState:
         }
         if self.cancel_asked:
             offered["cancelAppointmentIds"] = self.cancel_asked
+            # A carried ask records no fee, so it is never carried a second time.
             offered["cancelFeeCents"] = {
-                str(i): self.cancel_fee_cents.get(i, 0) for i in self.cancel_asked
+                str(i): self.cancel_fee_cents[i]
+                for i in self.cancel_asked
+                if i in self.cancel_fee_cents and i not in self.cancel_carried
             }
         return json.dumps(offered)
 
-    def keep_cancel_asks(self, shown: str | None) -> None:
+    def keep_cancel_asks(self, shown: str | None, carry: bool = True) -> None:
         """Keep this turn's cancel asks only if the caller saw the model's own reply
         (`shown`) and it states each late fee; otherwise a later yes cannot commit.
-        A reply that asks again to confirm a cancel (a question about the terms came in
-        between) carries the previous turn's asks forward on the same terms."""
+        A reply that asks again to confirm a cancel and restates its late fee (a question
+        about the terms came in between) carries the previous turn's ask forward once."""
         if (
-            shown is not None
+            carry
+            and shown is not None
             and not self.cancelled
             and "cancel" in shown.casefold()
             and "?" in shown
         ):
             for i, fee in self.cancel_confirmable.items():
-                if fee is None or i in self.cancel_asked:
-                    continue  # an old row without its fee is never carried
-                if fee:
+                if fee and i not in self.cancel_asked:
                     self.cancel_fee_cents[i] = fee
-                self.cancel_asked.append(i)
+                    self.cancel_asked.append(i)
+                    self.cancel_carried.add(i)
         self.cancel_asked = [
             i
             for i in self.cancel_asked

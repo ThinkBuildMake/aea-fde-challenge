@@ -842,9 +842,11 @@ def run_turn(
     # A yes can confirm a cancel only after the model's own reply put the terms.
     model_said = final_text == last_said or (amended and unamended == last_said)
     shown = last_said if model_said and not turn["error"] else None
-    if turn["error"] == "cancel_claim_withheld":
+    withheld = turn["error"] == "cancel_claim_withheld"
+    if withheld:
         shown = final_text  # the fixed text restates the terms and asks to confirm
-    state.keep_cancel_asks(shown if status == "active" else None)
+    # The fixed text names no visit, so it never carries an earlier turn's ask.
+    state.keep_cancel_asks(shown if status == "active" else None, carry=not withheld)
     if status == "active" and earlier + 1 >= ctx.settings.TURN_CAP:
         final_text = f"{final_text} {guards.TURN_CAP_TEXT}".strip()
     turn["reply_text"] = final_text
