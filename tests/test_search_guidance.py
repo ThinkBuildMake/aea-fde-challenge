@@ -49,6 +49,7 @@ def test_warranty_result_says_to_answer_with_conditions(
         "not matched yet",
         "ask only for their name and one of phone number",
         "installLaborWarrantyEnded",
+        "When the match's membershipTier is none, the 5-year term does not apply",
     ):
         assert rule in instruction, rule
 

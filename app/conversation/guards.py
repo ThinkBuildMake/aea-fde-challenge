@@ -122,7 +122,9 @@ WARRANTY_INSTRUCTION = (
     "for just that in one short question and state no terms. Never ask who installed or "
     "repaired it or about Comfort Club membership; state membership at install among the "
     "conditions, or for a member today say you are not sure about the 5-year term and "
-    "call escalate with reason no_document_answer."
+    "call escalate with reason no_document_answer. When the match's membershipTier is "
+    "none, the 5-year term does not apply: once installLaborWarrantyEnded is true, say "
+    "labor is billable and do not escalate."
 )
 HOLIDAY_INSTRUCTION = (
     "For a holiday, name every date listed for it (each day of a range), whether the "
