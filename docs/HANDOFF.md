@@ -1,6 +1,21 @@
-# Handoff: where the build stands (2026-10-19, 23:20 UTC)
+# Handoff: where the build stands (2026-10-20, 02:20 UTC)
 
-Read this first if you are picking the work up locally. Branches:
+Read this first if you are picking the work up locally.
+
+## Update 2026-10-20 02:20 UTC (read before the older sections below)
+
+- **Deployed:** production runs `9b3a56b` (cancel fix included), via `scripts/deploy.sh`. Gate needs `gitleaks` (`brew install gitleaks`) and, inside Cursor's sandbox, `PLAYWRIGHT_BROWSERS_PATH="$HOME/Library/Caches/ms-playwright"`.
+- **Committed locally on `build/meridian`, not pushed, not deployed:** `4aa8228`..`c83f640`, fixes from eval triage:
+  - Safety clear no: comma lists ("No smoke, no sparks, and no tripped breaker"), a plain "but", a question after the no, and "no smells" are clear no's; hazard words still stop the chat.
+  - The screen's burning-smell follow-up asks only about smoke, sparks or a breaker (FR-1.2), so callers do not re-confirm the smell.
+  - `identify_customer` refuses a name/detail the caller never wrote (no try counted). Tests switch this check off by default (`tests/conftest.py`); mark a test `caller_details` to keep it.
+  - Prompt: move >24 h says no fee; quoted old price gets the effective date and enrollment-price rule; unconfirmable warranty terms are "not sure" + handoff; someone else's visit is refused without a handoff and counts as resolved.
+- **Eval:** pre-fix run: 2/10 handled, 8% containment. Run on `345509e` (`.claude/worktrees/deploy/eval/runs/run-20261020T021340Z-49f096.json`): 24/31 pass, handled 7/10, containment 49.5%, escalations 12/12, $0.41. Its SF-3 failure is what `c83f640` fixes, so it is **not** the final run A.
+- **Next:** `make gate` on `c83f640` (last full gate was green on `345509e`: 1115 passed), then official run A and run B per section 1 below (save the full log, do not `grep -v '^{'` it away), human grades, commit records, deploy, then S42.
+- Remaining run failures to look at: WA-1 (labor billable not stated firmly), ME-3, RD-1, RF-1, BI-1 (facts missing 1-2). Provider latency spikes (8-31 s) still cause occasional "having trouble" replies.
+- `.gitignore` has an uncommitted `.agents/` line (local Cursor copies of the `.claude/skills`).
+
+Branches:
 
 - `build/meridian`: every finished story, gate green (`make gate`: 1098 passed). This is what production runs.
 - `story/S42`: work in progress on the README and walkthrough video (label check done; video helpers and shot list committed).
@@ -20,7 +35,7 @@ Read this first if you are picking the work up locally. Branches:
 All stories S01 to S50 except S41's live run and S42 are built, reviewed and landed. The human-demo stories (S29 to S40, S49) were demoed on the deployed app; the per-story results were recorded during the build.
 
 Fixes made right before handoff:
-- Safety screen: "No, nothing like that. Just warm air." is a clear no (92f6646). Hazards, doubt or "but ..." after the no still stop the chat.
+- Safety screen: "No, nothing like that. Just warm air." is a clear no (92f6646). Hazards or doubt after the no still stop the chat (a plain "but" no longer does, since 3d9557f).
 - Warranty and holiday answers: guidance in search results (7e32647). Live warranty test 6/6.
 - Cancel (24d0609): "I accept the fee. Please go ahead and cancel it." confirms; a reply that claims a cancel the turn did not make is replaced by the terms and a confirm question. Eval AP-2 passes live.
 
