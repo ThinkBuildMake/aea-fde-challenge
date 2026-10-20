@@ -127,6 +127,12 @@ def test_comma_joined_yes_is_clear(text: str):
         "Actually reschedule instead, sure",
         "I'll call back later, ok bye",
         "Hmm, ok",
+        "Okay hold off",
+        "yes keep it",
+        "Yes reschedule",
+        "Ok I changed my mind keep it",
+        "yes cancel the other one",
+        "Sure, move it instead",
     ],
 )
 def test_still_not_a_yes(text: str):

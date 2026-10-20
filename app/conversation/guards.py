@@ -525,7 +525,8 @@ _YES = re.compile(
 )
 _NOT_YES = re.compile(
     r"\b(?:no|not|never|wait|maybe|unsure|but|if|only|waive\w*|refund\w*|discount\w*"
-    r"|too)\b|n't|\?",
+    r"|too|keep\w*|hold\w*|resched\w*|mov\w*|chang\w*|other|later|instead|mind)\b"
+    r"|n't|\?",
     re.IGNORECASE,
 )
 # Naming the fee is fine only when the caller accepts it; otherwise it is a fee question.
