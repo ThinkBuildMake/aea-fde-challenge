@@ -179,6 +179,13 @@ def test_classifier_never_sees_card_digits(tmp_settings: Settings) -> None:
         ("No, nothing like that. Just warm air.", True, "burning_followup", "safe"),
         ("No. The AC is just blowing warm air.", True, "burning_followup", "safe"),
         ("Nope, it just won't cool the house", True, "burning_followup", "safe"),
+        (
+            "No, nothing like that. The AC just runs but the air is warm.",
+            True,
+            "burning_followup",
+            "safe",
+        ),
+        ("No, but the breaker keeps tripping", True, "burning_followup", "emergency"),
         ("No, the furnace just won't start", True, "burning_followup", "safe"),
         # Anything risky, hedged or contrasted after the no stays an emergency.
         (

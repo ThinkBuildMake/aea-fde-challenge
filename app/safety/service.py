@@ -143,11 +143,12 @@ _POLITE_PART = re.compile(_POLITE)
 
 
 # After the negative, a caller may restate their problem ("Just warm air."). Such a
-# part is fine only if it names no hazard and holds no doubt, contrast or change.
+# part is fine only if it names no hazard and holds no doubt, contrast or change. A
+# plain "but" is allowed ("it runs but the air is warm"); the hazard words still apply.
 _RISKY = re.compile(
     r"smok|spark|burn|smell|odou?r|fume|gas|fire|flame|breaker|trip|shock|melt|"
     r"buzz|sizzl|crackl|wir(?:e|ing)|carbon|alarm|hot|overheat|scorch|"
-    r"\b(?:but|though|although|except|however|actually|wait|still|now|worse|stronger|"
+    r"\b(?:though|although|except|however|actually|wait|still|now|worse|stronger|"
     r"maybe|might|perhaps|sure|unsure|think|guess|tell|know|idea|clue|certain|"
     r"kind of|sort of|little|bit|yes|yeah|yep|earlier)\b|\?"
 )
