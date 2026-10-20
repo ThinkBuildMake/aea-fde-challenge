@@ -544,21 +544,23 @@ _EARLIER_NOT = re.compile(
 )
 
 
-def _asks_earlier(sentence: str) -> bool:
-    return (
-        _EARLIER.search(sentence) is not None
-        and not _EARLIER_NOT.search(sentence)
-        and not any(
-            p.search(sentence) for p in (_MONTH_DAY, _DAY_MONTH, _ISO_DATE, _SLASH_DATE)
-        )
+def _vetoes(sentence: str) -> bool:
+    """A negation or a day of its own ("Never mind, Friday works.")."""
+    return _EARLIER_NOT.search(sentence) is not None or any(
+        p.search(sentence) for p in (_MONTH_DAY, _DAY_MONTH, _ISO_DATE, _SLASH_DATE)
     )
 
 
 def asks_earlier(text: str) -> bool:
     """Some sentence asks for an earlier window, typed or tapped ("anything sooner?"),
-    with no negation and no day of its own ("Anything on Wednesday earlier than noon?")."""
-    text = text.replace("\u2019", "'")
-    return any(_asks_earlier(s) for s in re.split(r"(?<=[.!?])\s+", text.strip()))
+    with no negation or day of its own ("Anything on Wednesday earlier than noon?") and
+    no later sentence taking it back or naming a day ("Anything sooner? Friday works.")."""
+    sentences = re.split(r"(?<=[.!?])\s+", text.replace("\u2019", "'").strip())
+    return any(
+        _EARLIER.search(s) is not None
+        and not any(_vetoes(later) for later in sentences[i:])
+        for i, s in enumerate(sentences)
+    )
 
 
 _JOIN_YES = re.compile(

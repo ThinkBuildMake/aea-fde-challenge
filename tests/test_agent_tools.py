@@ -1279,6 +1279,13 @@ def test_cancel_ask_survives_a_card_turn(
         ("something tmrw earlier?", False),
         ("Anything next week sooner?", False),
         ("Anything October 21 earlier?", False),
+        # A later sentence that names a day or takes the ask back vetoes it.
+        ("Anything sooner? Never mind, Friday works.", False),
+        ("Anything sooner? Actually no, book Friday.", False),
+        ("Is there an earlier slot? Scratch that, Thursday at 2 please.", False),
+        ("Anything earlier? On second thought Friday is fine.", False),
+        ("Last time you sent someone sooner. Can I get Friday morning?", False),
+        ("Book Wednesday. Anything sooner?", True),
     ],
 )
 def test_typed_earlier_request_counts_like_the_button(text: str, earlier: bool):
