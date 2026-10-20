@@ -137,9 +137,11 @@ _NO_HAZARDS = rf"no {_HAZARD}(?: (?:or|and|nor) (?:no )?{_HAZARD})*"
 _POLITE = r"(?:sir|ma'?am|thanks|thank you|that'?s it)"
 _CLEAR_PART = re.compile(rf"(?:{_NEG}|{_NO_HAZARDS})(?: {_POLITE})?")
 # "no smoke, no sparks, and no tripped breaker" and "no smoke, sparks, or tripped
-# breaker" are one list of negatives; "no smoke, and sparks" is not.
+# breaker" are one list of negatives; "no smoke, and sparks" and "no smoke, sparks"
+# are not (a bare comma joins a list only when it ends in "or <hazard>", FR-1.1).
 _LIST_COMMA = re.compile(
-    rf"\b({_HAZARD}),\s*(?:(?:and\s+)?(?=no\s+{_HAZARD}\b)|(?:(?:or|nor)\s+)?(?={_HAZARD}\b))"
+    rf"\b({_HAZARD}),\s*(?:(?:and\s+)?(?=no\s+{_HAZARD}\b)|(?:or|nor)\s+(?={_HAZARD}\b)"
+    rf"|(?={_HAZARD}(?:,\s*{_HAZARD})*,?\s+(?:or|nor)\s+{_HAZARD}\b))"
 )
 _POLITE_PART = re.compile(_POLITE)
 

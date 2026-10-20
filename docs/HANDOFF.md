@@ -6,7 +6,7 @@ Read this first if you are picking the work up locally.
 
 - **Deployed:** production runs `9b3a56b` (cancel fix included), via `scripts/deploy.sh`. Gate needs `gitleaks` (`brew install gitleaks`) and, inside Cursor's sandbox, `PLAYWRIGHT_BROWSERS_PATH="$HOME/Library/Caches/ms-playwright"`.
 - **Committed locally on `build/meridian`, not pushed, not deployed:** `4aa8228`..`c83f640`, fixes from eval triage:
-  - Safety clear no: comma lists ("No smoke, no sparks, and no tripped breaker"), a plain "but", a question after the no, and "no smells" are clear no's; hazard words still stop the chat.
+  - Safety clear no: comma lists ("No smoke, no sparks, and no tripped breaker"; a bare comma counts only when the list ends in "or <hazard>", so "No smoke, sparks" still stops), a plain "but", a question after the no, and "no smells" are clear no's; hazard words still stop the chat.
   - The screen's burning-smell follow-up asks only about smoke, sparks or a breaker (FR-1.2), so callers do not re-confirm the smell.
   - `identify_customer` refuses a name/detail the caller never wrote (no try counted). Tests switch this check off by default (`tests/conftest.py`); mark a test `caller_details` to keep it.
   - Prompt: move >24 h says no fee; quoted old price gets the effective date and enrollment-price rule; unconfirmable warranty terms are "not sure" + handoff; someone else's visit is refused without a handoff and counts as resolved.
