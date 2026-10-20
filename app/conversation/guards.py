@@ -538,26 +538,35 @@ _EARLIER = re.compile(
     re.IGNORECASE,
 )
 _EARLIER_NOT = re.compile(
-    rf"\b(?:no|not|never|nor|{'|'.join(_WEEKDAYS)}|today|tomorrow)\b|n't",
+    rf"\b(?:no|not|never|nor|{'|'.join(_WEEKDAYS)}|today|tomorrow|tmrw|tmw"
+    r"|mon|tues?|wed|weds|thu|thur|thurs|fri|sat|sun|(?:next|this) week)\b|n't",
     re.IGNORECASE,
 )
 
 
-def asks_earlier(text: str) -> bool:
-    """The caller asks for an earlier window, typed or tapped ("anything sooner?"), with
-    no negation and no day of their own ("Anything on Wednesday earlier than noon?")."""
+def _asks_earlier(sentence: str) -> bool:
     return (
-        _EARLIER.search(text) is not None
-        and not _EARLIER_NOT.search(text.replace("\u2019", "'"))
+        _EARLIER.search(sentence) is not None
+        and not _EARLIER_NOT.search(sentence)
         and not any(
-            p.search(text) for p in (_MONTH_DAY, _DAY_MONTH, _ISO_DATE, _SLASH_DATE)
+            p.search(sentence) for p in (_MONTH_DAY, _DAY_MONTH, _ISO_DATE, _SLASH_DATE)
         )
     )
 
 
+def asks_earlier(text: str) -> bool:
+    """Some sentence asks for an earlier window, typed or tapped ("anything sooner?"),
+    with no negation and no day of its own ("Anything on Wednesday earlier than noon?")."""
+    text = text.replace("\u2019", "'")
+    return any(_asks_earlier(s) for s in re.split(r"(?<=[.!?])\s+", text.strip()))
+
+
 _JOIN_YES = re.compile(
-    r"\b(?:do that|yes|yeah|yep|both|sounds good|and the waitlist|add me|put me on"
-    r"|please do)\b",
+    r"\b(?:do that|yes|yeah|yep|both|sounds good|add me|please do)\b", re.IGNORECASE
+)
+_WAITLIST = re.compile(r"\bwait\s?list", re.IGNORECASE)
+_JOIN_WAITLIST_YES = re.compile(
+    r"\b(?:and the waitlist|add me|put me on|join the waitlist|on the waitlist too)\b",
     re.IGNORECASE,
 )
 # When in doubt, no join.
@@ -570,9 +579,11 @@ _JOIN_NO = re.compile(
 
 def accepts_waitlist(text: str) -> bool:
     """The message takes up a waitlist offer ("Okay, do that, and book ...") and
-    turns nothing down ("just book it", "skip the waitlist")."""
+    turns nothing down ("just book it"). A message that names the waitlist must ask
+    for it outright ("and the waitlist"), not just say yes ("Yes, drop the waitlist")."""
     text = text.replace("\u2019", "'")
-    return bool(_JOIN_YES.search(text)) and not _JOIN_NO.search(text)
+    yes = _JOIN_WAITLIST_YES if _WAITLIST.search(text) else _JOIN_YES
+    return bool(yes.search(text)) and not _JOIN_NO.search(text)
 
 
 def earlier_offer_text(earliest: str) -> str:

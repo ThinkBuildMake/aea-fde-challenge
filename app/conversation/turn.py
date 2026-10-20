@@ -776,9 +776,28 @@ def run_turn(
                 end = _end_failed(db, conversation_id)
         else:
             # An earlier request the model answered without searching gets the app's offer.
-            replaced = tools.offer_earlier(ctx, state, history)
-            if replaced is not None:
-                stored = turn["stored"] = [user, *replaced]
+            search_start = datetime.now(UTC)
+            offer = tools.offer_earlier(
+                ctx, state, history, [c["name"] for c in tools_called]
+            )
+            if offer is not None:
+                replaced, entry = offer
+                tools_called.append(entry)
+                observations.append(
+                    _observed(
+                        entry["name"], "tool", search_start, None, [],
+                        metadata={"ok": entry["ok"]},
+                    )
+                )  # fmt: skip
+                # Keep the model's tool calls; drop only its own reply text.
+                stored = turn["stored"] = [
+                    *(
+                        m
+                        for m in stored
+                        if m.get("role") != "assistant" or m.get("tool_calls")
+                    ),
+                    *replaced,
+                ]
                 final_text = last_said = replaced[-1]["content"]
             choices = tools.choices(state)
             if tools.wants_earlier(state):
@@ -880,11 +899,9 @@ def run_turn(
     # The fixed text names no visit, so it never carries an earlier turn's ask.
     state.keep_cancel_asks(shown if status == "active" else None, carry=not withheld)
     # A later yes joins the waitlist only if this reply went out as the offer.
+    # Every path that is not active clears the choices.
     state.waitlist_shown = (
-        status == "active"
-        and not turn["error"]
-        and bool(choices)
-        and tools.wants_earlier(state)
+        not turn["error"] and bool(choices) and tools.wants_earlier(state)
     )
     if status == "active" and earlier + 1 >= ctx.settings.TURN_CAP:
         final_text = f"{final_text} {guards.TURN_CAP_TEXT}".strip()

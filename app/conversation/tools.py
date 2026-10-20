@@ -3,6 +3,7 @@
 import json
 import re
 import sqlite3
+import uuid
 from collections.abc import Callable, Iterable
 from datetime import date
 from typing import Any, get_args
@@ -972,52 +973,58 @@ def _last_service_type(history: list[dict[str, Any]]) -> str | None:
     return found
 
 
+# Tools that leave nothing in the model's reply the app's earlier offer would drop.
+_OFFER_EARLIER_AFTER = frozenset({"identify_customer", "lookup_my_appointments"})
+
+
 def offer_earlier(
-    ctx: AppContext, state: ToolState, history: list[dict[str, Any]]
-) -> list[dict[str, Any]] | None:
-    """When a matched caller who was shown windows asks for earlier and the model did not
-    search, run the earliest-window search here. Returns the messages to store in place
-    of the model's (the search and the fixed offer), or None to keep the model's reply."""
+    ctx: AppContext,
+    state: ToolState,
+    history: list[dict[str, Any]],
+    called: list[str],
+) -> tuple[list[dict[str, Any]], dict[str, Any]] | None:
+    """When a caller who was shown windows asks for earlier and the model's turn only
+    identified them or listed visits (`called`), run the earliest-window search here.
+    Returns the search and the fixed offer to store in place of the model's reply, with
+    the search's log entry, or None to keep the model's reply."""
     service_type = _last_service_type(history)
     if (
-        state.customer_id is None
-        or not state.earlier_slot_ids
-        or state.windows
-        or state.booking is not None
-        or state.handoff is not None
+        not state.earlier_slot_ids
         or service_type is None
+        or not set(called) <= _OFFER_EARLIER_AFTER
         or not guards.asks_earlier(state.caller_text)
+        # Belt and braces: each of these needs a tool the check above already rules out.
+        or state.windows
+        or state.booking
+        or state.handoff
+        or state.cancel_asked
+        or state.cancelled
+        or state.waitlisted
+        or state.has_write
+        or state.write_failed
+        or state.payment_link
     ):
         return None
-    args = {"serviceType": service_type}
-    try:
-        out = _find_open_windows(ctx, state, args)
-    except Exception:  # noqa: BLE001 - no search, the model's reply stands
-        return None
+    call = {
+        "id": f"app_earlier_{uuid.uuid4().hex[:12]}",
+        "type": "function",
+        "function": {
+            "name": "find_open_windows",
+            "arguments": json.dumps({"serviceType": service_type}),
+        },
+    }
+    out, entry = run_tool(ctx, state, call)
     if not wants_earlier(state):
         return None
-    call_id = "app_earlier_search"
-    return [
-        {
-            "role": "assistant",
-            "content": "",
-            "tool_calls": [
-                {
-                    "id": call_id,
-                    "type": "function",
-                    "function": {
-                        "name": "find_open_windows",
-                        "arguments": json.dumps(args),
-                    },
-                }
-            ],
-        },
-        {"role": "tool", "tool_call_id": call_id, "content": json.dumps(out)},
+    messages = [
+        {"role": "assistant", "content": "", "tool_calls": [call]},
+        {"role": "tool", "tool_call_id": call["id"], "content": json.dumps(out)},
         {
             "role": "assistant",
             "content": guards.earlier_offer_text(_when(state.windows[0])),
         },
     ]
+    return messages, entry
 
 
 def choices(state: ToolState) -> list[Choice]:

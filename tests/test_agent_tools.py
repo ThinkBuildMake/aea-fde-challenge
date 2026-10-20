@@ -1268,6 +1268,17 @@ def test_cancel_ask_survives_a_card_turn(
         ("Is there an earlier slot?", True),
         ("Can you get someone out sooner?", True),
         ("I need someone sooner", True),
+        (
+            (
+                "I was hoping for a visit this Monday, October 19, or Tuesday, October 20. "
+                "Is anything earlier possible?"
+            ),
+            True,
+        ),
+        ("Anything Weds earlier?", False),
+        ("something tmrw earlier?", False),
+        ("Anything next week sooner?", False),
+        ("Anything October 21 earlier?", False),
     ],
 )
 def test_typed_earlier_request_counts_like_the_button(text: str, earlier: bool):
@@ -1431,6 +1442,11 @@ def test_accepting_the_offer_joins_in_code(
         ("Yes, but don't add me to the waitlist", True),
         ("yes book it without the waitlist", True),
         ("yes, not the waitlist", True),
+        ("Yes, leave me off the waitlist", True),
+        ("Yes, book Wednesday. I'll decline the waitlist", True),
+        ("Yes, book Wednesday and drop the waitlist", True),
+        ("Yes, book Wednesday. Remove me from the waitlist", True),
+        ("Yes book Wednesday, the waitlist is unnecessary", True),
         ("Okay, do that, and book the slot for Wednesday from 8 AM to 12 PM.", False),
     ],
 )
@@ -1544,3 +1560,165 @@ def test_typed_earlier_request_offers_even_when_the_model_does_not_search(
     assert offered_rows(started, cid)[1]["waitlistOffered"] is True
     assert len(waitlist.calls) == 1
     assert booked["waitlisted"] is True
+
+
+def earlier_without_search(
+    started: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    text: str,
+    calls: list[dict[str, Any]],
+    answer: str,
+    first_windows: list[Window] | None = None,
+) -> tuple[str, dict[str, Any], Recorder]:
+    """Turn 1 matches the caller and shows windows (or `first_windows`); turn 2 sends
+    `text`, the model makes `calls` (never find_open_windows) and says `answer`."""
+    stub(monkeypatch, "app.scheduling.service.identify_customer", customer("MHC-10002"))
+    stub(monkeypatch, "app.scheduling.service.get_appointment", held_visit(7))
+    cancel = stub(monkeypatch, "app.scheduling.service.cancel_visit", None)
+    first = identify_and_offer(monkeypatch, "MHC-10002")
+    found = Recorder(
+        OpenWindows(
+            windows=[window(3)] if first_windows is None else first_windows,
+            matched_request=True,
+            reason=None,
+        )
+    )
+    monkeypatch.setattr("app.scheduling.service.find_open_windows", found)
+    second = (
+        [result(assistant(calls=calls)), result(assistant(answer))]
+        if calls
+        else [result(assistant(answer))]
+    )
+    client = client_for(
+        started,
+        FakeModelProvider(
+            results=[
+                result(assistant(calls=first)),
+                result(assistant("answer 0")),
+                *second,
+            ]
+        ),
+    )
+    cid = new_conversation(client)
+    say(client, cid, "hi")
+    found.value = OpenWindows(windows=[window(3)], matched_request=True, reason=None)
+    return cid, say(client, cid, text), cancel
+
+
+CANCEL_TERMS = (
+    "Your visit is Wednesday October 21, 8 AM to 12 PM. There is no fee. "
+    "Do you want me to cancel it?"
+)
+
+
+def test_earlier_offer_keeps_the_models_cancel_ask(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    cid, reply, cancel = earlier_without_search(
+        started,
+        monkeypatch,
+        "I want to cancel my visit, or is there an earlier slot?",
+        [tool_call("c", "cancel_visit", appointmentId=7, callerQuote="cancel")],
+        CANCEL_TERMS,
+    )
+    assert reply["text"] == CANCEL_TERMS
+    assert "choices_only" not in reply["actions"]
+    assert "waitlistOffered" not in offered_rows(started, cid)[1]
+    assert offered_rows(started, cid)[1]["cancelAppointmentIds"] == [7]
+    assert cancel.calls == []
+
+
+def test_earlier_offer_keeps_the_models_knowledge_answer(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    stub(monkeypatch, "app.knowledge.service.search_knowledge", [])
+    answer = "Members do not pay the diagnostic fee."
+    cid, reply, _ = earlier_without_search(
+        started,
+        monkeypatch,
+        "Is the fee waived for members? Also any earlier slot?",
+        [tool_call("k", "search_knowledge", query="member fee")],
+        answer,
+    )
+    assert reply["text"] == answer
+    assert "waitlistOffered" not in offered_rows(started, cid)[1]
+
+
+def test_earlier_offer_needs_windows_shown_before(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    answer = "Sorry, I have nothing open."
+    cid, reply, _ = earlier_without_search(
+        started, monkeypatch, "anything sooner?", [], answer, first_windows=[]
+    )
+    assert reply["text"] == answer
+    assert "waitlistOffered" not in offered_rows(started, cid)[1]
+
+
+def test_app_earlier_search_is_logged_with_a_unique_call_id(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    cid, reply, _ = earlier_without_search(
+        started, monkeypatch, "anything sooner?", [], "No."
+    )
+    called = json.loads(
+        rows(
+            started,
+            "SELECT tools_called FROM turns WHERE conversation_id = ? ORDER BY seq",
+            cid,
+        )[1][0]
+    )
+    stored = json.loads(
+        rows(
+            started,
+            "SELECT model_messages FROM turns WHERE conversation_id = ? ORDER BY seq",
+            cid,
+        )[1][0]
+    )
+    ids = [c["id"] for m in stored for c in m.get("tool_calls") or []]
+    assert [c["name"] for c in called] == ["find_open_windows"]
+    assert len(ids) == 1 and ids[0] != "app_earlier_search"
+    assert reply["text"].startswith("The earliest window I have is")
+
+
+def test_offer_with_a_failed_write_is_not_recorded(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    """The offer turn's reply went out with a failed write, so it is not a clean offer."""
+    stub(monkeypatch, "app.scheduling.service.identify_customer", customer("MHC-10002"))
+
+    def fail(*args: Any) -> Booking:
+        from app.scheduling.service import NotEligible
+
+        raise NotEligible("slot_taken")
+
+    monkeypatch.setattr("app.scheduling.service.book_visit", fail)
+    cid, replies = run(
+        started,
+        identify_and_offer(monkeypatch, "MHC-10002"),
+        [
+            tool_call("w", "find_open_windows", serviceType="hvac_repair"),
+            tool_call("b", "book_visit", slotId=3, issue="x", callerQuote="sooner"),
+        ],
+        texts=["hi", "anything sooner?"],
+    )
+    assert [c["text"] for c in replies[1]["choices"]][-1] == "Talk to a person instead"
+    assert "waitlistOffered" not in offered_rows(started, cid)[1]
+
+
+def test_no_earlier_offer_without_an_earlier_request(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    answer = "You are welcome."
+    cid, reply, _ = earlier_without_search(
+        started, monkeypatch, "Thanks for the help", [], answer
+    )
+    called = rows(
+        started,
+        "SELECT tools_called FROM turns WHERE conversation_id = ? ORDER BY seq",
+        cid,
+    )[1][0]
+    assert json.loads(called) == []
+    assert reply["text"] == answer
+    assert reply["choices"] == []
+    assert "waitlistOffered" not in offered_rows(started, cid)[1]
