@@ -291,6 +291,15 @@ def test_screen_reports_its_tokens_and_cost(tmp_settings: Settings) -> None:
         ("No burning smell or anything like that, but sparks", False),
         ("There is smoke", False),
         ("No, there is smoke", False),
+        # Past tense says nothing about now; hazards _RISKY used to miss (S52 review).
+        ("There was no smoke", False),
+        ("there was no smoke or anything like that", False),
+        ("no smoke or anything like that. outlet is glowing", False),
+        ("no smoke or anything, the panel is arcing", False),
+        ("no fire or anything, just a flash", False),
+        ("No sparks or anything. There was a bang and the power went out", False),
+        ("no smoke or anything, my CO detector is beeping", False),
+        ("No smoke. It popped and the lights went out", False),
     ],
 )
 def test_s52_more_clear_nos(text: str, expected: bool) -> None:

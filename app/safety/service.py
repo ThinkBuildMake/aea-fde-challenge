@@ -141,9 +141,10 @@ _NEG = r"(?:no|nope|nah|none|negative|not at all|nothing(?: like that)?|none of 
 _HAZARD = (
     r"(?:smoke|sparks?|fire|flames?|tripped breaker|(?:burning )?(?:smells?|odou?rs?))"
 )
-# "there is no smoke or sparks", "no burning smell or anything like that"
+# "there is no smoke or sparks", "no burning smell or anything like that" (not "there
+# was no smoke": that says nothing about now)
 _NO_HAZARDS = (
-    rf"(?:there(?:'s| is| was| are) )?no {_HAZARD}(?: (?:or|and|nor) (?:no )?{_HAZARD})*"
+    rf"(?:there(?:'s| is| are) )?no {_HAZARD}(?: (?:or|and|nor) (?:no )?{_HAZARD})*"
     r"(?: or anything(?: like that)?)?"
 )
 _POLITE = r"(?:sir|ma'?am|thanks|thank you|that'?s it)"
@@ -165,6 +166,8 @@ _POLITE_PART = re.compile(_POLITE)
 _RISKY = re.compile(
     r"smok|spark|burn|smell|odou?r|fume|gas|fire|flame|breaker|trip|shock|melt|"
     r"buzz|sizzl|crackl|wir(?:e|ing)|carbon|alarm|hot|overheat|scorch|"
+    r"glow|\barc(?:s|ed|ing)?\b|flash|\bbang|\bpop(?:s|ped|ping)?\b|beep|detector|"
+    r"lights? went|power went|power (?:is )?out|"
     r"\b(?:though|although|except|however|actually|wait|still|now|worse|stronger|"
     r"maybe|might|perhaps|sure|unsure|think|guess|tell|know|idea|clue|certain|"
     r"kind of|sort of|little|bit|yes|yeah|yep|earlier)\b"
