@@ -68,3 +68,21 @@ def test_instructions_carry_the_warranty_record_rules():
         "out of date",
     ):
         assert rule in INSTRUCTIONS, rule
+
+
+def test_instructions_answer_an_emailed_copy_without_a_handoff():
+    for rule in (
+        "a copy of an invoice by email or post",
+        "this chat cannot send one",
+        "the line items just given are the itemized invoice",
+    ):
+        assert rule in INSTRUCTIONS, rule
+
+
+def test_instructions_cover_a_repeat_failure_in_full():
+    for rule in (
+        "because Meridian supplied it",
+        "replaced the shorter repair warranty in the older terms",
+        "whether or not the caller mentions the old rule",
+    ):
+        assert rule in INSTRUCTIONS, rule
