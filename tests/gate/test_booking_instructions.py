@@ -65,7 +65,7 @@ def test_instructions_carry_the_warranty_record_rules():
         "earlier Meridian repairs from get_my_billing",
         "registers every installed unit",
         "return visit and labor are free if the technician finds the same part failed",
-        "out of date",
+        "out of date, without repeating the caller's figure,",
         "the first reply only asks who they are, with no coverage terms",
         "installLaborWarrantyEnds and installLaborWarrantyEnded",
         "a repeat failure of the same part an earlier Meridian repair replaced",
