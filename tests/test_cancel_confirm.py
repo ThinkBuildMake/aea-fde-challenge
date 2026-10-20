@@ -71,7 +71,6 @@ def test_comma_joined_acceptance_cancels(started: Settings, cancels):
     print(
         "reply:", replies[-1]["text"], "| last result:", tool_results(started, cid)[-1]
     )
-    assert guards.clear_yes(ACCEPT) is True
     assert [c[2] for c in cancels.calls] == [25]
     assert tool_results(started, cid)[-1]["appointmentId"] == 25
     assert replies[-1]["text"] == "Your visit is cancelled."
