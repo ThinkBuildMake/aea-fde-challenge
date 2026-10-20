@@ -314,20 +314,20 @@ def test_s52_unanswered_followup_is_asked_again(
 
 
 @pytest.mark.parametrize(
-    ("text", "answer", "pending"),
+    ("text", "answer"),
     [
-        ("How hot does the compressor get?", "unanswered", True),  # a _RISKY word
-        ("okay, let's schedule it.", "yes_or_unsure", True),
-        ("okay, let's schedule it.", "no", True),
-        ("okay, let's schedule it.", "not_pending", True),
-        ("okay, let's schedule it.", None, True),  # the field is missing
+        ("How hot does the compressor get?", "unanswered"),  # a _RISKY word
+        ("okay, let's schedule it.", "yes_or_unsure"),
+        ("okay, let's schedule it.", "no"),
+        ("okay, let's schedule it.", "not_pending"),
+        ("okay, let's schedule it.", None),  # the field is missing
     ],
 )
 def test_s52_other_non_answers_still_stop(
-    tmp_settings: Settings, text: str, answer: str | None, pending: bool
+    tmp_settings: Settings, text: str, answer: str | None
 ) -> None:
     ctx = _ctx(tmp_settings, FakeClassifier("safe", "no_hazard", answer))
-    v = screen_safety(ctx, text, ASKED, pending)
+    v = screen_safety(ctx, text, ASKED, True)
     assert (v.verdict, v.reason) == ("emergency", "followup_not_clear_no")
 
 
