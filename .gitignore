@@ -17,5 +17,5 @@ __pycache__/
 # Local Cursor agent skills (converted from .claude/skills)
 .agents/
 
-# Demo recording workspace (shot list, voice key, build). The submitted video is docs/walkthrough.mp4.
+# Demo recording workspace (shot list, voice key, build, and the video itself). Never committed.
 .demo/

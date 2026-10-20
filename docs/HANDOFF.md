@@ -78,7 +78,7 @@ Triage rule for failures: change a scenario only when REQUIREMENTS or the knowle
 ### 2. S42: README and video (branch `story/S42`)
 
 - README: fill every eval number from S41's committed run record (plan: `.demo` and the S42 story). Include the known limitations below and link `docs/OPERATIONS.md`.
-- Video: `.demo/shotlist.yaml` has 8 scenes; the app scenes were recorded on production and run about 2:56. The eval-numbers and outro narration still read PENDING. Helpers in `.demo/tools/` (Piper narration, split, combine, and a recorder copy that bypasses the app's CSP inside its own browser so the cursor shows). Some helper paths point at the old session's scratch folder: adjust them. Restore `.demo/tools/test_walkthrough_video.py.pending` as `tests/test_walkthrough_video.py` once `docs/walkthrough.mp4` exists. Target under 5 minutes. With an ElevenLabs key you can re-voice it with the demo-video skill instead of Piper.
+- Video: recorded with the demo-video skill from `.demo/shotlist.yaml` into `.demo/meridian_demo.mp4`. All of `.demo/`, the video included, is git-ignored and never committed; the video is submitted on its own. Re-voice it with ElevenLabs by putting the key in `.demo/.env`.
 
 ## Known limitations (for the README)
 
