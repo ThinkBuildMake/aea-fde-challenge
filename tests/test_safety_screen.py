@@ -186,6 +186,22 @@ def test_classifier_never_sees_card_digits(tmp_settings: Settings) -> None:
             "safe",
         ),
         ("No, but the breaker keeps tripping", True, "burning_followup", "emergency"),
+        (
+            "No, nothing like that. Can someone come out to look at it?",
+            True,
+            "burning_followup",
+            "safe",
+        ),
+        ("No? I don't know", True, "burning_followup", "emergency"),
+        (
+            "No, no smoke or smells. Can someone come out? I'm Hannah Rivera, 512-651-1296.",
+            True,
+            "burning_followup",
+            "safe",
+        ),
+        ("No smoke, smells", True, "burning_followup", "safe"),
+        ("No smoke, but it smells", True, "burning_followup", "emergency"),
+        ("No. Is a burning smell bad?", True, "burning_followup", "emergency"),
         ("No, the furnace just won't start", True, "burning_followup", "safe"),
         # Anything risky, hedged or contrasted after the no stays an emergency.
         (

@@ -130,7 +130,9 @@ def redact_card_numbers(text: str) -> RedactResult:
 # A clear no is a short negative and nothing else of substance: every comma- or
 # full-stop-separated part of the answer must be one of these, and one must be negative.
 _NEG = r"(?:no|nope|nah|none|negative|not at all|nothing(?: like that)?|none of (?:those|that|them|the above))"
-_HAZARD = r"(?:smoke|sparks?|fire|flames?|tripped breaker)"
+_HAZARD = (
+    r"(?:smoke|sparks?|fire|flames?|tripped breaker|(?:burning )?(?:smells?|odou?rs?))"
+)
 _NO_HAZARDS = rf"no {_HAZARD}(?: (?:or|and|nor) (?:no )?{_HAZARD})*"
 _POLITE = r"(?:sir|ma'?am|thanks|thank you|that'?s it)"
 _CLEAR_PART = re.compile(rf"(?:{_NEG}|{_NO_HAZARDS})(?: {_POLITE})?")
@@ -144,13 +146,14 @@ _POLITE_PART = re.compile(_POLITE)
 
 # After the negative, a caller may restate their problem ("Just warm air."). Such a
 # part is fine only if it names no hazard and holds no doubt, contrast or change. A
-# plain "but" is allowed ("it runs but the air is warm"); the hazard words still apply.
+# plain "but" or a question after the no is allowed ("it runs but the air is warm",
+# "can someone come out?"); the hazard words still apply, and "no?" is not a clear no.
 _RISKY = re.compile(
     r"smok|spark|burn|smell|odou?r|fume|gas|fire|flame|breaker|trip|shock|melt|"
     r"buzz|sizzl|crackl|wir(?:e|ing)|carbon|alarm|hot|overheat|scorch|"
     r"\b(?:though|although|except|however|actually|wait|still|now|worse|stronger|"
     r"maybe|might|perhaps|sure|unsure|think|guess|tell|know|idea|clue|certain|"
-    r"kind of|sort of|little|bit|yes|yeah|yep|earlier)\b|\?"
+    r"kind of|sort of|little|bit|yes|yeah|yep|earlier)\b"
 )
 
 
