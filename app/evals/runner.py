@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import re
 import secrets
 import shutil
 import sqlite3
@@ -47,6 +48,16 @@ log = logging.getLogger("meridian.evals")
 
 NO_LIMIT = 10**9
 Reporter = Callable[[RunResult, list[Scenario]], None]
+
+
+_LINK_TOKEN = re.compile(
+    r"(https://pay\.example\.com/invoice/[^\s?]+\?token=)[A-Za-z0-9_-]+"
+)
+
+
+def redact_link_tokens(text: str) -> str:
+    """The payment link without its token, so committed run records hold no token."""
+    return _LINK_TOKEN.sub(r"\1[removed]", text)
 
 
 def _now() -> str:
@@ -288,7 +299,7 @@ def _play(
         transcript.append(
             TranscriptLine(
                 role="agent",
-                text=turn["reply_text"],
+                text=redact_link_tokens(turn["reply_text"]),
                 latency_ms=turn["latency_ms"],
                 has_write=bool(turn["has_write"]),
             )
