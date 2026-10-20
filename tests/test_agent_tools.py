@@ -13,6 +13,7 @@ from app.conversation.guards import (
     JOIN_AFTER_BOOKING_INSTRUCTION,
     ON_WAITLIST_INSTRUCTION,
     SEARCH_UNAVAILABLE_INSTRUCTION,
+    asks_earlier,
 )
 from app.conversation.tools import ToolState, run_tool
 from app.knowledge.service import EmbeddingUnavailable, IndexUnavailable, UnknownFee
@@ -977,7 +978,7 @@ def test_typed_earlier_variant_keeps_window_buttons(
         started,
         identify("MHC-10002"),
         [tool_call("w", "find_open_windows", serviceType="hvac_repair")],
-        texts=["Omar Patel, MHC-10002", "anything sooner?"],
+        texts=["Omar Patel, MHC-10002", "I want an earlier start time on Wednesday"],
     )
     assert "instruction" not in tool_results(started, cid)[-1]
     assert (
@@ -1244,3 +1245,188 @@ def test_cancel_ask_survives_a_card_turn(
         cid,
     )[-1]
     assert json.loads(last["offered"])["cancelAppointmentIds"] == [7]
+
+
+@pytest.mark.parametrize(
+    ("text", "earlier"),
+    [
+        ("Is there anything earlier possible?", True),
+        ("anything sooner?", True),
+        ("Do you have anything earlier?", True),
+        ("Can you do anything earlier?", True),
+        ("I want an earlier start time on Wednesday", False),
+        ("earlier you said Wednesday", False),
+        ("can I book Wednesday?", False),
+    ],
+)
+def test_typed_earlier_request_counts_like_the_button(text: str, earlier: bool):
+    assert asks_earlier(text) is earlier
+
+
+def test_typed_earlier_request_gets_the_waitlist_choices(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    stub(monkeypatch, "app.scheduling.service.identify_customer", customer("MHC-10002"))
+    found = stub(
+        monkeypatch,
+        "app.scheduling.service.find_open_windows",
+        OpenWindows(
+            windows=[window(119, "13:00", "17:00")], matched_request=True, reason=None
+        ),
+    )
+    cid, replies = run(
+        started,
+        identify("MHC-10002"),
+        [
+            tool_call(
+                "w",
+                "find_open_windows",
+                serviceType="hvac_repair",
+                preferredDate="2026-10-19",
+            )
+        ],
+        texts=["Omar Patel, MHC-10002", "Is there anything earlier possible?"],
+    )
+    assert found.calls[-1][1:] == ("MHC-10002", "hvac_repair", None, None)
+    assert tool_results(started, cid)[-1]["instruction"] == EARLIER_INSTRUCTION
+    assert [c["label"] for c in replies[1]["choices"]] == EARLIER_LABELS
+    assert "choices_only" in replies[1]["actions"]
+
+
+def offered_rows(started: Settings, cid: str) -> list[dict[str, Any]]:
+    return [
+        json.loads(r[0])
+        for r in rows(
+            started,
+            "SELECT offered FROM turns WHERE conversation_id = ? ORDER BY seq",
+            cid,
+        )
+    ]
+
+
+def test_earlier_turn_records_the_waitlist_offer(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    stub(monkeypatch, "app.scheduling.service.identify_customer", customer("MHC-10002"))
+    stub(
+        monkeypatch,
+        "app.scheduling.service.find_open_windows",
+        OpenWindows(windows=[window(3)], matched_request=True, reason=None),
+    )
+    cid, _ = run(
+        started,
+        [*identify("MHC-10002"), tool_call("w", "find_open_windows", serviceType="x")],
+        [tool_call("w", "find_open_windows", serviceType="hvac_repair")],
+        texts=["Omar Patel, MHC-10002", "anything sooner?"],
+    )
+    offered = offered_rows(started, cid)
+    assert "waitlistOffered" not in offered[0]
+    assert offered[1]["waitlistOffered"] is True
+
+
+def book_after_offer(
+    started: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    text: str,
+    offer: bool = True,
+    fail_join: bool = False,
+):
+    """Turn 1 shows slot 3; turn 2 asks for earlier (or not); turn 3 books slot 3 with
+    `text`. The model never calls join_waitlist."""
+    stub(monkeypatch, "app.scheduling.service.identify_customer", customer("MHC-10002"))
+    stub(monkeypatch, "app.scheduling.service.book_visit", booking())
+    stub(
+        monkeypatch,
+        "app.knowledge.service.get_fee",
+        Fee(code="FEE-DIAG", cents=8900, source_file="pricing"),
+    )
+    got = stub(monkeypatch, "app.scheduling.service.get_appointment", held_visit(7))
+    if fail_join:
+        monkeypatch.setattr("app.scheduling.service.get_appointment", raise_not_found)
+    waitlist = stub(
+        monkeypatch, "app.followups.service.join_waitlist", joined(created=True)
+    )
+    cid, replies = run(
+        started,
+        identify_and_offer(monkeypatch, "MHC-10002"),
+        [tool_call("w", "find_open_windows", serviceType="hvac_repair")],
+        [tool_call("b", "book_visit", slotId=3, issue="no cooling", callerQuote=text)],
+        texts=[
+            "hi",
+            "Is there anything earlier possible?" if offer else "What do you have?",
+            text,
+        ],
+    )
+    return cid, replies, waitlist, got
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Okay, do that, and book the slot for Wednesday from 8 AM to 12 PM.",
+        "Yes, book Wednesday",
+        "Both please, book Wednesday",
+        "Sounds good, book it",
+        "Book Wednesday and the waitlist",
+        "Add me and book Wednesday",
+    ],
+)
+def test_accepting_the_offer_joins_in_code(
+    started: Settings, monkeypatch: pytest.MonkeyPatch, text: str
+):
+    cid, replies, waitlist, got = book_after_offer(started, monkeypatch, text)
+    assert len(waitlist.calls) == 1
+    entry = waitlist.calls[0][1]
+    assert (entry.held_date, entry.held_window) == ("2026-10-21", "08:00-12:00")
+    assert got.calls[-1][1:] == ("MHC-10002", 7)
+    assert replies[2]["booking"]["appointmentId"] == 7
+    assert replies[2]["waitlisted"] is True
+    assert tool_results(started, cid)[-1]["instruction"] == (
+        JOIN_AFTER_BOOKING_INSTRUCTION
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "offer"),
+    [
+        ("Book Wednesday 8 AM only", True),
+        ("just book it", True),
+        ("no waitlist, just book Wednesday", True),
+        ("Okay, do that, and book the slot for Wednesday from 8 AM to 12 PM.", False),
+    ],
+)
+def test_declining_the_offer_does_not_join(
+    started: Settings, monkeypatch: pytest.MonkeyPatch, text: str, offer: bool
+):
+    _, replies, waitlist, _ = book_after_offer(started, monkeypatch, text, offer)
+    assert waitlist.calls == []
+    assert replies[2]["booking"]["appointmentId"] == 7
+    assert replies[2]["waitlisted"] is False
+
+
+def test_accepting_when_already_on_the_waitlist_adds_no_row(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    stub(
+        monkeypatch, "app.followups.service.list_waitlist", [joined(created=True).entry]
+    )
+    cid, replies, waitlist, _ = book_after_offer(
+        started, monkeypatch, "Yes, book Wednesday"
+    )
+    assert waitlist.calls == []
+    assert replies[2]["waitlisted"] is True
+    assert tool_results(started, cid)[-1]["instruction"] == (
+        ALREADY_ON_WAITLIST_INSTRUCTION
+    )
+
+
+def test_failed_app_join_after_booking_offers_a_person(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    _, replies, waitlist, _ = book_after_offer(
+        started, monkeypatch, "Yes, book Wednesday", fail_join=True
+    )
+    assert waitlist.calls == []
+    assert replies[2]["booking"]["appointmentId"] == 7
+    assert replies[2]["waitlisted"] is False
+    assert "request_callback" in replies[2]["actions"]

@@ -172,8 +172,9 @@ EARLIER_INSTRUCTION = (
     "Never say when the team will call. The choices appear as buttons; do not list them."
 )
 JOIN_AFTER_BOOKING_INSTRUCTION = (
-    "The caller also asked to join the waitlist for an earlier window. Call "
-    "join_waitlist with this booking's appointmentId before you answer."
+    "The caller is now also on the waitlist for an earlier window, holding this "
+    "booking; do not call join_waitlist. Say the team will call if one opens; never "
+    "say when."
 )
 ON_WAITLIST_INSTRUCTION = (
     "The caller is on the waitlist for an earlier window. Say the team will call if "
@@ -502,20 +503,55 @@ def earlier_offered(
     return slots, appointments
 
 
+def _last_offered(db: sqlite3.Connection, conversation_id: str) -> dict[str, Any]:
+    """What the previous message turn offered (turns.offered)."""
+    row = db.execute(
+        "SELECT offered FROM turns WHERE conversation_id = ? AND kind = 'message' "
+        "ORDER BY seq DESC LIMIT 1",
+        (conversation_id,),
+    ).fetchone()
+    return json.loads(row[0]) if row else {}
+
+
 def last_cancel_asks(
     db: sqlite3.Connection, conversation_id: str
 ) -> dict[int, int | None]:
     """Appointments whose cancel terms the previous message turn put to the caller, each
     with the late fee in cents that turn asked about itself (None for no fee, or for an
     ask it only carried forward)."""
-    row = db.execute(
-        "SELECT offered FROM turns WHERE conversation_id = ? AND kind = 'message' "
-        "ORDER BY seq DESC LIMIT 1",
-        (conversation_id,),
-    ).fetchone()
-    offered = json.loads(row[0]) if row else {}
+    offered = _last_offered(db, conversation_id)
     fees = offered.get("cancelFeeCents", {})
     return {i: fees.get(str(i)) for i in offered.get("cancelAppointmentIds", [])}
+
+
+def last_waitlist_offer(db: sqlite3.Connection, conversation_id: str) -> bool:
+    """The previous message turn offered the waitlist for an earlier window."""
+    return _last_offered(db, conversation_id).get("waitlistOffered") is True
+
+
+_EARLIER = re.compile(
+    r"\b(?:anything|something|nothing|any)\b(?:\s+\w+){0,2}?\s+(?:earlier|sooner)\b",
+    re.IGNORECASE,
+)
+
+
+def asks_earlier(text: str) -> bool:
+    """The caller asks for an earlier window, typed or tapped ("anything sooner?")."""
+    return _EARLIER.search(text) is not None
+
+
+_JOIN_YES = re.compile(
+    r"\b(?:do that|yes|yeah|yep|both|sounds good|waitlist|add me|please do)\b",
+    re.IGNORECASE,
+)
+_JOIN_NO = re.compile(r"\b(?:no|not|only|just book|without)\b|n't", re.IGNORECASE)
+
+
+def accepts_waitlist(text: str) -> bool:
+    """The message takes up a waitlist offer ("Okay, do that, and book ...") and
+    turns nothing down ("just book it", "no waitlist")."""
+    text = text.replace("\u2019", "'")
+    return bool(_JOIN_YES.search(text)) and not _JOIN_NO.search(text)
 
 
 _YES = re.compile(

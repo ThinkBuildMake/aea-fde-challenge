@@ -210,6 +210,8 @@ class ToolState:
         self.unavailable: str | None = None
         self.waitlisted = False
         self.waitlist_failed = False
+        self.waitlist_offered = False
+        self.joined: dict[str, Any] | None = None
         self.cancelled = False
         self.handoff: HandoffRecord | None = None
         self.cancel_asked: list[int] = []
@@ -244,6 +246,8 @@ class ToolState:
                 for i in self.cancel_asked
                 if i in self.cancel_fee_cents and i not in self.cancel_carried
             }
+        if wants_earlier(self):
+            offered["waitlistOffered"] = True
         return json.dumps(offered)
 
     def keep_cancel_asks(self, shown: str | None, carry: bool = True) -> None:
@@ -306,6 +310,7 @@ class ToolState:
             db, conversation_id
         )
         state.cancel_confirmable = guards.last_cancel_asks(db, conversation_id)
+        state.waitlist_offered = guards.last_waitlist_offer(db, conversation_id)
         return state
 
 
@@ -546,7 +551,7 @@ def _find_open_windows(
     ctx: AppContext, state: ToolState, args: dict[str, Any]
 ) -> dict[str, Any]:
     # The earlier button asks for the earliest windows, whatever day the model passes.
-    earlier = state.caller_text.strip() == EARLIER_CHOICE.text
+    earlier = guards.asks_earlier(state.caller_text)
     found = scheduling.find_open_windows(
         ctx,
         _customer(state),
@@ -621,8 +626,21 @@ def _book_visit(
         state.conversation_id,
     )
     out = _booking_result(_stamp(ctx, state, visit))
-    if state.caller_text.strip().endswith(JOIN_SUFFIX):
-        out["instruction"] = guards.JOIN_AFTER_BOOKING_INSTRUCTION
+    if state.caller_text.strip().endswith(JOIN_SUFFIX) or (
+        state.waitlist_offered and guards.accepts_waitlist(state.caller_text)
+    ):
+        # The caller took the waitlist offer: join here, not by asking the model.
+        try:
+            state.joined = _join_waitlist(ctx, state, {})
+        except Exception:  # noqa: BLE001 - the booking stands; the caller is offered a person
+            out["instruction"] = guards.WAITLIST_FAILED_INSTRUCTION
+            state.write_failed = state.waitlist_failed = True
+            return out
+        out["instruction"] = (
+            guards.ALREADY_ON_WAITLIST_INSTRUCTION
+            if state.joined["alreadyOnWaitlist"]
+            else guards.JOIN_AFTER_BOOKING_INSTRUCTION
+        )
     return out
 
 
@@ -725,6 +743,8 @@ def card_turn_link(ctx: AppContext, state: ToolState) -> PaymentLink | None:
 def _join_waitlist(
     ctx: AppContext, state: ToolState, args: dict[str, Any]
 ) -> dict[str, Any]:
+    if state.joined is not None:  # the booking already joined this turn
+        return state.joined
     customer_id = _customer(state)
     # A join on the turn that booked holds that booking, whatever id the model passed.
     appointment_id = (
@@ -922,9 +942,10 @@ def _label(window: Window) -> str:
 
 
 def wants_earlier(state: ToolState) -> bool:
-    """The caller tapped the earlier-window button and this turn found windows to offer."""
+    """The caller asked for an earlier window (typed or tapped) and this turn found
+    windows to offer."""
     return (
-        state.caller_text.strip() == EARLIER_CHOICE.text
+        guards.asks_earlier(state.caller_text)
         and bool(state.windows)
         and state.booking is None
     )
