@@ -82,7 +82,7 @@ def test_gas_stops_the_chat(live: Chat):
 
 def test_breaker_after_the_followup_stops(live: Chat):
     first = live.say(BURNING)
-    assert first["text"] == guards.BURNING_FOLLOWUP_TEXT
+    assert first["text"] == guards.SMELL_FOLLOWUP_TEXT
     assert first["choices"] == []
     reply = live.say("Yes, the breaker tripped")
     assert reply["status"] == reply["banner"] == "safety_stop"
@@ -92,7 +92,7 @@ def test_breaker_after_the_followup_stops(live: Chat):
 
 def test_no_after_the_followup_asks_who_you_are(live: Chat):
     first = live.say(BURNING)
-    assert first["text"] == guards.BURNING_FOLLOWUP_TEXT
+    assert first["text"] == guards.SMELL_FOLLOWUP_TEXT
     reply = live.say("No, nothing like that")
     assert reply["status"] == "active"
     assert reply["banner"] == "none"

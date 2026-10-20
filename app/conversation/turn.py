@@ -701,7 +701,7 @@ def run_turn(
         final_text = (
             guards.emergency_text(state.customer_id is not None)
             if emergency
-            else guards.BURNING_FOLLOWUP_TEXT
+            else guards.SMELL_FOLLOWUP_TEXT
         )
         turn["stored"] = [user, {"role": "assistant", "content": final_text}]
         turn["tools_called"] = []

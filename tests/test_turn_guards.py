@@ -232,7 +232,7 @@ def test_nothing_is_written_before_the_screen_says_safe(
     gate.clear()
     reply = say(client, cid, "There's a burning smell")
     assert calls.books == [] and calls.windows == []
-    assert reply["text"] == guards.BURNING_FOLLOWUP_TEXT
+    assert reply["text"] == guards.SMELL_FOLLOWUP_TEXT
     assert reply["choices"] == [] and reply["booking"] is None
     assert reply["banner"] == "none" and reply["status"] == "active"
     t = rows(started, "SELECT * FROM turns WHERE conversation_id = ? AND seq = 2", cid)[
@@ -241,7 +241,7 @@ def test_nothing_is_written_before_the_screen_says_safe(
     assert t["safety_verdict"] == "burning_followup" and t["latency_ms"] >= 2000
     assert json.loads(t["model_messages"]) == [
         {"role": "user", "content": "There's a burning smell"},
-        {"role": "assistant", "content": guards.BURNING_FOLLOWUP_TEXT},
+        {"role": "assistant", "content": guards.SMELL_FOLLOWUP_TEXT},
     ]
     assert rows(started, "SELECT outcome FROM conversations")[0][0] is None
     say(client, cid, "No, nothing else")

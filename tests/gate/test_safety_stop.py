@@ -199,7 +199,7 @@ def test_burning_smell_asks_first_then_breaker_stops(
 
     first = chat.say(BURNING)
 
-    assert first["text"] == guards.BURNING_FOLLOWUP_TEXT
+    assert first["text"] == guards.SMELL_FOLLOWUP_TEXT
     assert (first["status"], first["banner"]) == ("active", "none")
     assert first["choices"] == [] and first["booking"] is None
     assert chat.handoffs() == []

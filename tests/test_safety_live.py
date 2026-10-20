@@ -65,7 +65,7 @@ BURNING = "There's a burning smell coming from my furnace"
 
 def _after_followup(tmp_settings: Settings, answer: str):
     return screen_safety(
-        _ctx(tmp_settings), answer, [BURNING, guards.BURNING_FOLLOWUP_TEXT], True
+        _ctx(tmp_settings), answer, [BURNING, guards.SMELL_FOLLOWUP_TEXT], True
     )
 
 

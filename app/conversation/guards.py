@@ -17,6 +17,10 @@ ACCOUNT_FLAGGED = "Your account has been flagged for a safety follow-up."
 CONVERSATION_FLAGGED = "This conversation has been flagged for a safety follow-up."
 BURNING_QUESTION = "Is there any burning smell, smoke, sparks or a tripped breaker?"
 BURNING_FOLLOWUP_TEXT = f"Sorry to hear that. {BURNING_QUESTION}"
+# The caller already said it smells of burning, so the screen asks only the rest (FR-1.2).
+SMELL_FOLLOWUP_TEXT = (
+    "Sorry to hear that. Is there any smoke, sparks or a tripped breaker?"
+)
 FALLBACK_TEXT = (
     "Sorry, I am having trouble right now and did not want to guess. "
     "A person can help you with this. Would you like a call back?"
