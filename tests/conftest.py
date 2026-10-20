@@ -14,6 +14,18 @@ SCHEMA_MD = REPO / "data" / "meridian_dataset" / "scheduling_db" / "SCHEMA.md"
 MIGRATIONS = REPO / "app" / "migrations"
 
 
+@pytest.fixture(autouse=True)
+def _scripted_callers_give_their_details(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Scripted turns use placeholder caller text, so identify_customer skips the check
+    that the caller wrote the details, except in tests marked caller_details."""
+    if request.node.get_closest_marker("caller_details") is None:
+        monkeypatch.setattr(
+            "app.conversation.tools._caller_gave", lambda state, args: True
+        )
+
+
 @pytest.fixture
 def seed_path() -> Path:
     return SEED

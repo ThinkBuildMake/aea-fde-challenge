@@ -378,6 +378,33 @@ def _report_status(
     return {"ok": True}
 
 
+def _caller_gave(state: ToolState, args: dict[str, Any]) -> bool:
+    """True when the name and every detail passed appear in the caller's own messages."""
+    texts = [
+        r[0]
+        for r in state.db.execute(
+            "SELECT caller_text FROM turns WHERE conversation_id = ?",
+            (state.conversation_id,),
+        )
+    ] + [state.caller_text]
+    words = " ".join(" ".join(re.findall(r"\w+", t.casefold())) for t in texts)
+    digits = [re.sub(r"\D", "", t) for t in texts]
+
+    def said(value: Any) -> bool:
+        return (
+            f" {' '.join(re.findall(r'\w+', str(value).casefold()))} " in f" {words} "
+        )
+
+    phone = re.sub(r"\D", "", str(args.get("phone") or ""))[-10:]
+    return (
+        said(args.get("name") or "")
+        and (not phone or any(phone in d for d in digits))
+        and all(
+            said(args[k]) for k in ("accountNumber", "serviceAddress") if args.get(k)
+        )
+    )
+
+
 def _identify_customer(
     ctx: AppContext, state: ToolState, args: dict[str, Any]
 ) -> dict[str, Any]:
@@ -404,6 +431,14 @@ def _identify_customer(
             "error": "missing_details",
             "message": "Ask for a phone number, account number or service address "
             "as well as the name. This did not count as a try.",
+        }
+    if not _caller_gave(state, args):
+        return {
+            "ok": False,
+            "error": "details_not_given",
+            "message": "The caller has not written that name and phone number, account "
+            "number or service address in this conversation. Ask them for it; never "
+            "make up a detail. This did not count as a try.",
         }
     reserved = state.db.execute(
         "UPDATE conversations SET identify_attempts = identify_attempts + 1 "

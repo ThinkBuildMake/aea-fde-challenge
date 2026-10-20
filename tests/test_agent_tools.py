@@ -722,6 +722,50 @@ def test_name_only_identify_is_refused_without_a_try(
     assert rows(started, "SELECT identify_attempts FROM conversations")[0][0] == 0
 
 
+@pytest.mark.caller_details
+def test_made_up_details_are_refused_without_a_try(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    ident = stub(monkeypatch, "app.scheduling.service.identify_customer", None)
+    call = identify_as("id", "Omar Patel", "512-555-0102")
+    cid, replies = run(started, [call], texts=["No, none of that."])
+    assert ident.calls == []
+    assert tool_results(started, cid)[0]["error"] == "details_not_given"
+    assert rows(started, "SELECT identify_attempts FROM conversations")[0][0] == 0
+    assert replies[0]["status"] != "handed_off"
+
+
+@pytest.mark.caller_details
+def test_details_from_an_earlier_message_are_accepted(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    looked = by_name(monkeypatch)
+    call = identify_as("id", "Omar Patel", "+1 (512) 555-0102")
+    results = [
+        result(assistant("Thanks.")),
+        result(assistant(calls=[call])),
+        result(assistant("answer")),
+    ]
+    client = client_for(started, FakeModelProvider(results=results))
+    cid = new_conversation(client)
+    say(client, cid, "I'm omar patel, 512.555.0102")
+    say(client, cid, "book it")
+    assert looked == ["Omar Patel"]
+
+
+@pytest.mark.caller_details
+def test_account_number_must_be_the_one_given(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    ident = stub(monkeypatch, "app.scheduling.service.identify_customer", None)
+    call = tool_call("id", "identify_customer")
+    call["function"]["arguments"] = json.dumps(
+        {"name": "Omar Patel", "accountNumber": "MHC-10002"}
+    )
+    run(started, [call], texts=["Omar Patel, account MHC-10003"])
+    assert ident.calls == []
+
+
 def raise_with(exc: Exception):
     def boom(*args: Any, **kwargs: Any) -> Any:
         raise exc

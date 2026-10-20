@@ -42,6 +42,7 @@ venv = ".venv"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = ["error"]
+markers = ["caller_details: keep the check that identify_customer details came from the caller"]
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["fastapi.Depends"]
