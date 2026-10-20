@@ -52,3 +52,19 @@ def test_today_follows_the_reference_clock(started: Settings):
     assert system.splitlines()[-1].startswith(
         "Today is Wednesday October 21, 2026, 09:30 Central time."
     )
+
+
+def test_instructions_carry_the_billing_dates():
+    for rule in ("issued date", "due date", "paid or unpaid", "every line item"):
+        assert rule in INSTRUCTIONS, rule
+
+
+def test_instructions_carry_the_warranty_record_rules():
+    for rule in (
+        "system_install_date",
+        "get_my_billing",
+        "registers every installed unit",
+        "return visit and labor are free",
+        "out of date",
+    ):
+        assert rule in INSTRUCTIONS, rule
