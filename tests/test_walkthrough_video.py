@@ -2,18 +2,11 @@
 
 import struct
 
-import yaml
-
 from tests.conftest import REPO
 
 VIDEO = REPO / "docs" / "walkthrough.mp4"
-SHOTLIST = REPO / ".demo" / "shotlist.yaml"
-TOPICS = {
-    "drivers": "drivers",
-    "retrieval": "retrieval",
-    "escalation": "escalation",
-    "eval-numbers": "containment",
-}
+CAPTIONS = REPO / "docs" / "walkthrough.srt"
+TOPICS = ("drivers", "retrieval", "escalation", "containment")
 
 
 def mp4_duration(data: bytes) -> float:
@@ -29,14 +22,16 @@ def mp4_duration(data: bytes) -> float:
 
 def test_video_runs_three_to_four_minutes():
     seconds = mp4_duration(VIDEO.read_bytes())
-    print(f"docs/walkthrough.mp4 runs {seconds:.1f} s ({int(seconds // 60)}:{seconds % 60:04.1f})")
+    print(
+        f"docs/walkthrough.mp4 runs {seconds:.1f} s ({int(seconds // 60)}:{seconds % 60:04.1f})"
+    )
     assert 180.0 <= seconds <= 240.0
 
 
-def test_shotlist_covers_the_four_topics():
-    scenes = {s["id"]: s for s in yaml.safe_load(SHOTLIST.read_text())["scenes"]}
-    for scene_id, word in TOPICS.items():
-        narration = " ".join(scenes[scene_id]["narration"].split())
-        print(f"{scene_id}: {narration[:90]}...")
-        assert word in narration.lower()
-        assert "PENDING" not in narration
+def test_captions_cover_the_four_topics():
+    text = CAPTIONS.read_text().lower()
+    for word in TOPICS:
+        assert word in text
+    assert "pending" not in text
+    assert "ay eye" not in text
+    assert "pee dee eff" not in text

@@ -13,3 +13,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 /var/
+
+# Local Cursor agent skills (converted from .claude/skills)
+.agents/
+
+# Demo recording workspace (shot list, voice key, build). The submitted video is docs/walkthrough.mp4.
+.demo/
