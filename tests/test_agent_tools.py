@@ -1030,7 +1030,9 @@ def test_join_after_booking_holds_the_new_booking(
         Fee(code="FEE-DIAG", cents=8900, source_file="pricing"),
     )
     got = stub(monkeypatch, "app.scheduling.service.get_appointment", held_visit(7))
-    stub(monkeypatch, "app.followups.service.join_waitlist", joined(created=True))
+    waitlist = stub(
+        monkeypatch, "app.followups.service.join_waitlist", joined(created=True)
+    )
     quote = "Book it and join the waitlist for earlier"
     cid, replies = run(
         started,
@@ -1047,6 +1049,7 @@ def test_join_after_booking_holds_the_new_booking(
     assert booked["instruction"] == JOIN_AFTER_BOOKING_INSTRUCTION
     assert joined_out["instruction"] == ON_WAITLIST_INSTRUCTION
     assert got.calls[0][1:] == ("MHC-10002", 7)
+    assert len(waitlist.calls) == 1
     assert replies[1]["booking"]["appointmentId"] == 7
     assert replies[1]["waitlisted"] is True
 
@@ -1257,6 +1260,14 @@ def test_cancel_ask_survives_a_card_turn(
         ("I want an earlier start time on Wednesday", False),
         ("earlier you said Wednesday", False),
         ("can I book Wednesday?", False),
+        ("nothing earlier works for me, Wednesday is fine", False),
+        ("Anything on Wednesday earlier than noon?", False),
+        ("Nothing sooner is needed, Wednesday is fine", False),
+        ("no need for anything earlier", False),
+        ("any earlier calls?", False),
+        ("Is there an earlier slot?", True),
+        ("Can you get someone out sooner?", True),
+        ("I need someone sooner", True),
     ],
 )
 def test_typed_earlier_request_counts_like_the_button(text: str, earlier: bool):
@@ -1330,6 +1341,8 @@ def book_after_offer(
     text: str,
     offer: bool = True,
     fail_join: bool = False,
+    offer_answer: str = "answer 1",
+    model_joins: bool = False,
 ):
     """Turn 1 shows slot 3; turn 2 asks for earlier (or not); turn 3 books slot 3 with
     `text`. The model never calls join_waitlist."""
@@ -1342,7 +1355,14 @@ def book_after_offer(
     )
     got = stub(monkeypatch, "app.scheduling.service.get_appointment", held_visit(7))
     if fail_join:
-        monkeypatch.setattr("app.scheduling.service.get_appointment", raise_not_found)
+        # The app's join fails; a model retry would find the visit.
+        def fail_once(*args: Any) -> AppointmentView:
+            if not got.calls:
+                got.calls.append(args)
+                raise_not_found()
+            return held_visit(7)
+
+        monkeypatch.setattr("app.scheduling.service.get_appointment", fail_once)
     waitlist = stub(
         monkeypatch, "app.followups.service.join_waitlist", joined(created=True)
     )
@@ -1350,7 +1370,17 @@ def book_after_offer(
         started,
         identify_and_offer(monkeypatch, "MHC-10002"),
         [tool_call("w", "find_open_windows", serviceType="hvac_repair")],
-        [tool_call("b", "book_visit", slotId=3, issue="no cooling", callerQuote=text)],
+        [
+            tool_call(
+                "b", "book_visit", slotId=3, issue="no cooling", callerQuote=text
+            ),
+            *(
+                [tool_call("j", "join_waitlist", appointmentId=7)]
+                if model_joins
+                else []
+            ),
+        ],
+        answers=["answer 0", offer_answer, "answer 2"],
         texts=[
             "hi",
             "Is there anything earlier possible?" if offer else "What do you have?",
@@ -1392,6 +1422,15 @@ def test_accepting_the_offer_joins_in_code(
         ("Book Wednesday 8 AM only", True),
         ("just book it", True),
         ("no waitlist, just book Wednesday", True),
+        ("Nah, skip the waitlist, book Wednesday", True),
+        ("Yes, but skip the waitlist", True),
+        ("Yes please. I dont want the waitlist", True),
+        ("Yes, book Wednesday, hold off on the waitlist", True),
+        ("Book Wednesday, nope to the waitlist", True),
+        ("Never mind the waitlist, book Wednesday", True),
+        ("Yes, but don't add me to the waitlist", True),
+        ("yes book it without the waitlist", True),
+        ("yes, not the waitlist", True),
         ("Okay, do that, and book the slot for Wednesday from 8 AM to 12 PM.", False),
     ],
 )
@@ -1424,9 +1463,84 @@ def test_failed_app_join_after_booking_offers_a_person(
     started: Settings, monkeypatch: pytest.MonkeyPatch
 ):
     _, replies, waitlist, _ = book_after_offer(
-        started, monkeypatch, "Yes, book Wednesday", fail_join=True
+        started, monkeypatch, "Yes, book Wednesday", fail_join=True, model_joins=True
     )
     assert waitlist.calls == []
     assert replies[2]["booking"]["appointmentId"] == 7
     assert replies[2]["waitlisted"] is False
     assert "request_callback" in replies[2]["actions"]
+
+
+def test_offer_the_caller_never_saw_is_not_recorded(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    """The earlier turn's reply was empty, so the caller got the fallback, not the offer."""
+    cid, replies, waitlist, _ = book_after_offer(
+        started, monkeypatch, "yes book Wednesday", offer_answer=""
+    )
+    assert "waitlistOffered" not in offered_rows(started, cid)[1]
+    assert waitlist.calls == []
+    assert replies[2]["waitlisted"] is False
+
+
+EARLIEST_SLOT_3 = "Wednesday October 21, 8 AM to 12 PM"
+
+
+def test_typed_earlier_request_offers_even_when_the_model_does_not_search(
+    started: Settings, monkeypatch: pytest.MonkeyPatch
+):
+    stub(monkeypatch, "app.scheduling.service.identify_customer", customer("MHC-10002"))
+    stub(monkeypatch, "app.scheduling.service.book_visit", booking())
+    stub(
+        monkeypatch,
+        "app.knowledge.service.get_fee",
+        Fee(code="FEE-DIAG", cents=8900, source_file="pricing"),
+    )
+    stub(monkeypatch, "app.scheduling.service.get_appointment", held_visit(7))
+    waitlist = stub(
+        monkeypatch, "app.followups.service.join_waitlist", joined(created=True)
+    )
+    first = identify_and_offer(monkeypatch, "MHC-10002")
+    found = Recorder(
+        OpenWindows(windows=[window(3)], matched_request=True, reason=None)
+    )
+    monkeypatch.setattr("app.scheduling.service.find_open_windows", found)
+    book = "Okay, do that, and book the slot."
+    client = client_for(
+        started,
+        FakeModelProvider(
+            results=[
+                result(assistant(calls=first)),
+                result(assistant("answer 0")),
+                result(assistant("Nothing earlier, but I can pass you to a person.")),
+                result(
+                    assistant(
+                        calls=[
+                            tool_call(
+                                "b", "book_visit", slotId=3, issue="x", callerQuote=book
+                            )
+                        ]
+                    )
+                ),
+                result(assistant("Booked.")),
+            ]
+        ),
+    )
+    cid = new_conversation(client)
+    say(client, cid, "hi")
+    offer = say(client, cid, "Is there anything earlier possible?")
+    booked = say(client, cid, book)
+    assert found.calls[-1][1:] == ("MHC-10002", "hvac_repair", None, None)
+    assert [c["label"] for c in offer["choices"]] == [
+        f"Book {EARLIEST_SLOT_3} and join the waitlist for earlier",
+        f"Book {EARLIEST_SLOT_3} only",
+        "Talk to a person instead",
+    ]
+    assert "choices_only" in offer["actions"]
+    assert offer["text"] == (
+        f"The earliest window I have is {EARLIEST_SLOT_3}. I can book it and add you "
+        "to the waitlist for an earlier window. If one opens, the team will call you."
+    )
+    assert offered_rows(started, cid)[1]["waitlistOffered"] is True
+    assert len(waitlist.calls) == 1
+    assert booked["waitlisted"] is True

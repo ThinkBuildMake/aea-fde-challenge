@@ -530,28 +530,57 @@ def last_waitlist_offer(db: sqlite3.Connection, conversation_id: str) -> bool:
 
 
 _EARLIER = re.compile(
-    r"\b(?:anything|something|nothing|any)\b(?:\s+\w+){0,2}?\s+(?:earlier|sooner)\b",
+    r"\b(?:anything|something|any)\b(?:\s+\w+){0,2}?\s+(?:earlier|sooner)"
+    r"(?:\s+(?:possible|available|please))?\s*[?.!]*\s*$"
+    r"|\b(?:an?|any)\s+(?:earlier|sooner)\s+"
+    r"(?:slot|window|time|opening|appointment|visit)s?\b"
+    r"|\bsomeone\s+(?:out\s+)?(?:earlier|sooner)\b",
+    re.IGNORECASE,
+)
+_EARLIER_NOT = re.compile(
+    rf"\b(?:no|not|never|nor|{'|'.join(_WEEKDAYS)}|today|tomorrow)\b|n't",
     re.IGNORECASE,
 )
 
 
 def asks_earlier(text: str) -> bool:
-    """The caller asks for an earlier window, typed or tapped ("anything sooner?")."""
-    return _EARLIER.search(text) is not None
+    """The caller asks for an earlier window, typed or tapped ("anything sooner?"), with
+    no negation and no day of their own ("Anything on Wednesday earlier than noon?")."""
+    return (
+        _EARLIER.search(text) is not None
+        and not _EARLIER_NOT.search(text.replace("\u2019", "'"))
+        and not any(
+            p.search(text) for p in (_MONTH_DAY, _DAY_MONTH, _ISO_DATE, _SLASH_DATE)
+        )
+    )
 
 
 _JOIN_YES = re.compile(
-    r"\b(?:do that|yes|yeah|yep|both|sounds good|waitlist|add me|please do)\b",
+    r"\b(?:do that|yes|yeah|yep|both|sounds good|and the waitlist|add me|put me on"
+    r"|please do)\b",
     re.IGNORECASE,
 )
-_JOIN_NO = re.compile(r"\b(?:no|not|only|just book|without)\b|n't", re.IGNORECASE)
+# When in doubt, no join.
+_JOIN_NO = re.compile(
+    r"\b(?:no|not|never|only|just book|without|skip|pass|forget|hold off|nope|nah"
+    r"|dont|do not|but)\b|n't",
+    re.IGNORECASE,
+)
 
 
 def accepts_waitlist(text: str) -> bool:
     """The message takes up a waitlist offer ("Okay, do that, and book ...") and
-    turns nothing down ("just book it", "no waitlist")."""
+    turns nothing down ("just book it", "skip the waitlist")."""
     text = text.replace("\u2019", "'")
     return bool(_JOIN_YES.search(text)) and not _JOIN_NO.search(text)
+
+
+def earlier_offer_text(earliest: str) -> str:
+    """The app's own offer when the caller asks for earlier and the model did not search."""
+    return (
+        f"The earliest window I have is {earliest}. I can book it and add you to the "
+        "waitlist for an earlier window. If one opens, the team will call you."
+    )
 
 
 _YES = re.compile(

@@ -211,6 +211,7 @@ class ToolState:
         self.waitlisted = False
         self.waitlist_failed = False
         self.waitlist_offered = False
+        self.waitlist_shown = False  # the reply went out as the waitlist offer
         self.joined: dict[str, Any] | None = None
         self.cancelled = False
         self.handoff: HandoffRecord | None = None
@@ -246,7 +247,7 @@ class ToolState:
                 for i in self.cancel_asked
                 if i in self.cancel_fee_cents and i not in self.cancel_carried
             }
-        if wants_earlier(self):
+        if self.waitlist_shown:
             offered["waitlistOffered"] = True
         return json.dumps(offered)
 
@@ -633,6 +634,12 @@ def _book_visit(
         try:
             state.joined = _join_waitlist(ctx, state, {})
         except Exception:  # noqa: BLE001 - the booking stands; the caller is offered a person
+            # No retry this turn: the caller is told they are not on the waitlist.
+            state.joined = {
+                "ok": False,
+                "error": "waitlist_failed",
+                "instruction": guards.WAITLIST_FAILED_INSTRUCTION,
+            }
             out["instruction"] = guards.WAITLIST_FAILED_INSTRUCTION
             state.write_failed = state.waitlist_failed = True
             return out
@@ -743,7 +750,7 @@ def card_turn_link(ctx: AppContext, state: ToolState) -> PaymentLink | None:
 def _join_waitlist(
     ctx: AppContext, state: ToolState, args: dict[str, Any]
 ) -> dict[str, Any]:
-    if state.joined is not None:  # the booking already joined this turn
+    if state.joined is not None:  # the booking already joined (or failed to) this turn
         return state.joined
     customer_id = _customer(state)
     # A join on the turn that booked holds that booking, whatever id the model passed.
@@ -949,6 +956,68 @@ def wants_earlier(state: ToolState) -> bool:
         and bool(state.windows)
         and state.booking is None
     )
+
+
+def _last_service_type(history: list[dict[str, Any]]) -> str | None:
+    """The serviceType of the last find_open_windows call in the replayed history."""
+    found: str | None = None
+    for message in history:
+        for call in message.get("tool_calls") or []:
+            fn = call.get("function") or {}
+            if fn.get("name") == "find_open_windows":
+                try:
+                    found = str(json.loads(fn.get("arguments") or "{}")["serviceType"])
+                except (ValueError, KeyError, TypeError):
+                    continue
+    return found
+
+
+def offer_earlier(
+    ctx: AppContext, state: ToolState, history: list[dict[str, Any]]
+) -> list[dict[str, Any]] | None:
+    """When a matched caller who was shown windows asks for earlier and the model did not
+    search, run the earliest-window search here. Returns the messages to store in place
+    of the model's (the search and the fixed offer), or None to keep the model's reply."""
+    service_type = _last_service_type(history)
+    if (
+        state.customer_id is None
+        or not state.earlier_slot_ids
+        or state.windows
+        or state.booking is not None
+        or state.handoff is not None
+        or service_type is None
+        or not guards.asks_earlier(state.caller_text)
+    ):
+        return None
+    args = {"serviceType": service_type}
+    try:
+        out = _find_open_windows(ctx, state, args)
+    except Exception:  # noqa: BLE001 - no search, the model's reply stands
+        return None
+    if not wants_earlier(state):
+        return None
+    call_id = "app_earlier_search"
+    return [
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": call_id,
+                    "type": "function",
+                    "function": {
+                        "name": "find_open_windows",
+                        "arguments": json.dumps(args),
+                    },
+                }
+            ],
+        },
+        {"role": "tool", "tool_call_id": call_id, "content": json.dumps(out)},
+        {
+            "role": "assistant",
+            "content": guards.earlier_offer_text(_when(state.windows[0])),
+        },
+    ]
 
 
 def choices(state: ToolState) -> list[Choice]:
