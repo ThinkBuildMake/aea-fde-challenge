@@ -292,6 +292,13 @@ def test_screen_reports_its_tokens_and_cost(tmp_settings: Settings) -> None:
         ("There is smoke", False),
         ("No, there is smoke", False),
         # Past tense says nothing about now; hazards _RISKY used to miss (S52 review).
+        ("No burning smell or sparks, and the breaker is fine.", True),
+        ("No smoke. The breaker's fine.", True),
+        ("No sparks and the breaker is ok", True),
+        ("No smoke, the breaker is fine but it smells hot", False),
+        ("No smoke and the breaker is fine now", False),
+        ("The breaker is fine", False),
+        ("No smoke, the breaker is not fine", False),
         ("There was no smoke", False),
         ("there was no smoke or anything like that", False),
         ("no smoke or anything like that. outlet is glowing", False),

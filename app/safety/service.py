@@ -151,7 +151,10 @@ _NO_HAZARDS = (
     r"(?: or anything(?: like that)?)?"
 )
 _POLITE = r"(?:sir|ma'?am|thanks|thank you|that'?s it)"
-_CLEAR_PART = re.compile(rf"(?:{_NEG}|{_NO_HAZARDS})(?: {_POLITE})?")
+# "and the breaker is fine": a plain statement that the breaker has not tripped.
+_BREAKER_OK = r"(?:and )?(?:the )?breaker(?:'s| is) (?:fine|ok|okay|good|normal)"
+_CLEAR_PART = re.compile(rf"(?:{_NEG}|{_NO_HAZARDS})(?: {_BREAKER_OK})?(?: {_POLITE})?")
+_BREAKER_OK_PART = re.compile(_BREAKER_OK)
 # "no smoke, no sparks, and no tripped breaker" and "no smoke, sparks, or tripped
 # breaker" are one list of negatives; "no smoke, and sparks" and "no smoke, sparks"
 # are not (a bare comma joins a list only when it ends in "or <hazard>", FR-1.1).
@@ -191,7 +194,10 @@ def _is_clear_no(text: str) -> bool:
     if not parts or not _CLEAR_PART.fullmatch(parts[0]):
         return False
     return all(
-        _CLEAR_PART.fullmatch(p) or _POLITE_PART.fullmatch(p) or not _RISKY.search(p)
+        _CLEAR_PART.fullmatch(p)
+        or _POLITE_PART.fullmatch(p)
+        or _BREAKER_OK_PART.fullmatch(p)
+        or not _RISKY.search(p)
         for p in parts[1:]
     )
 
