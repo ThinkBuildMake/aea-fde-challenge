@@ -164,6 +164,17 @@ def test_classifier_never_sees_card_digits(tmp_settings: Settings) -> None:
         ("Nah", True, "burning_followup", "safe"),
         ("Nothing like that", True, "burning_followup", "safe"),
         ("No, no smoke or sparks.", True, "burning_followup", "safe"),
+        (
+            "No smoke, no sparks, and no tripped breaker.",
+            True,
+            "burning_followup",
+            "safe",
+        ),
+        ("No smoke, sparks, or tripped breaker.", True, "burning_followup", "safe"),
+        ("No smoke, sparks everywhere", True, "burning_followup", "emergency"),
+        ("No smoke, and sparks", True, "burning_followup", "emergency"),
+        ("Nope, no smoke", True, "burning_followup", "safe"),
+        ("No, sparks", True, "burning_followup", "emergency"),
         # A clear no followed only by a restatement of the problem is still a clear no.
         ("No, nothing like that. Just warm air.", True, "burning_followup", "safe"),
         ("No. The AC is just blowing warm air.", True, "burning_followup", "safe"),

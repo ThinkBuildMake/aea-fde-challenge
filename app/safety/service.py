@@ -134,6 +134,11 @@ _HAZARD = r"(?:smoke|sparks?|fire|flames?|tripped breaker)"
 _NO_HAZARDS = rf"no {_HAZARD}(?: (?:or|and|nor) (?:no )?{_HAZARD})*"
 _POLITE = r"(?:sir|ma'?am|thanks|thank you|that'?s it)"
 _CLEAR_PART = re.compile(rf"(?:{_NEG}|{_NO_HAZARDS})(?: {_POLITE})?")
+# "no smoke, no sparks, and no tripped breaker" and "no smoke, sparks, or tripped
+# breaker" are one list of negatives; "no smoke, and sparks" is not.
+_LIST_COMMA = re.compile(
+    rf"\b({_HAZARD}),\s*(?:(?:and\s+)?(?=no\s+{_HAZARD}\b)|(?:(?:or|nor)\s+)?(?={_HAZARD}\b))"
+)
 _POLITE_PART = re.compile(_POLITE)
 
 
@@ -149,7 +154,7 @@ _RISKY = re.compile(
 
 
 def _is_clear_no(text: str) -> bool:
-    t = text.casefold().replace("\u2019", "'")
+    t = _LIST_COMMA.sub(r"\1 or ", text.casefold().replace("\u2019", "'"))
     parts = [" ".join(p.split()) for p in re.split(r"[,.;!]+", t)]
     parts = [p for p in parts if p]
     if not parts or not _CLEAR_PART.fullmatch(parts[0]):
