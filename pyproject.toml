@@ -10,7 +10,7 @@ dependencies = [
     "pydantic-settings==2.16.0",
     "python-multipart==0.0.32",
     "openai==3.35.1",
-    "numpy==2.5.3",
+    "numpy==2.5.4",
     "langfuse==4.16.0",
     "limits==5.8.0",
 ]
