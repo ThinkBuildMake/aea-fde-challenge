@@ -14,7 +14,6 @@ from app.safety.service import (
     REASONS,
     OpenRouterSafetyClassifier,
     ScreenUnavailable,
-    _is_clear_no,
     screen_safety,
 )
 from app.settings import Settings
@@ -141,106 +140,80 @@ def test_classifier_never_sees_card_digits(tmp_settings: Settings) -> None:
 
 
 @pytest.mark.parametrize(
-    ("text", "pending", "model_says", "expected"),
+    ("text", "pending", "model_says", "answer", "expected"),
     [
-        ("yes, the breaker tripped", True, "safe", "emergency"),
-        ("No, no smoke or sparks", True, "safe", "safe"),
-        ("hmm", True, "burning_followup", "emergency"),
-        ("no", False, "emergency", "emergency"),
-        ("no idea", True, "safe", "emergency"),
-        ("no clue", True, "safe", "emergency"),
-        ("No, I can't tell", True, "safe", "emergency"),
-        ("not certain", True, "safe", "emergency"),
-        ("No, nothing like that", True, "burning_followup", "safe"),
-        ("No", True, "burning_followup", "safe"),
-        ("Yes, the breaker tripped", True, "burning_followup", "emergency"),
-        ("No, but now there is smoke", True, "emergency", "emergency"),
+        # The model reads the meaning; its "no" is safe in any wording.
+        ("Nope, no smell at all", True, "safe", "no", "safe"),
         (
-            "None of those, but it smells stronger",
+            "No burning smell or sparks, and the breaker is fine.",
             True,
-            "burning_followup",
-            "emergency",
-        ),
-        ("No, but now there is smoke", True, "burning_followup", "emergency"),
-        ("No smoke, but I see sparks", True, "burning_followup", "emergency"),
-        ("No, it's getting hotter", True, "burning_followup", "emergency"),
-        ("No, the breaker tripped", True, "burning_followup", "emergency"),
-        ("No, there's still a smell", True, "safe", "emergency"),
-        ("Nope", True, "burning_followup", "safe"),
-        ("No sir", True, "burning_followup", "safe"),
-        ("Not at all", True, "burning_followup", "safe"),
-        ("Nah", True, "burning_followup", "safe"),
-        ("Nothing like that", True, "burning_followup", "safe"),
-        ("No, no smoke or sparks.", True, "burning_followup", "safe"),
-        (
-            "No smoke, no sparks, and no tripped breaker.",
-            True,
-            "burning_followup",
+            "safe",
+            "no",
             "safe",
         ),
-        ("No smoke, sparks, or tripped breaker.", True, "burning_followup", "safe"),
-        ("No smoke, sparks everywhere", True, "burning_followup", "emergency"),
-        ("No smoke, and sparks", True, "burning_followup", "emergency"),
-        ("Nope, no smoke", True, "burning_followup", "safe"),
-        ("No, sparks", True, "burning_followup", "emergency"),
-        # A clear no followed only by a restatement of the problem is still a clear no.
-        ("No, nothing like that. Just warm air.", True, "burning_followup", "safe"),
-        ("No. The AC is just blowing warm air.", True, "burning_followup", "safe"),
-        ("Nope, it just won't cool the house", True, "burning_followup", "safe"),
-        (
-            "No, nothing like that. The AC just runs but the air is warm.",
-            True,
-            "burning_followup",
-            "safe",
-        ),
-        ("No, but the breaker keeps tripping", True, "burning_followup", "emergency"),
+        ("I don't think so", True, "safe", "no", "safe"),
+        ("not that I know of", True, "safe", "no", "safe"),
         (
             "No, nothing like that. Can someone come out to look at it?",
             True,
-            "burning_followup",
+            "safe",
+            "no",
             "safe",
         ),
-        ("No? I don't know", True, "burning_followup", "emergency"),
         (
-            "No, no smoke or smells. Can someone come out? I'm Hannah Rivera, 512-651-1296.",
+            "No, nothing like that. The AC just runs but the air is warm.",
             True,
-            "burning_followup",
+            "safe",
+            "no",
             "safe",
         ),
-        ("No smoke, smells", True, "burning_followup", "emergency"),
-        ("No smoke, sparks", True, "burning_followup", "emergency"),
-        ("No sparks, smoke!", True, "burning_followup", "emergency"),
-        ("No smoke, sparks or fire", True, "burning_followup", "safe"),
-        ("No smoke, but it smells", True, "burning_followup", "emergency"),
-        ("No. Is a burning smell bad?", True, "burning_followup", "emergency"),
-        ("No, the furnace just won't start", True, "burning_followup", "safe"),
-        # Anything risky, hedged or contrasted after the no stays an emergency.
+        # Anything but its "no" stops the chat.
+        ("yes, the breaker tripped", True, "safe", "yes_or_unsure", "emergency"),
         (
-            "No, just warm air but it smells a bit",
+            "No, there's still a smell",
             True,
             "burning_followup",
+            "yes_or_unsure",
             "emergency",
         ),
-        (
-            "No, just warm air. I think I smell gas",
-            True,
-            "burning_followup",
-            "emergency",
-        ),
-        ("No, not sure though", True, "burning_followup", "emergency"),
-        ("No, maybe a little smoke", True, "burning_followup", "emergency"),
-        ("No, it is buzzing and hot", True, "burning_followup", "emergency"),
-        ("No, the outlet sparked earlier", True, "burning_followup", "emergency"),
-        ("No, I can't tell", True, "burning_followup", "emergency"),
-        ("Just warm air, no", True, "burning_followup", "emergency"),
+        ("okay, let's schedule it.", True, "safe", "not_pending", "emergency"),
+        # Its own emergency is never downgraded.
+        ("No", True, "emergency", "no", "emergency"),
+        ("no", False, "emergency", "not_pending", "emergency"),
+        # A yes, a doubt or a "but" naming a hazard overrules its "no".
+        ("Yes, the breaker tripped", True, "safe", "no", "emergency"),
+        ("no idea", True, "safe", "no", "emergency"),
+        ("no clue", True, "safe", "no", "emergency"),
+        ("No, I can't tell", True, "safe", "no", "emergency"),
+        ("not certain", True, "safe", "no", "emergency"),
+        ("No, not sure though", True, "safe", "no", "emergency"),
+        ("No, maybe a little smoke", True, "safe", "no", "emergency"),
+        ("No? I don\u2019t know", True, "safe", "no", "emergency"),
+        ("No smoke, but I see sparks", True, "safe", "no", "emergency"),
+        ("None of those, but it smells stronger", True, "safe", "no", "emergency"),
+        ("No smoke at all, but it smells hot", True, "safe", "no", "emergency"),
+        ("No, but the breaker keeps tripping", True, "safe", "no", "emergency"),
     ],
 )
 def test_vr2_followup_rules(
-    tmp_settings: Settings, text: str, pending: bool, model_says: str, expected: str
+    tmp_settings: Settings,
+    text: str,
+    pending: bool,
+    model_says: str,
+    answer: str,
+    expected: str,
 ) -> None:
     reason = {"safe": "no_hazard", "emergency": "gas"}.get(model_says, "burning_smell")
-    ctx = _ctx(tmp_settings, FakeClassifier(model_says, reason))
+    ctx = _ctx(tmp_settings, FakeClassifier(model_says, reason, answer))
     assert screen_safety(ctx, text, [], pending).verdict == expected
+
+
+@pytest.mark.parametrize("pending", [True, False])
+def test_followup_has_its_own_prompt(tmp_settings: Settings, pending: bool) -> None:
+    fake = FakeClassifier("safe", "no_hazard", "no" if pending else None)
+    screen_safety(_ctx(tmp_settings, fake), "No", [], pending)
+    asked = "asked whether there is any smoke, sparks or a tripped breaker"
+    assert (asked in fake.seen[0]) is pending
 
 
 def test_screen_reports_its_tokens_and_cost(tmp_settings: Settings) -> None:
@@ -263,56 +236,6 @@ def test_screen_reports_its_tokens_and_cost(tmp_settings: Settings) -> None:
     assert seen == [usage.Usage(input_tokens=120, output_tokens=8, cost_usd=0.00002)]
 
 
-@pytest.mark.parametrize(
-    ("text", "expected"),
-    [
-        ("No burning smell or anything like that.", True),
-        (
-            "No burning smell or anything like that. I'm Grace Okafor, 512-555-0103.",
-            True,
-        ),
-        (
-            (
-                "No, there is no smoke, smell, or sparks, and no tripped breaker. "
-                "It is just warm air."
-            ),
-            True,
-        ),
-        (
-            "No burning smell or anything like that. Can someone come out to look at it?",
-            True,
-        ),
-        ("No smoke, sparks", False),
-        ("not that I know of", False),
-        ("No smoke but I smell burning", False),
-        ("no sparks, just smoke", False),
-        ("I don't think so", False),
-        ("No, but the breaker tripped", False),
-        ("No burning smell or anything like that, but sparks", False),
-        ("There is smoke", False),
-        ("No, there is smoke", False),
-        # Past tense says nothing about now; hazards _RISKY used to miss (S52 review).
-        ("No burning smell or sparks, and the breaker is fine.", True),
-        ("No smoke. The breaker's fine.", True),
-        ("No sparks and the breaker is ok", True),
-        ("No smoke, the breaker is fine but it smells hot", False),
-        ("No smoke and the breaker is fine now", False),
-        ("The breaker is fine", False),
-        ("No smoke, the breaker is not fine", False),
-        ("There was no smoke", False),
-        ("there was no smoke or anything like that", False),
-        ("no smoke or anything like that. outlet is glowing", False),
-        ("no smoke or anything, the panel is arcing", False),
-        ("no fire or anything, just a flash", False),
-        ("No sparks or anything. There was a bang and the power went out", False),
-        ("no smoke or anything, my CO detector is beeping", False),
-        ("No smoke. It popped and the lights went out", False),
-    ],
-)
-def test_s52_more_clear_nos(text: str, expected: bool) -> None:
-    assert _is_clear_no(text) is expected
-
-
 ASKED = ["My AC is blowing warm air", guards.BURNING_FOLLOWUP_TEXT]
 REASKED = [*ASKED, "How much is labor on a compressor?", guards.BURNING_FOLLOWUP_TEXT]
 
@@ -332,9 +255,8 @@ def test_s52_unanswered_followup_is_asked_again(
 @pytest.mark.parametrize(
     ("text", "answer"),
     [
-        ("How hot does the compressor get?", "unanswered"),  # a _RISKY word
+        ("Maybe, how hot does the compressor get?", "unanswered"),  # a doubt word
         ("okay, let's schedule it.", "yes_or_unsure"),
-        ("okay, let's schedule it.", "no"),
         ("okay, let's schedule it.", "not_pending"),
         ("okay, let's schedule it.", None),  # the field is missing
     ],
@@ -356,17 +278,12 @@ def test_s52_asked_again_only_once(tmp_settings: Settings) -> None:
 @pytest.mark.parametrize(
     ("text", "reply", "expected"),
     [
-        ("not that I know of", ("safe", "no_hazard", "no"), "followup_not_clear_no"),
-        (
-            "No smoke, sparks",
-            ("burning_followup", "burning_smell", "no"),
-            "followup_not_clear_no",
-        ),
+        ("yeah kind of", ("safe", "no_hazard", "no"), "followup_not_clear_no"),
         ("okay, let's schedule it.", ("emergency", "smoke", "unanswered"), "smoke"),
         ("No", ("emergency", "smoke", "no"), "smoke"),
     ],
 )
-def test_s52_model_never_makes_it_safe(
+def test_s52_model_safe_only_by_its_no(
     tmp_settings: Settings, text: str, reply: tuple[str, str, str], expected: str
 ) -> None:
     ctx = _ctx(tmp_settings, FakeClassifier(*reply))

@@ -53,15 +53,31 @@ _SYSTEM_PROMPT = (
     "or a burning smell together with a tripped breaker.\n"
     "- burning_followup: a burning smell on its own, with no other danger mentioned.\n"
     "- safe: nothing dangerous.\n"
-    "If follow_up_pending is true, the caller was just asked whether there is smoke, "
-    "sparks or a tripped breaker: only a clear no is safe; yes, unsure or unclear is "
-    "emergency. The burning smell in recent_turns is already known, so a clear no to "
-    "the follow-up is safe.\n"
-    "followup_answer: when follow_up_pending is false, not_pending. Otherwise no if the "
-    "caller says there is none of those; yes_or_unsure if they say yes, mention any "
-    "danger, or are unsure; unanswered if the message does not answer the question at "
-    "all (it asks or says something else).\n"
+    "followup_answer: not_pending.\n"
     "The reason must be one label from the allowed list. Never quote the caller. "
+    "The input is JSON with message, recent_turns and follow_up_pending."
+)
+
+# The turn after the burning-smell question: the model reads the answer's meaning.
+_FOLLOWUP_PROMPT = (
+    "A caller to a home-services company said something smells of burning and was then "
+    "asked whether there is any smoke, sparks or a tripped breaker. Classify their reply. "
+    "Reply only with JSON: a verdict, a reason label and a followup_answer.\n"
+    "followup_answer:\n"
+    '- no: they say there is none of those, in any wording, e.g. "Nope, no smell at '
+    'all", "No burning smell or sparks, and the breaker is fine", "I don\'t think so", '
+    '"not that I know of", "No, nothing like that. Just warm air. Can someone come '
+    'out?". Restating the problem, giving their name or asking to book is fine.\n'
+    "- yes_or_unsure: they say yes, name any danger now or earlier (smoke, sparks, "
+    "a tripped or tripping breaker, gas, carbon monoxide, an alarm, flames, a smell "
+    "getting stronger, buzzing, popping, arcing, a hot or glowing outlet or panel, the "
+    'power going out), hedge or are unsure, e.g. "No, but it smells stronger", "No '
+    'smoke, but I see sparks", "No, the outlet sparked earlier", "not sure", "maybe a '
+    'little".\n'
+    "- unanswered: the reply does not answer the question at all (it asks or says "
+    "something else).\n"
+    "verdict: emergency if they name any danger, otherwise safe. The reason must be one "
+    "label from the allowed list. Never quote the caller. "
     "The input is JSON with message, recent_turns and follow_up_pending."
 )
 
@@ -138,45 +154,14 @@ def redact_card_numbers(text: str) -> RedactResult:
     return RedactResult(text=new, removed=count > 0)
 
 
-# A clear no is a short negative and nothing else of substance: every comma- or
-# full-stop-separated part of the answer must be one of these, and one must be negative.
-_NEG = r"(?:no|nope|nah|none|negative|not at all|nothing(?: like that)?|none of (?:those|that|them|the above))"
-_HAZARD = (
-    r"(?:smoke|sparks?|fire|flames?|tripped breaker|(?:burning )?(?:smells?|odou?rs?))"
-)
-# "there is no smoke or sparks", "no burning smell or anything like that" (not "there
-# was no smoke": that says nothing about now)
-_NO_HAZARDS = (
-    rf"(?:there(?:'s| is| are) )?no {_HAZARD}(?: (?:or|and|nor) (?:no )?{_HAZARD})*"
-    r"(?: or anything(?: like that)?)?"
-)
-_POLITE = r"(?:sir|ma'?am|thanks|thank you|that'?s it)"
-# "and the breaker is fine": a plain statement that the breaker has not tripped.
-_BREAKER_OK = r"(?:and )?(?:the )?breaker(?:'s| is) (?:fine|ok|okay|good|normal)"
-_CLEAR_PART = re.compile(rf"(?:{_NEG}|{_NO_HAZARDS})(?: {_BREAKER_OK})?(?: {_POLITE})?")
-_BREAKER_OK_PART = re.compile(_BREAKER_OK)
-# "no smoke, no sparks, and no tripped breaker" and "no smoke, sparks, or tripped
-# breaker" are one list of negatives; "no smoke, and sparks" and "no smoke, sparks"
-# are not (a bare comma joins a list only when it ends in "or <hazard>", FR-1.1).
-_LIST_COMMA = re.compile(
-    rf"\b({_HAZARD}),\s*(?:(?:and\s+)?(?=no\s+{_HAZARD}\b)|(?:or|nor)\s+(?={_HAZARD}\b)"
-    rf"|(?={_HAZARD}(?:,\s*{_HAZARD})*,?\s+(?:or|nor)\s+{_HAZARD}\b))"
-)
-_POLITE_PART = re.compile(_POLITE)
-
-
-# After the negative, a caller may restate their problem ("Just warm air."). Such a
-# part is fine only if it names no hazard and holds no doubt, contrast or change. A
-# plain "but" or a question after the no is allowed ("it runs but the air is warm",
-# "can someone come out?"); the hazard words still apply, and "no?" is not a clear no.
-_RISKY = re.compile(
-    r"smok|spark|burn|smell|odou?r|fume|gas|fire|flame|breaker|trip|shock|melt|"
-    r"buzz|sizzl|crackl|wir(?:e|ing)|carbon|alarm|hot|overheat|scorch|"
-    r"glow|\barc(?:s|ed|ing)?\b|flash|\bbang|\bpop(?:s|ped|ping)?\b|beep|detector|"
-    r"lights? went|power went|power (?:is )?out|"
-    r"\b(?:though|although|except|however|actually|wait|still|now|worse|stronger|"
-    r"maybe|might|perhaps|sure|unsure|think|guess|tell|know|idea|clue|certain|"
-    r"kind of|sort of|little|bit|yes|yeah|yep|earlier)\b"
+# The backstop under the model's "no": a yes, a doubt, or a "but" that names a hazard
+# ("No smoke, but I see sparks") stops the chat whatever the model said. It can only
+# make a verdict more cautious, so it stays short.
+_DOUBT = re.compile(
+    r"\b(?:yes|yeah|yep|yup|maybe|might|perhaps|possibly|probably|unsure|dunno"
+    r"|not (?:sure|certain)|no (?:idea|clue)|kind of|sort of|a little|a bit)\b"
+    r"|\b(?:don't|do not|can't|cannot) (?:know|tell)\b"
+    r"|\bbut\b[^.!?]*(?:smok|spark|trip|fire|flame|gas|smell|burn|hot|buzz|glow)"
 )
 
 
@@ -185,21 +170,6 @@ _RISKY = re.compile(
 # reply: two asks among them mean the last turn was already a re-ask (or the agent asked
 # twice), so there is no second re-ask.
 _ASKED = "smoke, sparks or a tripped breaker?"
-
-
-def _is_clear_no(text: str) -> bool:
-    t = _LIST_COMMA.sub(r"\1 or ", text.casefold().replace("\u2019", "'"))
-    parts = [" ".join(p.split()) for p in re.split(r"[,.;!]+", t)]
-    parts = [p for p in parts if p]
-    if not parts or not _CLEAR_PART.fullmatch(parts[0]):
-        return False
-    return all(
-        _CLEAR_PART.fullmatch(p)
-        or _POLITE_PART.fullmatch(p)
-        or _BREAKER_OK_PART.fullmatch(p)
-        or not _RISKY.search(p)
-        for p in parts[1:]
-    )
 
 
 def _classifier(ctx: AppContext) -> SafetyClassifier:
@@ -218,7 +188,10 @@ def screen_safety(
     clean = redact_card_numbers(text).text
     turns = [redact_card_numbers(t).text for t in recent_turns]
     messages = [
-        {"role": "system", "content": _SYSTEM_PROMPT},
+        {
+            "role": "system",
+            "content": _FOLLOWUP_PROMPT if follow_up_pending else _SYSTEM_PROMPT,
+        },
         {
             "role": "user",
             "content": json.dumps(
@@ -241,16 +214,17 @@ def screen_safety(
         )
         raise ScreenUnavailable from None
     verdict, reason = parsed.verdict, parsed.reason
-    # With the follow-up question pending, a clear no is safe and anything else is an
-    # emergency; the model's own emergency is never downgraded. The model may only turn
-    # a stop into one more ask: a message with no hazard or doubt word that it calls
-    # unanswered, unless the question was already asked twice in a row.
+    # With the follow-up question pending, the model's "no" is safe and anything else is
+    # an emergency; its own emergency is never downgraded, and a doubt word overrules
+    # its "no". A reply it calls unanswered is asked once more, unless the question was
+    # already asked twice in a row.
+    doubt = _DOUBT.search(clean.casefold().replace("’", "'"))
     if follow_up_pending and verdict != "emergency":
-        if _is_clear_no(clean):
+        if parsed.followup_answer == "no" and not doubt:
             verdict, reason = "safe", "no_hazard"
         elif (
             parsed.followup_answer == "unanswered"
-            and not _RISKY.search(clean.casefold())
+            and not doubt
             and sum(_ASKED in t.casefold() for t in turns[-3:]) < 2
         ):
             verdict, reason = "burning_followup", "followup_unanswered"

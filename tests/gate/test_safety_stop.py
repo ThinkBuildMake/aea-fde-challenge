@@ -35,7 +35,7 @@ SCREEN = {
     GAS: {"verdict": "emergency", "reason": "gas"},
     BURNING: {"verdict": "burning_followup", "reason": "burning_smell"},
     YES: {"verdict": "burning_followup", "reason": "burning_smell"},
-    NO: {"verdict": "burning_followup", "reason": "burning_smell"},
+    NO: {"verdict": "safe", "reason": "no_hazard", "followup_answer": "no"},
 }
 WARM = "My AC is blowing warm air"
 LABOR = "How much is labor on a compressor?"

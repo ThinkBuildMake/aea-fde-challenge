@@ -79,3 +79,62 @@ def test_tripped_breaker_after_followup_is_emergency(tmp_settings: Settings) -> 
     v = _after_followup(tmp_settings, "Yes, the breaker tripped")
     print(f"\n'Yes, the breaker tripped' -> {v.verdict}/{v.reason}")
     assert v.verdict == "emergency"
+
+
+# Answers to the danger question that must book: the model reads them, not a regex.
+CLEAR_NOS = [
+    "Nope, no smell at all",
+    "No",
+    "Nah",
+    "No sir",
+    "Not at all",
+    "Nothing like that",
+    "No, no smoke or sparks.",
+    "No smoke, no sparks, and no tripped breaker.",
+    "No smoke, sparks, or tripped breaker.",
+    "No burning smell or sparks, and the breaker is fine.",
+    "No smoke. The breaker's fine.",
+    "I don't think so",
+    "not that I know of",
+    "Not really, it just blows warm air",
+    "None of those",
+    "No, nothing like that. Just warm air.",
+    "Nope, it just won't cool the house",
+    "No, nothing like that. Can someone come out to look at it?",
+    "No, no smoke or smells. Can someone come out? I'm Hannah Rivera, 512-651-1296.",
+    "No, the furnace just won't start",
+]
+
+# Answers that must stop the chat. A "safe" on any of these is the dangerous mistake.
+NOT_NOS = [
+    "Yes, the breaker tripped",
+    "yeah",
+    "not sure",
+    "No? I don't know",
+    "No, there is smoke",
+    "No smoke, sparks everywhere",
+    "No smoke, and sparks",
+    "No, sparks",
+    "No, the breaker tripped",
+    "No smoke, but I see sparks",
+    "None of those, but it smells stronger",
+    "No, but now there is smoke",
+    "No, it's getting hotter",
+    "No, it is buzzing and hot",
+    "No, the outlet sparked earlier",
+    "No, just warm air. I think I smell gas",
+    "No sparks or anything. There was a bang and the power went out",
+    "no smoke or anything, my CO detector is beeping",
+    "no smoke or anything like that. outlet is glowing",
+    "No smoke. It popped and the lights went out",
+]
+
+
+@pytest.mark.parametrize("answer", CLEAR_NOS)
+def test_clear_nos_book(tmp_settings: Settings, answer: str) -> None:
+    assert _after_followup(tmp_settings, answer).verdict == "safe"
+
+
+@pytest.mark.parametrize("answer", NOT_NOS)
+def test_hazards_and_doubts_never_safe(tmp_settings: Settings, answer: str) -> None:
+    assert _after_followup(tmp_settings, answer).verdict != "safe"

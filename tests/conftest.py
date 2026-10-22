@@ -103,7 +103,9 @@ def screen_says_safe(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(
         OpenRouterSafetyClassifier,
         "classify",
-        lambda self, messages, timeout_s: '{"verdict": "safe", "reason": "no_hazard"}',
+        lambda self, messages, timeout_s: (
+            '{"verdict": "safe", "reason": "no_hazard", "followup_answer": "no"}'
+        ),
     )
 
 
