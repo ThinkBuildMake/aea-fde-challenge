@@ -1,0 +1,32 @@
+app = "aea-fde-challenge"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  SCHEDULING_DB_PATH = "/data/sched.sqlite"
+  APP_DB_PATH = "/data/app.sqlite"
+  INDEX_PATH = "/data/index/knowledge_index.npz"
+  PORT = "8000"
+
+[mounts]
+  source = "data"
+  destination = "/data"
+
+# SQLite on one volume: exactly one machine, never stopped mid-call.
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "off"
+  min_machines_running = 1
+
+[[http_service.checks]]
+  method = "GET"
+  path = "/health"
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "60s"
+
+[[vm]]
+  memory = "1gb"
