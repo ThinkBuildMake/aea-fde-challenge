@@ -174,26 +174,6 @@ def test_promises(text: str, promise: bool):
 @pytest.mark.parametrize(
     "text",
     [
-        "Yes",
-        "Yes, cancel it",
-        "yes please",
-        "Sure, go ahead.",
-        "OK, cancel it",
-        "Confirm",
-        # Accepting the stated fee is still a clear yes.
-        "I accept the fee. Please go ahead and cancel it.",
-        "That's fine, I'll pay the $49. Yes, cancel it.",
-        "Understood about the fee. Go ahead and cancel.",
-        "Please cancel it.",
-    ],
-)
-def test_a_clear_yes_confirms(text: str):
-    assert guards.clear_yes(text) is True
-
-
-@pytest.mark.parametrize(
-    "text",
-    [
         guards.CARD_REFUSAL_TEXT,
         "Sorry, I can't accept card numbers here.",
         "I’m unable to take card details in this chat.",
@@ -203,28 +183,6 @@ def test_a_clear_yes_confirms(text: str):
 )
 def test_refuses_card(text: str):
     assert guards.refuses_card(text) is True
-
-
-@pytest.mark.parametrize(
-    "text",
-    [
-        "Can you waive the $49?",
-        "Maybe I'll cancel, I'm not sure",
-        "Cancel my visit",
-        "Yes, but can you waive the fee",
-        "No, keep it",
-        "Yes? What does it cost?",
-        "Wait",
-        "Yes I would like you to cancel it but only if you can make sure there is no charge",
-        "",
-        "What is the fee?",
-        "The fee is too high.",
-        "I don't accept the fee.",
-        "Is there a fee? Cancel it.",
-    ],
-)
-def test_anything_else_is_not_a_yes(text: str):
-    assert guards.clear_yes(text) is False
 
 
 @pytest.mark.parametrize(

@@ -39,6 +39,7 @@ class AppContext:
     index: IndexStore
     spend: "KeyUsageCache"
     safety: "SafetyClassifier | None" = None
+    confirm: "SafetyClassifier | None" = None
     tracer: "Tracer | None" = None
     limiter: RateLimiter = field(default_factory=RateLimiter)
 

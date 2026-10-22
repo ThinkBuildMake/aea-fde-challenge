@@ -1,9 +1,13 @@
 """S51: a cancel commits on the caller's clear yes to terms they saw, even when the yes
 is comma-joined or a question about the terms sits between the ask and the yes."""
 
+import dataclasses
+import json
+
 import pytest
 
-from app.conversation import guards
+from app.conversation import confirm, guards
+from app.main import create_app
 from app.settings import Settings
 from app.types import AppointmentView, CancelResult, Fee
 from tests.test_agent_tools import customer, identify_as, run, stub, tool_results
@@ -107,36 +111,58 @@ def test_question_turn_without_the_fee_drops_the_ask(started: Settings, cancels)
     assert out["cancelled"] is False and out["needsConfirmation"] is True
 
 
-@pytest.mark.parametrize("text", [ACCEPT, "Sure, go ahead and cancel it, thanks"])
-def test_comma_joined_yes_is_clear(text: str):
-    assert guards.clear_yes(text) is True
+class FakeConfirm:
+    def __init__(self, answer: str | Exception) -> None:
+        self.answer = answer
+        self.seen: list[dict] = []
+
+    def classify(self, messages, timeout_s):
+        self.seen.append(json.loads(messages[-1]["content"]))
+        if isinstance(self.answer, Exception):
+            raise self.answer
+        return json.dumps({"answer": self.answer})
+
+
+def _accepts(settings: Settings, fake: FakeConfirm, text: str) -> bool:
+    ctx = dataclasses.replace(create_app(settings).state.ctx, confirm=fake)
+    return confirm.accepts_cancel(ctx, text, ASK)
+
+
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [
+        ("accepts", True),
+        ("declines", False),
+        ("question", False),
+        ("other", False),
+        (RuntimeError("down"), False),  # a failed check is never a yes
+        ("maybe", False),  # outside the label set
+    ],
+)
+def test_only_the_models_accepts_cancels(started: Settings, answer, expected: bool):
+    fake = FakeConfirm(answer)
+    assert _accepts(started, fake, "Yes, that works for me") is expected
+    assert fake.seen == [{"message": "Yes, that works for me", "last_reply": ASK}]
 
 
 @pytest.mark.parametrize(
     "text",
     [
-        NOTICE,
-        "can you waive the fee?",
-        "ok but only if there's no fee",
-        "I'm not sure",
-        "I accept, but can you waive the fee",
-        "Keep it, ok",
-        "Hold off, ok",
-        "Let me check with my wife first, ok",
-        "Move it to Thursday, sure",
-        "Actually reschedule instead, sure",
-        "I'll call back later, ok bye",
-        "Hmm, ok",
-        "Okay hold off",
-        "yes keep it",
-        "Yes reschedule",
-        "Ok I changed my mind keep it",
-        "yes cancel the other one",
+        "Yes, but keep it if you can",
+        "Ok, hold off",
+        "Yes, wait",
         "Sure, move it instead",
+        "Yes reschedule",
+        "Ok I changed my mind",
+        "yes cancel the other one",
+        "I accept, but can you waive the fee",
+        "Yes, I don\u2019t want the fee",
     ],
 )
-def test_still_not_a_yes(text: str):
-    assert guards.clear_yes(text) is False
+def test_a_veto_word_blocks_the_models_yes(started: Settings, text: str):
+    fake = FakeConfirm("accepts")
+    assert _accepts(started, fake, text) is False
+    assert fake.seen == []  # no model call is spent on it
 
 
 def test_two_turns_between_terms_and_yes_drop_the_ask(started: Settings, cancels):

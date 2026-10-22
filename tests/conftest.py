@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -91,6 +92,7 @@ def screen_says_safe(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyP
     if name.startswith(
         (
             "tests.test_safety",
+            "tests.test_cancel_confirm_live",
             "tests.test_interfaces",
             "tests.test_policy_answers_live",
             "tests.test_other_handoffs_live",
@@ -100,13 +102,17 @@ def screen_says_safe(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyP
         return
     from app.safety.service import OpenRouterSafetyClassifier
 
-    monkeypatch.setattr(
-        OpenRouterSafetyClassifier,
-        "classify",
-        lambda self, messages, timeout_s: (
-            '{"verdict": "safe", "reason": "no_hazard", "followup_answer": "no"}'
-        ),
-    )
+    def classify(self, messages, timeout_s):
+        if self.schema_name != "cancel_answer":
+            return '{"verdict": "safe", "reason": "no_hazard", "followup_answer": "no"}'
+        # The cancel-confirm model: scripted yeses accept, anything else does not.
+        message = json.loads(messages[-1]["content"])["message"]
+        yes = re.match(r"(?:yes|yeah|sure|ok|i accept)\b", message, re.IGNORECASE)
+        return json.dumps(
+            {"answer": "accepts" if yes and "?" not in message else "other"}
+        )
+
+    monkeypatch.setattr(OpenRouterSafetyClassifier, "classify", classify)
 
 
 @pytest.fixture(autouse=True)

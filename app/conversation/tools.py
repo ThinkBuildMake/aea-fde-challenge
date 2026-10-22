@@ -9,7 +9,7 @@ from datetime import date
 from typing import Any, get_args
 
 from app.context import AppContext
-from app.conversation import guards
+from app.conversation import confirm, guards
 from app.followups import service as followups
 from app.knowledge import service as knowledge
 from app.scheduling import service as scheduling
@@ -220,6 +220,7 @@ class ToolState:
         self.cancel_fee_cents: dict[int, int] = {}
         self.cancel_confirmable: dict[int, int | None] = {}
         self.cancel_carried: set[int] = set()
+        self.cancel_accepted: bool | None = None  # the confirm model, asked once a turn
         self.card_removed = False
         self.payment_link: PaymentLink | None = None
 
@@ -698,7 +699,7 @@ def _ask_cancel(
 def _cancel_visit(
     ctx: AppContext, state: ToolState, args: dict[str, Any]
 ) -> dict[str, Any]:
-    if _is_cancel_ask(state, "cancel_visit", args):
+    if _is_cancel_ask(ctx, state, "cancel_visit", args):
         return _ask_cancel(ctx, state, int(args["appointmentId"]))
     cancelled = scheduling.cancel_visit(
         ctx, _customer(state), int(args["appointmentId"]), state.conversation_id
@@ -865,13 +866,23 @@ HANDLERS: dict[str, Handler] = {
 }
 
 
-def _is_cancel_ask(state: ToolState, name: str, args: dict[str, Any]) -> bool:
+def _is_cancel_ask(
+    ctx: AppContext, state: ToolState, name: str, args: dict[str, Any]
+) -> bool:
     """A cancel_visit only reads unless the previous turn put its terms to the caller and
-    this message is a clear yes; a read skips the write guard."""
-    return name == "cancel_visit" and (
-        args.get("appointmentId") not in state.cancel_confirmable
-        or not guards.clear_yes(state.caller_text)
-    )
+    this message accepts them; a read skips the write guard."""
+    if (
+        name != "cancel_visit"
+        or args.get("appointmentId") not in state.cancel_confirmable
+    ):
+        return name == "cancel_visit"
+    if state.cancel_accepted is None:
+        state.cancel_accepted = confirm.accepts_cancel(
+            ctx,
+            state.caller_text,
+            confirm.last_reply(state.db, state.conversation_id),
+        )
+    return not state.cancel_accepted
 
 
 def run_tool(
@@ -895,7 +906,7 @@ def run_tool(
             )
             if name in guards.WRITE_TOOLS
             and state.customer_id is not None
-            and not _is_cancel_ask(state, name, args)
+            and not _is_cancel_ask(ctx, state, name, args)
             else None
         )
         if refusal:

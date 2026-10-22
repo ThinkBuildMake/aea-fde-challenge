@@ -268,12 +268,12 @@ def test_unidentified_safety_stop_record_is_complete(
 def test_unconfirmed_cancel_counts(
     live: Settings, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    # The app's own clear-yes rule is turned off so the eval's AZ-2 check is what catches
-    # a cancel the caller never said yes to.
+    # The app's own cancel-confirm check is turned off so the eval's AZ-2 check is what
+    # catches a cancel the caller never said yes to.
     from app.llm import FakeModelProvider
     from tests.gate.test_change_a_visit import FREE_ASK, cancel, linda_lookup
 
-    monkeypatch.setattr(guards, "clear_yes", lambda text: True)
+    monkeypatch.setattr("app.conversation.confirm.accepts_cancel", lambda *args: True)
     base = next(s for s in eight_scenarios() if s.id == "SYN-BOOK-0")
     scenario = base.model_copy(
         update={

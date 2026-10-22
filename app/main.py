@@ -41,9 +41,10 @@ def create_app(
         yield
         if app.state.ctx.tracer is not None:
             app.state.ctx.tracer.flush(5)
-        close = getattr(app.state.ctx.safety, "close", None)
-        if close is not None:
-            close()
+        for classifier in (app.state.ctx.safety, app.state.ctx.confirm):
+            close = getattr(classifier, "close", None)
+            if close is not None:
+                close()
 
     app = FastAPI(
         title="Meridian",

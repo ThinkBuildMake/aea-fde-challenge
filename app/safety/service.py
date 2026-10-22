@@ -1,7 +1,7 @@
 import json
 import re
 import time
-from typing import Literal, Protocol, get_args
+from typing import Any, Literal, Protocol, get_args
 
 import httpx2
 import openai
@@ -93,13 +93,20 @@ class SafetyClassifier(Protocol):
 
 
 class OpenRouterSafetyClassifier:
+    """A small model that answers in one JSON schema: the safety verdict by default, or
+    another label set (app.conversation.confirm)."""
+
     def __init__(
         self,
         api_key: str,
         model: str,
         http_client: httpx2.Client | None = None,
+        schema: dict[str, Any] = _SCHEMA,
+        schema_name: str = "safety_verdict",
     ) -> None:
         self._model = model
+        self._schema = schema
+        self.schema_name = schema_name
         self._client = openai.OpenAI(
             api_key=api_key,
             base_url="https://openrouter.ai/api/v1",
@@ -119,9 +126,9 @@ class OpenRouterSafetyClassifier:
             response_format={
                 "type": "json_schema",
                 "json_schema": {
-                    "name": "safety_verdict",
+                    "name": self.schema_name,
                     "strict": True,
-                    "schema": _SCHEMA,
+                    "schema": self._schema,
                 },
             },
             extra_body={

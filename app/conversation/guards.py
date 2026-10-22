@@ -596,44 +596,6 @@ def earlier_offer_text(earliest: str) -> str:
     )
 
 
-_YES = re.compile(
-    r"^(?:yes|yeah|yep|yup|sure|ok|okay|confirm(?:ed)?|please do|go ahead|do it"
-    r"|please (?:go ahead and )?cancel|go ahead and cancel|cancel it)\b",
-    re.IGNORECASE,
-)
-_NOT_YES = re.compile(
-    r"\b(?:no|not|never|wait|maybe|unsure|but|if|only|waive\w*|refund\w*|discount\w*"
-    r"|too|keep\w*|hold\w*|resched\w*|mov\w*|chang\w*|other|later|instead|mind)\b"
-    r"|n't|\?",
-    re.IGNORECASE,
-)
-# Naming the fee is fine only when the caller accepts it; otherwise it is a fee question.
-_FEE = re.compile(r"\b(?:fees?|charge\w*|cost\w*|price\w*)\b|\$", re.IGNORECASE)
-_ACCEPTS = re.compile(
-    r"\b(?:i accept|accepted|that's fine|that is fine|understood|i agree|i'll pay"
-    r"|i will pay|happy to pay|ok with|okay with)\b",
-    re.IGNORECASE,
-)
-
-
-_CLOSING = re.compile(r"thanks|thank you|that is all|that's all", re.IGNORECASE)
-
-
-def clear_yes(text: str) -> bool:
-    """A short plain yes: no question, no condition, and the fee named only to accept it.
-    Every clause is a yes, an acceptance of the fee or a closing ("I accept the fee,
-    please go ahead and cancel it. That is all.")."""
-    text = text.strip().replace("\u2019", "'")
-    clauses = [s.strip() for s in re.split(r"[.!;,]+", text) if s.strip()]
-    if not clauses or len(text.split()) > 16 or _NOT_YES.search(text):
-        return False
-    if _FEE.search(text) and not _ACCEPTS.search(text):
-        return False
-    return all(
-        _YES.match(s) or _ACCEPTS.match(s) or _CLOSING.fullmatch(s) for s in clauses
-    ) and any(_YES.match(s) for s in clauses)
-
-
 _CANCEL_CLAIM = re.compile(
     r"\b(?:has been|have been|had been|is|is now|was|it's|i've|i have|we've|we have"
     r"|successfully|now) cancell?ed\b|\bcancell?ed (?:your|the|it)\b",
